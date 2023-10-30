@@ -80,6 +80,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true)
             return true
         elseif (tcheck .<= integrator.dt)
             return true
+        elseif (integrator.dt .<= 1e-4)
+            return true
         else
             return false
         end
@@ -93,6 +95,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true)
         tcheck = minimum([t1 t2 t3 t4])
         if (tcheck .<= integrator.dt)
             set_proposed_dt!(integrator, integrator.dt .* 0.5)
+        elseif (integrator.dt .<= 1e-4)
+            terminate!(integrator)
         else
             set_proposed_dt!(integrator, integrator.dt .* 1.1)
         end
@@ -115,10 +119,13 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true)
         end
         set_proposed_dt!(integrator, integrator.dt .* 0.3)
     end
+    
+    
         
     cbackEmax = ContinuousCallback(c_e2max, affect_e2max!, interp_points=10, abstol=1e-2)
     cbackdt = DiscreteCallback(check_timescale, affect_timescale!)
     cbackspin = DiscreteCallback(check_spin, affect_spin!)
+    
     cbset = CallbackSet(cbackEmax, cbackdt, cbackspin)
     prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-6, abstol=1e-6)
     # sol = solve(prob, Vern6(), saveat=saveat, callback=cbset)
