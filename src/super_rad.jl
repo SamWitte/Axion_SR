@@ -29,7 +29,7 @@ end
 
 function emax_211(MBH, mu, aBH)
     alph = GNew .* MBH .* mu
-
+    
     emax_N = 1 .- 8 .* alph.^2 .+ 8 .* alph.^3 .* aBH .- sqrt.(1 .- 16 .* alph.^2 .+ 32 .* aBH .* alph.^3 - 16 .* aBH.^2 .* alph.^4)
     emax_D = 8 .* (-alph.^3 .+ aBH .* alph.^4)
     return (emax_N ./ emax_D)
@@ -40,7 +40,13 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true)
     
     y0 = [1.0 ./ (GNew .* M_BH.^2 .* M_to_eV), 1.0 ./ (GNew .* M_BH.^2 .* M_to_eV), aBH, M_BH]
     wait = 0
-    Emax2 = emax_211(M_BH, mu, aBH)
+    
+    Emax2 = 1.0
+    OmegaH = aBH ./ (2 .* (GNew .* M_BH) .* (1 .+ sqrt.(1 .- aBH.^2)))
+    if (OmegaH .> ergL(2, 1, 1, mu, M_BH))
+        Emax2 = emax_211(M_BH, mu, aBH)
+    end
+    
     
     Mvars = [mu, fa, Emax2]
     tspan = (0.0, t_max)
@@ -51,6 +57,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true)
     end
     function affect_e2max!(integrator)
         integrator.u[1] = Emax2
+        set_proposed_dt!(integrator, integrator.dt .* 0.2)
     end
     function check_timescale(u, t, integrator)
         alph = GNew .* u[4] .* mu
@@ -65,17 +72,29 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true)
         end
         du = get_du(integrator)
         
+        
+      
         t1 = abs.(u[1] ./ du[1])
+        # OmegaH = u[3] ./ (2 .* (GNew .* u[4]) .* (1 .+ sqrt.(1 .- u[3].^2)))
+        if (OmegaH .< ergL(2, 1, 1, mu, u[4]))||(u[1] < (GNew .* u[4].^2 .* M_to_eV).^(-1))
+            t1 = 1e100
+        end
         t2 = abs.(u[2] ./ du[2])
+        if (2 .* OmegaH .< ergL(3, 2, 2, mu, u[4]))
+            t2 = 1e100
+        end
         t3 = abs.(u[3] ./ du[3])
         t4 = abs.(u[4] ./ du[4])
         tcheck = minimum([t1 t2 t3 t4])
         wait += 1
         
-    
-        # print("CHECK \t", integrator.dt, "\t", u[1] ./ du[1], "\t", u[2] ./ du[2], "\t", tcheck, "\n")
+        if debug
+            # print("CHECK \t", integrator.dt, "\t", u[1] ./ du[1], "\t", u[2] ./ du[2], "\n")
+            # print("CHECK \t", integrator.dt, "\t", t1, "\t", t2, "\t", t3, "\t", t4, "\n")
+            # print(t, "\t", u[1], "\t", u[2], "\t", u[3], "\n")
+        end
         
-        if (tcheck .>= 50.0 .* integrator.dt) && (wait % 100 == 0)
+        if (tcheck .>= 10.0 .* integrator.dt) && (wait % 100 == 0)
             # print("here \t", integrator.dt, "\t", wait, "\n")
             return true
         elseif (tcheck .<= integrator.dt)
@@ -89,7 +108,14 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true)
     function affect_timescale!(integrator)
         du = get_du(integrator)
         t1 = abs.(integrator.u[1] ./ du[1])
+        # OmegaH = integrator.u[3] ./ (2 .* (GNew .* integrator.u[4]) .* (1 .+ sqrt.(1 .- integrator.u[3].^2)))
+        if (OmegaH .< ergL(2, 1, 1, mu, integrator.u[4]))||(integrator.u[1] < (GNew .* integrator.u[4].^2 .* M_to_eV).^(-1))
+            t1 = 1e100
+        end
         t2 = abs.(integrator.u[2] ./ du[2])
+        if (2 .* OmegaH .< ergL(3, 2, 2, mu, integrator.u[4]))
+            t2 = 1e100
+        end
         t3 = abs.(integrator.u[3] ./ du[3])
         t4 = abs.(integrator.u[4] ./ du[4])
         tcheck = minimum([t1 t2 t3 t4])
@@ -98,12 +124,12 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true)
         elseif (integrator.dt .<= 1e-4)
             terminate!(integrator)
         else
-            set_proposed_dt!(integrator, integrator.dt .* 1.1)
+            set_proposed_dt!(integrator, integrator.dt .* 1.2)
         end
     end
     
     function check_spin(u, t, integrator)
-        if u[3] .> aBH
+        if u[3] .> (aBH .+ 0.01)
             return true
         elseif u[3] .<= 0.0
             return true
@@ -147,7 +173,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true)
     MassB = [sol.u[i][4] for i in 1:length(sol.u)]
     if debug
         print("Initial \t", state211[1], "\t", state322[1], "\t", spinBH[1], "\t", MassB[1], "\n")
-        print("Final \t", state211[end], "\t", state322[end], "\t", spinBH[end], "\t", MassB[end], "\n")
+        print("Final \t", state211[end] ./ Emax2, "\t", state322[end], "\t", spinBH[end], "\t", MassB[end], "\n")
         print("Giving back \t",spinBH[end], "\n" )
     end
     if isnan(spinBH[end])
@@ -156,8 +182,35 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true)
     return spinBH[end]
 end
 
+function ergL(n, l, m, massB, MBH)
+    alph = GNew .* MBH .* massB
+    return massB .* (1.0 .- alph.^2 ./ (2 .* (n .+ l .+ 1).^2))
+end
 
 
+function sr_rates(n, l, m, massB, MBH, aBH)
+    alph = GNew .* MBH .* massB
+    rP = nothing
+    if aBH .> 0.998
+        rP = 1.0 .+ sqrt.(1 - 0.998 .^2)
+        aBH = 0.998
+    elseif aBH .< 0.0
+        rP = 2.0
+        aBH = 0.0
+    else
+        rP = 1.0 .+ sqrt.(1 - aBH.^2)
+    end
+    rP *= (GNew .* MBH)
+    OmegaH = aBH ./ (2 .* (GNew .* MBH) .* (1 .+ sqrt.(1 .- aBH.^2)))
+    Anl = 2 .^(4 .* l .+ 2) .* factorial(Int(2 .* l .+ n .+ 1)) ./ ((l .+ n .+ 1).^(2 .* l .+ 4) .* factorial(n))
+    Anl *= (factorial(Int(l)) ./ (factorial(Int(2 .* l)) .* factorial(Int(2 .* l .+ 1)))).^2
+    Chilm = 1.0
+    for k in 1:Int(l)
+        Chilm *= (k.^2 .* (1.0 - aBH.^2) .+ 4 .* rP.^2 .* (m .* ergL(n, l, m, massB, MBH) .- massB).^2)
+    end
+    Gamma_nlm = 2 * massB .* rP .* (m .* OmegaH .- ergL(n, l, m, massB, MBH)) .* alph.^(4 .* l + 4) .* Anl .* Chilm
+    return Gamma_nlm
+end
 
 function RHS_ax!(du, u, Mvars, t)
 
@@ -169,6 +222,7 @@ function RHS_ax!(du, u, Mvars, t)
     rP = nothing
     if u[3] .> 0.998
         rP = 1.0 .+ sqrt.(1 - 0.998 .^2)
+        u[3] = 0.998
     elseif u[3] .< 0.0
         rP = 2.0
         u[3] = 0.0
@@ -176,10 +230,21 @@ function RHS_ax!(du, u, Mvars, t)
         rP = 1.0 .+ sqrt.(1 - u[3].^2)
     end
     
-    
+    if u[1] < 0
+        u[1] = 0.0
+    end
+    if u[2] < 0
+        u[2] = 0.0
+    end
+
     
     kSR_211 = 4e-2 # kSR_211
+    
+    SR211 = sr_rates(2, 1, 1, mu, u[4], u[3])
+    SR322 = sr_rates(3, 2, 2, mu, u[4], u[3])
+    
     if u[1] .> Emax2
+        SR211 *= 0.0
         kSR_211 *= 0.0
     end
     k322BH = 4e-7  # k^322xBH_211x211
@@ -188,14 +253,20 @@ function RHS_ax!(du, u, Mvars, t)
     kGW_3t2 = 5e-6 # k^GW_{322->211}
     kGW_23 = 0.0 # k^GW_211x322
     kI_222 = 1.5e-8 # k^Infinity_(211)^3
-    kI_223 = 1.5e-8 # ??? k^Infinity_{(211)^2 x 322}
-    kI_233 = 1.5e-8 # ??? k^Infinity_{(211)x 322^2}
+    kI_223 = 0.0 # ??? k^Infinity_{(211)^2 x 322}
+    kI_233 = 0.0 # ??? k^Infinity_{(211)x 322^2}
     kSR_322 = 8e-5
     kGW_33 = 3e-8
-    kI_333 = 1.5e-8  # ???
+    kI_333 = 0.0 # ???
     
+    OmegaH = u[3] ./ (2 .* (GNew .* u[4]) .* (1 .+ sqrt.(1 .- u[3].^2)))
+    if (2 .* OmegaH .< ergL(3, 2, 2, mu, u[4]))
+        kSR_322 *= 0.0
+        SR322 *= 0.0
+    end
     
-    du[1] = kSR_211 .* alph.^8 .* (u[3] .- 2 .* alph .* rP) .* u[1]
+    # du[1] = kSR_211 .* alph.^8 .* (u[3] .- 2 .* alph .* rP) .* u[1]
+    du[1] = SR211 .* u[1] ./ mu
     du[1] += - 2 .* k322BH .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* u[1].^2 .* u[2]
     du[1] += k2I_333 .* alph.^8 .* (M_pl ./ fa).^4 .* u[2].^2 .* u[1]
     du[1] += -2 .* kGW_22 .* alph.^14 .* u[1].^2
@@ -206,7 +277,8 @@ function RHS_ax!(du, u, Mvars, t)
     du[1] += kI_233 .* alph.^25 .* (M_pl ./ fa).^4 .* u[1] .* u[2].^2
     
     
-    du[2] = kSR_322 .* alph.^12 .* (u[3] .- alph .* rP) .* u[2]
+    # du[2] = kSR_322 .* alph.^12 .* (u[3] .- alph .* rP) .* u[2]
+    du[2] = SR322 .* u[2] ./ mu
     du[2] += k322BH .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* u[1].^2 .* u[2]
     du[2] += -2 .* k2I_333 .* alph.^8 .* (M_pl ./ fa).^4 .* u[2].^2 .* u[1]
     du[2] += -2 .* kGW_33 .* alph.^18 .* u[2].^2
@@ -215,8 +287,10 @@ function RHS_ax!(du, u, Mvars, t)
     du[2] += -kI_223 .* alph.^23 .* (M_pl ./ fa).^4 .* u[1].^2 .* u[2]
     du[2] += -2 .* kI_233 .* alph.^25 .* (M_pl ./ fa).^4 .* u[1] .* u[2].^2
     
-    du[3] = - kSR_211 .* alph.^8 .* (u[3] .- 2 .* alph .* rP) .* u[1] .- 2 .* kSR_322 .* alph.^12 .* (u[3] .- alph .* rP) .* u[2]
-    du[4] = - kSR_211 .* alph.^8 .* (u[3] .- 2 .* alph .* rP) .* u[1] .- kSR_322 .* alph.^12 .* (u[3] .- alph .* rP) .* u[2]
+    # du[3] = - kSR_211 .* alph.^8 .* (u[3] .- 2 .* alph .* rP) .* u[1] .- 2 .* kSR_322 .* alph.^12 .* (u[3] .- alph .* rP) .* u[2]
+    # du[4] = - kSR_211 .* alph.^8 .* (u[3] .- 2 .* alph .* rP) .* u[1] .- kSR_322 .* alph.^12 .* (u[3] .- alph .* rP) .* u[2]
+    du[3] = - SR211 .* u[1] ./ mu .- 2 .* SR322 .* u[2] ./ mu
+    du[4] = - SR211 .* u[1] ./ mu .- SR322 .* u[2] ./ mu
     du[4] += k322BH .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* u[1].^2 .* u[2]
     
     # print(t, "\t", u[1] ./ Emax2, "\t", u[2] .* mu .* (GNew .* u[4]), "\t", u[3], "\t", u[4], "\n")
@@ -233,10 +307,10 @@ end
 
 
 #### TESTING ZONE
-# M_BH = 1e8
-# aBH = 0.9
-# massB = 5e-19
-# f_a = 1e19
+# M_BH = 6.3
+# aBH = 0.7
+# massB = 3.12e-12
+# f_a = 1e17
 # tau_max = 1e8
 # alpha_max_cut = 0.5
 # super_rad_check(M_BH, aBH, massB, f_a, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=true)

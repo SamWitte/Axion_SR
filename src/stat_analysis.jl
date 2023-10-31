@@ -8,16 +8,13 @@ include("super_rad.jl")
 # Random.seed!(1234)
 
 
-M_BH = 1.0
-aBH = 0.98
-massB = 1e-11
 f_a = 1e18
-tau_max=1e8
+tau_max = 4e8
 alpha_max_cut = 0.2
-lg_m_low=-13
-lg_m_high=-10
-lg_f_high=19
-lg_f_low=11
+lg_m_low = -13
+lg_m_high = -10
+lg_f_high = 19
+lg_f_low = 16
 
 
 
@@ -51,33 +48,66 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
     
     if use_input_table
         MassBH_c = data[:, 1]
-        MassBH_err = data[:, 2]
-        SpinBH_c = data[:, 3]
-        SpinBH_err = data[:, 4]
+        MassBH_errU = data[:, 2]
+        MassBH_errD = data[:, 3]
+        SpinBH_c = data[:, 4]
+        SpinBH_errU = data[:, 5]
+        SpinBH_errD = data[:, 6]
         
         num_data = length(MassBH_c)
         
         for i in 1:num_data
         
-            mass_found = false
+            val_found = false
+            p_or_neg = Int(round(rand()))
             MassBH = nothing
-            d_mass = Normal(MassBH_c[i], MassBH_err[i])
-            while !mass_found
+            d_mass = nothing
+            if p_or_neg == 0
+                d_mass = Normal(MassBH_c[i], MassBH_errU[i])
+            else
+                d_mass = Normal(MassBH_c[i], MassBH_errD[i])
+            end
+            
+            while !val_found
                 MassBH = rand(d_mass,1)[1]
-                if MassBH > 0
-                    mass_found = true
+                if (p_or_neg == 0) && (MassBH >= MassBH_c[i])
+                    val_found = true
+                elseif (p_or_neg == 1) && (MassBH <= MassBH_c[i]) && (MassBH > 0)
+                    val_found = true
                 end
             end
-            d_spin = Normal(SpinBH_c[i], SpinBH_err[i])
-            SpinBH = rand(d_spin,1)[1]
+            
+            SpinBH = nothing
+            p_or_neg = Int(round(rand()))
+            SpinBH = nothing
+            val_found = false
+            if p_or_neg == 0
+                SpinBH = rand(Uniform(SpinBH_c[i], 0.998))
+            else
+                d_spin = Normal(SpinBH_c[i], SpinBH_errD[i])
+                while !val_found
+                    SpinBH = rand(d_spin,1)[1]
+                    if (SpinBH <= SpinBH_c[i]) && (SpinBH >= 0.0)
+                        val_found = true
+                    end
+                end
+            end
+                
+
             if SpinBH > 0.998
                 SpinBH = 0.998
             end
             if SpinBH < 0.0
                 SpinBH = 0.0
             end
+            # print(SpinBH, "\t", 10 .^log_m, "\t", 10 .^log_f, "\n")
             final_spin = super_rad_check(MassBH, SpinBH, 10 .^log_m, 10 .^log_f, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=false)
-            sum_loglike += -0.5 * (SpinBH_c[i] - final_spin).^2 / SpinBH_err[i].^2
+            
+            if final_spin > SpinBH_c[i]
+                sum_loglike += -0.5 * (SpinBH_c[i] - final_spin).^2 / SpinBH_errU[i].^2
+            else
+                sum_loglike += -0.5 * (SpinBH_c[i] - final_spin).^2 / SpinBH_errD[i].^2
+            end
         end
     else
         # assume data format: [Indx DataEntry Label], Label=0 [velocity disp] Label=1 Galaxy Mass
@@ -140,11 +170,11 @@ function mcmc_func_minimize(data; lg_m_low=-20, lg_m_high=-18, lg_f_high=19, lg_
     numdims = 2
     numwalkers = 10
     thinning = 1
-    numsamples_perwalker = 100
+    numsamples_perwalker = 1000
     burnin = 100
 
     function llhood(x)
-        return log_probability(x, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high, use_input_table=use_input_table)
+        return log_probability(x, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high, tau_max=tau_max, alpha_max_cut=alpha_max_cut, use_input_table=use_input_table)
     end
 
     x0 = initialize_walkers(numwalkers, lg_m_low, lg_m_high, lg_f_low, lg_f_high)
