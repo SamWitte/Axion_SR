@@ -3,6 +3,7 @@ using OrdinaryDiffEq
 using Statistics
 using Distributions
 using DelimitedFiles
+using Dierckx
 include("Constants.jl")
 
 
@@ -35,11 +36,18 @@ function emax_211(MBH, mu, aBH)
     return (emax_N ./ emax_D)
 end
     
-function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true)
+function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_322=true)
     
     
     y0 = [1.0 ./ (GNew .* M_BH.^2 .* M_to_eV), 1.0 ./ (GNew .* M_BH.^2 .* M_to_eV), aBH, M_BH]
     wait = 0
+
+#    damping_u2 = 1.0
+#    u2_eq = false
+    u2_kill = false
+    u2_rough = []
+    t_rough = []
+    spin_rough = []
     
     Emax2 = 1.0
     OmegaH = aBH ./ (2 .* (GNew .* M_BH) .* (1 .+ sqrt.(1 .- aBH.^2)))
@@ -48,7 +56,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true)
     end
     
     
-    Mvars = [mu, fa, Emax2]
+    Mvars = [mu, fa, Emax2, solve_322]
     tspan = (0.0, t_max)
     saveat = (tspan[2] .- tspan[1]) ./ n_times
     # print("T max \t", t_max, "\n")
@@ -75,7 +83,6 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true)
         
       
         t1 = abs.(u[1] ./ du[1])
-        # OmegaH = u[3] ./ (2 .* (GNew .* u[4]) .* (1 .+ sqrt.(1 .- u[3].^2)))
         if (OmegaH .< ergL(2, 1, 1, mu, u[4]))||(u[1] < (GNew .* u[4].^2 .* M_to_eV).^(-1))
             t1 = 1e100
         end
@@ -85,17 +92,55 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true)
         end
         t3 = abs.(u[3] ./ du[3])
         t4 = abs.(u[4] ./ du[4])
+    
+        if u2_kill
+            terminate!(integrator)
+        end
+        
+        # watch out for stable equilibrium of 322 state
+        if ((wait % (t_max/1e3)) == 0)
+            if (length(u2_rough) > 2)
+                
+                k322BH = 4e-7  # k^322xBH_211x211
+                t2_start = (k322BH .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* u[1].^2 .* mu ./ hbar .* 3.15e7).^(-1)
+                
+                cond1 = (abs.( (log.(u[2]) .- u2_rough[end]) ./ log.(u[2])) .< 1e-3)
+                cond2 = (abs.( (log.(u[2]) .- u2_rough[end-1]) ./ log.(u[2])) .< 1e-3)
+                print("CHECK \t", integrator.dt, "\t", t1, "\t", t2, "\t", t3, "\t", t4, "\n")
+                print("testing Equil \t ", u[3], "\t", u[2] ./ Emax2, "\t", integrator.dt, "\t", t, "\t", t2_start, "\n\n")
+                
+                if cond1 && cond2 && (t > 1e2 .* t2_start)
+                    u2_eq = true
+
+                    if (t3 .> (t_max - t) .* 10)
+                        if debug
+                            print("ending evolution \t", t3, "\n")
+                        end
+                        u2_kill = true
+                    end
+                end
+            end
+            
+            push!(u2_rough, log.(u[2]))
+            if ((wait % (t_max/1e2)) == 0)
+                push!(t_rough, t)
+                push!(spin_rough, u[3])
+            end
+        end
+        
+        
+
         tcheck = minimum([t1 t2 t3 t4])
         wait += 1
+        
         
         if debug
             # print("CHECK \t", integrator.dt, "\t", u[1] ./ du[1], "\t", u[2] ./ du[2], "\n")
             # print("CHECK \t", integrator.dt, "\t", t1, "\t", t2, "\t", t3, "\t", t4, "\n")
-            # print(t, "\t", u[1], "\t", u[2], "\t", u[3], "\n")
+            # print(t, "\t", u[1], "\t", u[2], "\t", u[3], "\n\n")
         end
         
-        if (tcheck .>= 10.0 .* integrator.dt) && (wait % 100 == 0)
-            # print("here \t", integrator.dt, "\t", wait, "\n")
+        if (tcheck .>= 5.0 .* integrator.dt) && (wait % 100 == 0)
             return true
         elseif (tcheck .<= integrator.dt)
             return true
@@ -106,7 +151,9 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true)
         end
     end
     function affect_timescale!(integrator)
+        
         du = get_du(integrator)
+
         t1 = abs.(integrator.u[1] ./ du[1])
         # OmegaH = integrator.u[3] ./ (2 .* (GNew .* integrator.u[4]) .* (1 .+ sqrt.(1 .- integrator.u[3].^2)))
         if (OmegaH .< ergL(2, 1, 1, mu, integrator.u[4]))||(integrator.u[1] < (GNew .* integrator.u[4].^2 .* M_to_eV).^(-1))
@@ -116,18 +163,26 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true)
         if (2 .* OmegaH .< ergL(3, 2, 2, mu, integrator.u[4]))
             t2 = 1e100
         end
+      
         t3 = abs.(integrator.u[3] ./ du[3])
         t4 = abs.(integrator.u[4] ./ du[4])
+    
+        
         tcheck = minimum([t1 t2 t3 t4])
+    
+                
+                
         if (tcheck .<= integrator.dt)
             set_proposed_dt!(integrator, integrator.dt .* 0.5)
         elseif (integrator.dt .<= 1e-4)
             terminate!(integrator)
         else
+            
             set_proposed_dt!(integrator, integrator.dt .* 1.2)
         end
     end
     
+
     function check_spin(u, t, integrator)
         if u[3] .> (aBH .+ 0.01)
             return true
@@ -164,8 +219,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true)
     if debug
         print("Time guess \t", dt_guess, "\n")
     end
+    
     sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
-    # sol = solve(prob, Vern6(), dt=dt_guess, saveat=saveat, callback=cbset)
     
     state211 = [sol.u[i][1] for i in 1:length(sol.u)]
     state322 = [sol.u[i][2] for i in 1:length(sol.u)]
@@ -174,12 +229,14 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true)
     if debug
         print("Initial \t", state211[1], "\t", state322[1], "\t", spinBH[1], "\t", MassB[1], "\n")
         print("Final \t", state211[end] ./ Emax2, "\t", state322[end], "\t", spinBH[end], "\t", MassB[end], "\n")
-        print("Giving back \t",spinBH[end], "\n" )
     end
+
+
     if isnan(spinBH[end])
         spinBH = spinBH[.!isnan.(spinBH)]
     end
     return spinBH[end]
+ 
 end
 
 function ergL(n, l, m, massB, MBH)
@@ -217,7 +274,8 @@ function RHS_ax!(du, u, Mvars, t)
     # [e211, e322, aBH, MBH]
     # mu [mass eV], fa[1/GeV]
     
-    mu, fa, Emax2  = Mvars
+    mu, fa, Emax2, solve_322  = Mvars
+    
     alph = GNew .* u[4] .* mu #
     rP = nothing
     if u[3] .> 0.998
@@ -251,12 +309,13 @@ function RHS_ax!(du, u, Mvars, t)
     k2I_333 = 1e-8 # k^211xInfinity_322x322
     kGW_22 = 1e-2 # k^GW_211x211
     kGW_3t2 = 5e-6 # k^GW_{322->211}
-    kGW_23 = 0.0 # k^GW_211x322
     kI_222 = 1.5e-8 # k^Infinity_(211)^3
-    kI_223 = 0.0 # ??? k^Infinity_{(211)^2 x 322}
-    kI_233 = 0.0 # ??? k^Infinity_{(211)x 322^2}
     kSR_322 = 8e-5
     kGW_33 = 3e-8
+    
+    kGW_23 = 0.0 # k^GW_211x322
+    kI_223 = 0.0 # ??? k^Infinity_{(211)^2 x 322}
+    kI_233 = 0.0 # ??? k^Infinity_{(211)x 322^2}
     kI_333 = 0.0 # ???
     
     OmegaH = u[3] ./ (2 .* (GNew .* u[4]) .* (1 .+ sqrt.(1 .- u[3].^2)))
@@ -286,6 +345,9 @@ function RHS_ax!(du, u, Mvars, t)
     du[2] += -3 .* kI_333 .* alph.^27 .* (M_pl ./ fa).^4 .* u[2].^3
     du[2] += -kI_223 .* alph.^23 .* (M_pl ./ fa).^4 .* u[1].^2 .* u[2]
     du[2] += -2 .* kI_233 .* alph.^25 .* (M_pl ./ fa).^4 .* u[1] .* u[2].^2
+    if solve_322 == false
+        du[2] *= 0.0
+    end
     
     # du[3] = - kSR_211 .* alph.^8 .* (u[3] .- 2 .* alph .* rP) .* u[1] .- 2 .* kSR_322 .* alph.^12 .* (u[3] .- alph .* rP) .* u[2]
     # du[4] = - kSR_211 .* alph.^8 .* (u[3] .- 2 .* alph .* rP) .* u[1] .- kSR_322 .* alph.^12 .* (u[3] .- alph .* rP) .* u[2]
@@ -300,6 +362,7 @@ function RHS_ax!(du, u, Mvars, t)
     du[3] *= mu ./ hbar .* 3.15e7
     du[4] *= mu.^2 .* (GNew .* u[4].^2) ./ hbar .* 3.15e7
     
+    
     # print("Test \t", u[1] ./ du[1], "\t", u[2] ./ du[2], "\n")
     return
 end
@@ -307,12 +370,12 @@ end
 
 
 #### TESTING ZONE
-# M_BH = 6.3
-# aBH = 0.7
-# massB = 3.12e-12
-# f_a = 1e17
-# tau_max = 1e8
-# alpha_max_cut = 0.5
-# super_rad_check(M_BH, aBH, massB, f_a, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=true)
+M_BH = 6.3
+aBH = 0.93
+massB = 1.22e-12
+f_a = 1.0e15
+tau_max = 1e8
+alpha_max_cut = 0.5
+super_rad_check(M_BH, aBH, massB, f_a, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=true)
 ########################
 

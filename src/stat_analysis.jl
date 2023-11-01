@@ -8,13 +8,13 @@ include("super_rad.jl")
 # Random.seed!(1234)
 
 
-f_a = 1e18
+solve_322 = true
 tau_max = 4e8
 alpha_max_cut = 0.2
 lg_m_low = -13
 lg_m_high = -10
 lg_f_high = 19
-lg_f_low = 16
+lg_f_low = 11
 
 
 
@@ -31,17 +31,17 @@ function prior(theta, lg_m_low, lg_m_high, lg_f_low, lg_f_high)
     return -Inf
 end
 
-function log_probability(theta, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high; tau_max=1e4, alpha_max_cut=0.2, use_input_table=true)
+function log_probability(theta, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high; tau_max=1e4, alpha_max_cut=0.2, use_input_table=true, solve_322=true)
 
     lp = prior(theta, lg_m_low, lg_m_high, lg_f_low, lg_f_high)
     if !isfinite.(lp)
         return -Inf
     end
 
-    return lp + log_likelihood(theta, data, tau_max=tau_max, alpha_max_cut=alpha_max_cut, use_input_table=use_input_table)
+    return lp + log_likelihood(theta, data, tau_max=tau_max, alpha_max_cut=alpha_max_cut, use_input_table=use_input_table, solve_322=solve_322)
 end
 
-function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_table=true)
+function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_table=true, solve_322=true)
     
     log_m, log_f = theta
     sum_loglike = 0.0
@@ -68,6 +68,7 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
                 d_mass = Normal(MassBH_c[i], MassBH_errD[i])
             end
             
+            print("looking for mass \n")
             while !val_found
                 MassBH = rand(d_mass,1)[1]
                 if (p_or_neg == 0) && (MassBH >= MassBH_c[i])
@@ -77,6 +78,7 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
                 end
             end
             
+            print("looking for spin \n")
             SpinBH = nothing
             p_or_neg = Int(round(rand()))
             SpinBH = nothing
@@ -100,7 +102,7 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
             if SpinBH < 0.0
                 SpinBH = 0.0
             end
-            # print(SpinBH, "\t", 10 .^log_m, "\t", 10 .^log_f, "\n")
+            print(SpinBH, "\t", 10 .^log_m, "\t", 10 .^log_f, "\n")
             final_spin = super_rad_check(MassBH, SpinBH, 10 .^log_m, 10 .^log_f, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=false)
             
             if final_spin > SpinBH_c[i]
@@ -123,7 +125,7 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
             
             # a_samples, m_samples, _, _ = monte_carlo_all(prior_Mbh=prior_MBH, prior_spin=prior_spins, log_Mbh_min=7, log_Mbh_max=10, N_draw=1, Mstar_max=1)
             
-            final_spin = super_rad_check(MassBH, SpinBH, 10 .^log_m, 10 .^log_f, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=false)
+            final_spin = super_rad_check(MassBH, SpinBH, 10 .^log_m, 10 .^log_f, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=false, solve_322=solve_322)
             ## What is spin error here? Ideally what I'd like
             sum_loglike += -0.5 * (SpinBH_c[i] - final_spin).^2 / SpinBH_err[i].^2
             
@@ -166,15 +168,15 @@ function initialize_walkers(numwalkers, lg_m_low, lg_m_high, lg_f_low, lg_f_high
     return x0
 end
 
-function mcmc_func_minimize(data; lg_m_low=-20, lg_m_high=-18, lg_f_high=19, lg_f_low=18, tau_max=1e4, alpha_max_cut=0.2, use_input_table=true)
+function mcmc_func_minimize(data; lg_m_low=-20, lg_m_high=-18, lg_f_high=19, lg_f_low=18, tau_max=1e4, alpha_max_cut=0.2, use_input_table=true, solve_322=true)
     numdims = 2
     numwalkers = 10
-    thinning = 1
-    numsamples_perwalker = 1000
-    burnin = 100
+    thinning = 2
+    numsamples_perwalker = 5000
+    burnin = 500
 
     function llhood(x)
-        return log_probability(x, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high, tau_max=tau_max, alpha_max_cut=alpha_max_cut, use_input_table=use_input_table)
+        return log_probability(x, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high, tau_max=tau_max, alpha_max_cut=alpha_max_cut, use_input_table=use_input_table, solve_322=solve_322)
     end
 
     x0 = initialize_walkers(numwalkers, lg_m_low, lg_m_high, lg_f_low, lg_f_high)
@@ -190,4 +192,4 @@ function mcmc_func_minimize(data; lg_m_low=-20, lg_m_high=-18, lg_f_high=19, lg_
     
 end
         
-mcmc_func_minimize(data, lg_m_low=lg_m_low, lg_m_high=lg_m_high, lg_f_high=lg_f_high, lg_f_low=lg_f_low, tau_max=tau_max, alpha_max_cut=alpha_max_cut, use_input_table=use_input_table)
+mcmc_func_minimize(data, lg_m_low=lg_m_low, lg_m_high=lg_m_high, lg_f_high=lg_f_high, lg_f_low=lg_f_low, tau_max=tau_max, alpha_max_cut=alpha_max_cut, use_input_table=use_input_table, solve_322=solve_322)
