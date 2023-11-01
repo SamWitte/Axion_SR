@@ -68,7 +68,7 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
                 d_mass = Normal(MassBH_c[i], MassBH_errD[i])
             end
             
-            print("looking for mass \n")
+            # print("looking for mass \n")
             while !val_found
                 MassBH = rand(d_mass,1)[1]
                 if (p_or_neg == 0) && (MassBH >= MassBH_c[i])
@@ -78,7 +78,7 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
                 end
             end
             
-            print("looking for spin \n")
+            # print("looking for spin \n")
             SpinBH = nothing
             p_or_neg = Int(round(rand()))
             SpinBH = nothing
@@ -102,7 +102,7 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
             if SpinBH < 0.0
                 SpinBH = 0.0
             end
-            print(SpinBH, "\t", 10 .^log_m, "\t", 10 .^log_f, "\n")
+            # print(SpinBH, "\t", 10 .^log_m, "\t", 10 .^log_f, "\n")
             final_spin = super_rad_check(MassBH, SpinBH, 10 .^log_m, 10 .^log_f, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=false)
             
             if final_spin > SpinBH_c[i]
