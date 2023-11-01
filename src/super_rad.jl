@@ -9,7 +9,7 @@ include("Constants.jl")
 
 
 
-function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_cut=0.2, debug=false)
+function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_cut=0.2, debug=false, solve_322=true)
    
     alph = GNew .* M_BH .* massB #
     if debug
@@ -22,7 +22,7 @@ function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_c
         return aBH
     end
     
-    final_spin = solve_system(massB, f_a, aBH, M_BH, tau_max, debug=debug)
+    final_spin = solve_system(massB, f_a, aBH, M_BH, tau_max, debug=debug, solve_322=solve_322)
     # print("Spin diff.. \t ", aBH, "\t", final_spin, "\t", alph, "\n")
     return final_spin
     
@@ -42,12 +42,13 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     y0 = [1.0 ./ (GNew .* M_BH.^2 .* M_to_eV), 1.0 ./ (GNew .* M_BH.^2 .* M_to_eV), aBH, M_BH]
     wait = 0
 
-#    damping_u2 = 1.0
-#    u2_eq = false
+
+    u1_eq = false
+    u2_eq = false
     u2_kill = false
     u2_rough = []
-    t_rough = []
-    spin_rough = []
+    u1_rough = []
+
     
     Emax2 = 1.0
     OmegaH = aBH ./ (2 .* (GNew .* M_BH) .* (1 .+ sqrt.(1 .- aBH.^2)))
@@ -93,43 +94,6 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         t3 = abs.(u[3] ./ du[3])
         t4 = abs.(u[4] ./ du[4])
     
-        if u2_kill
-            terminate!(integrator)
-        end
-        
-        # watch out for stable equilibrium of 322 state
-        if ((wait % (t_max/1e3)) == 0)
-            if (length(u2_rough) > 2)
-                
-                k322BH = 4e-7  # k^322xBH_211x211
-                t2_start = (k322BH .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* u[1].^2 .* mu ./ hbar .* 3.15e7).^(-1)
-                
-                cond1 = (abs.( (log.(u[2]) .- u2_rough[end]) ./ log.(u[2])) .< 1e-3)
-                cond2 = (abs.( (log.(u[2]) .- u2_rough[end-1]) ./ log.(u[2])) .< 1e-3)
-                # print("CHECK \t", integrator.dt, "\t", t1, "\t", t2, "\t", t3, "\t", t4, "\n")
-                # print("testing Equil \t ", u[3], "\t", u[2] ./ Emax2, "\t", integrator.dt, "\t", t, "\t", t2_start, "\n\n")
-                
-                if cond1 && cond2 && (t > 1e2 .* t2_start)
-                    u2_eq = true
-
-                    if (t3 .> (t_max - t) .* 10)
-                        if debug
-                            print("ending evolution \t", t3, "\n")
-                        end
-                        u2_kill = true
-                    end
-                end
-            end
-            
-            push!(u2_rough, log.(u[2]))
-            if ((wait % (t_max/1e2)) == 0)
-                push!(t_rough, t)
-                push!(spin_rough, u[3])
-            end
-        end
-        
-        
-
         tcheck = minimum([t1 t2 t3 t4])
         wait += 1
         
@@ -182,6 +146,52 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         end
     end
     
+    function check_eq(u, t, integrator)
+        if u2_kill
+            terminate!(integrator)
+        end
+        du = get_du(integrator)
+        t3 = abs.(integrator.u[3] ./ du[3])
+        # watch out for stable equilibrium of 322 state
+        if ((wait % (t_max/1e3)) == 0)
+            if (length(u2_rough) > 2)
+                cond1 = (abs.( (log.(u[1]) .- u1_rough[end]) ./ log.(u[1])) .< 1e-3)
+                cond2 = (abs.( (log.(u[1]) .- u1_rough[end-1]) ./ log.(u[1])) .< 1e-3)
+                # print(cond1, "\t", cond2, "\n")
+                if cond1 && cond2 && (t > 1e6)
+                    u1_eq = true
+                end
+                
+                cond1 = (abs.( (log.(u[2]) .- u2_rough[end]) ./ log.(u[2])) .< 1e-3)
+                cond2 = (abs.( (log.(u[2]) .- u2_rough[end-1]) ./ log.(u[2])) .< 1e-3)
+                # print("CHECK \t", integrator.dt, "\t", t1, "\t", t2, "\t", t3, "\t", t4, "\n")
+                if cond1 && cond2 && (t > 1e6)
+                    u2_eq = true
+                    if (t3 .> (t_max - t) .* 10)
+                        u2_kill = true
+                    end
+                end
+            end
+            
+            push!(u2_rough, log.(u[2]))
+            push!(u1_rough, log.(u[1]))
+        end
+        if u1_eq||u2_eq
+            return true
+        else
+            return false
+        end
+    end
+    function affect_eq!(integrator)
+        du = get_du(integrator)
+        if u1_eq
+            du[1] = 0.0
+        end
+        if u2_eq
+            du[2] = 0.0
+        end
+    end
+    
 
     function check_spin(u, t, integrator)
         if u[3] .> (aBH .+ 0.01)
@@ -205,11 +215,12 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         
     cbackEmax = ContinuousCallback(c_e2max, affect_e2max!, interp_points=10, abstol=1e-2)
     cbackdt = DiscreteCallback(check_timescale, affect_timescale!)
+    cback_equil = DiscreteCallback(check_eq, affect_eq!)
     cbackspin = DiscreteCallback(check_spin, affect_spin!)
     
-    cbset = CallbackSet(cbackEmax, cbackdt, cbackspin)
+    cbset = CallbackSet(cback_equil, cbackEmax, cbackdt, cbackspin)
     prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-6, abstol=1e-6)
-    # sol = solve(prob, Vern6(), saveat=saveat, callback=cbset)
+    
     rP = 1.0 .+ sqrt.(1 - aBH.^2)
     if (aBH .- 2 .* (GNew .* M_BH .* mu) .* rP) .> 0.0
         dt_guess = abs.(4e-2 .* (GNew .* M_BH .* mu ).^8 .* (aBH .- 2 .* (GNew .* M_BH .* mu) .* rP) .* mu / hbar .* 3.15e7).^(-1)
@@ -220,7 +231,12 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         print("Time guess \t", dt_guess, "\n")
     end
     
-    sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
+    # choice_function(integrator) = (Int((integrator.dt ./ integrator.t) < 1e-3) + 1)
+    # alg_switch = CompositeAlgorithm((Euler(), Tsit5()), choice_function)
+    # sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
+    # sol = solve(prob, alg_switch, dt=dt_guess, saveat=saveat, callback=cbset)
+    sol = solve(prob, RK4(), dt=dt_guess, saveat=saveat, callback=cbset)
+    
     
     state211 = [sol.u[i][1] for i in 1:length(sol.u)]
     state322 = [sol.u[i][2] for i in 1:length(sol.u)]
@@ -324,16 +340,15 @@ function RHS_ax!(du, u, Mvars, t)
         SR322 *= 0.0
     end
     
-    # du[1] = kSR_211 .* alph.^8 .* (u[3] .- 2 .* alph .* rP) .* u[1]
+#     du[1] = kSR_211 .* alph.^8 .* (u[3] .- 2 .* alph .* rP) .* u[1]
     du[1] = SR211 .* u[1] ./ mu
     du[1] += - 2 .* k322BH .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* u[1].^2 .* u[2]
     du[1] += k2I_333 .* alph.^8 .* (M_pl ./ fa).^4 .* u[2].^2 .* u[1]
     du[1] += -2 .* kGW_22 .* alph.^14 .* u[1].^2
-    du[1] += -kGW_23 .* alph.^16 .* u[1] .* u[2] .+ kGW_3t2 .* alph.^10 .* u[1] .* u[2]
+#     du[1] += -kGW_23 .* alph.^16 .* u[1] .* u[2] .+ kGW_3t2 .* alph.^10 .* u[1] .* u[2]
     du[1] += -3 .* kI_222 .* alph.^21 .* (M_pl ./ fa).^4 .* u[1].^3
-    du[1] += -3 .* kI_222 .* alph.^21 .* (M_pl ./ fa).^4 .* u[1].^3
-    du[1] += -2 .* kI_223 .* alph.^23 .* (M_pl ./ fa).^4 .* u[1].^2 .* u[2]
-    du[1] += kI_233 .* alph.^25 .* (M_pl ./ fa).^4 .* u[1] .* u[2].^2
+#     du[1] += -2 .* kI_223 .* alph.^23 .* (M_pl ./ fa).^4 .* u[1].^2 .* u[2]
+#     du[1] += kI_233 .* alph.^25 .* (M_pl ./ fa).^4 .* u[1] .* u[2].^2
     
     
     # du[2] = kSR_322 .* alph.^12 .* (u[3] .- alph .* rP) .* u[2]
@@ -370,12 +385,13 @@ end
 
 
 #### TESTING ZONE
-M_BH = 6.3
-aBH = 0.93
-massB = 1.22e-12
-f_a = 1.0e15
-tau_max = 1e8
-alpha_max_cut = 0.5
-super_rad_check(M_BH, aBH, massB, f_a, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=true)
+# M_BH = 6.3
+# aBH = 0.93
+# massB = 1.22e-12
+# f_a = 1.4e13
+# tau_max = 1e8
+# alpha_max_cut = 0.5
+# solve_322 = true
+# super_rad_check(M_BH, aBH, massB, f_a, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=true, solve_322=solve_322)
 ########################
 
