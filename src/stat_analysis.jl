@@ -9,13 +9,13 @@ include("super_rad.jl")
 
 
 solve_322 = true
-tau_max = 4e8
+tau_max = 1e8
 alpha_max_cut = 0.2
 lg_m_low = -13
 lg_m_high = -10
 lg_f_high = 19
 lg_f_low = 11
-
+Fname = "Test_Full_"
 
 
 # data = open(readdlm, "data_in/TestData.dat")
@@ -168,7 +168,7 @@ function initialize_walkers(numwalkers, lg_m_low, lg_m_high, lg_f_low, lg_f_high
     return x0
 end
 
-function mcmc_func_minimize(data; lg_m_low=-20, lg_m_high=-18, lg_f_high=19, lg_f_low=18, tau_max=1e4, alpha_max_cut=0.2, use_input_table=true, solve_322=true)
+function mcmc_func_minimize(data, Fname; lg_m_low=-20, lg_m_high=-18, lg_f_high=19, lg_f_low=18, tau_max=1e4, alpha_max_cut=0.2, use_input_table=true, solve_322=true)
     numdims = 2
     numwalkers = 10
     thinning = 2
@@ -187,9 +187,9 @@ function mcmc_func_minimize(data; lg_m_low=-20, lg_m_high=-18, lg_f_high=19, lg_
     print("Finished main run...\n")
     flatchain, flatllhoodvals = AffineInvariantMCMC.flattenmcmcarray(chain, llhoodvals)
 
-    writedlm("output_mcmc/Test_mcmc.dat", flatchain')
-    writedlm("output_mcmc/Test_likevals.dat", flatllhoodvals')
+    writedlm("output_mcmc/"*Fname*"_mcmc.dat", flatchain')
+    writedlm("output_mcmc/"*Fname*"_likevals.dat", flatllhoodvals')
     
 end
         
-mcmc_func_minimize(data, lg_m_low=lg_m_low, lg_m_high=lg_m_high, lg_f_high=lg_f_high, lg_f_low=lg_f_low, tau_max=tau_max, alpha_max_cut=alpha_max_cut, use_input_table=use_input_table, solve_322=solve_322)
+mcmc_func_minimize(data, Fname, lg_m_low=lg_m_low, lg_m_high=lg_m_high, lg_f_high=lg_f_high, lg_f_low=lg_f_low, tau_max=tau_max, alpha_max_cut=alpha_max_cut, use_input_table=use_input_table, solve_322=solve_322)
