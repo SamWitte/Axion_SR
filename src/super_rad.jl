@@ -106,8 +106,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
                 
                 cond1 = (abs.( (log.(u[2]) .- u2_rough[end]) ./ log.(u[2])) .< 1e-3)
                 cond2 = (abs.( (log.(u[2]) .- u2_rough[end-1]) ./ log.(u[2])) .< 1e-3)
-                print("CHECK \t", integrator.dt, "\t", t1, "\t", t2, "\t", t3, "\t", t4, "\n")
-                print("testing Equil \t ", u[3], "\t", u[2] ./ Emax2, "\t", integrator.dt, "\t", t, "\t", t2_start, "\n\n")
+                # print("CHECK \t", integrator.dt, "\t", t1, "\t", t2, "\t", t3, "\t", t4, "\n")
+                # print("testing Equil \t ", u[3], "\t", u[2] ./ Emax2, "\t", integrator.dt, "\t", t, "\t", t2_start, "\n\n")
                 
                 if cond1 && cond2 && (t > 1e2 .* t2_start)
                     u2_eq = true
