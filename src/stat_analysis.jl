@@ -8,13 +8,13 @@ include("super_rad.jl")
 # Random.seed!(1234)
 
 
-solve_322 = false
+solve_322 = true
 tau_max = 1e8
 alpha_max_cut = 0.2
 lg_m_low = -13
 lg_m_high = -10
 lg_f_high = 19
-lg_f_low = 11
+lg_f_low = 9
 Fname = "Test_No322_"
 
 
