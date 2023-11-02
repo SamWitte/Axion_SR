@@ -169,16 +169,16 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         # watch out for stable equilibrium of 322 state
         if ((wait % 1e4) == 0)
             if (length(u2_rough) > 2)
-                cond1 = (abs.( (log.(u[1]) .- u1_rough[end]) ./ log.(u[1])) .< 1e-3)
-                cond2 = (abs.( (log.(u[1]) .- u1_rough[end-1]) ./ log.(u[1])) .< 1e-3)
+                cond1 = (abs.( (log.(u[1]) .- u1_rough[end]) ./ log.(u[1])) .< 1e-1)
+                cond2 = (abs.( (log.(u[1]) .- u1_rough[end-1]) ./ log.(u[1])) .< 1e-1)
                 # print(cond1, "\t", cond2, "\n")
                 if cond1 && cond2 && (integrator.dt / t < 1e4)
                     u1_eq = true
                     u1_fix = u[1]
                 end
                 
-                cond1 = (abs.( (log.(u[2]) .- u2_rough[end]) ./ log.(u[2])) .< 1e-3)
-                cond2 = (abs.( (log.(u[2]) .- u2_rough[end-1]) ./ log.(u[2])) .< 1e-3)
+                cond1 = (abs.( (log.(u[2]) .- u2_rough[end]) ./ log.(u[2])) .< 1e-1)
+                cond2 = (abs.( (log.(u[2]) .- u2_rough[end-1]) ./ log.(u[2])) .< 1e-1)
                 # print("CHECK \t", integrator.dt, "\t", t1, "\t", t2, "\t", t3, "\t", t4, "\n")
                 if cond1 && cond2 && (integrator.dt / t < 1e4)
                     u2_eq = true
@@ -409,13 +409,13 @@ end
 
 
 #### TESTING ZONE
-# M_BH = 15.4
-# aBH = 0.98
-# massB = 1.68e-12
-# f_a = 4.2e11
-# tau_max = 1e8
-# alpha_max_cut = 0.5
-# solve_322 = true
-# super_rad_check(M_BH, aBH, massB, f_a, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=true, solve_322=solve_322)
+M_BH = 6.41
+aBH = 0.73
+massB = 1.05e-12
+f_a = 9.76e9
+tau_max = 1e8
+alpha_max_cut = 0.5
+solve_322 = true
+super_rad_check(M_BH, aBH, massB, f_a, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=true, solve_322=solve_322)
 ########################
 
