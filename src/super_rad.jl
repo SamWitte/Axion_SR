@@ -109,14 +109,14 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         if debug
             # print("CHECK \t", integrator.dt, "\t", u[1] ./ du[1], "\t", u[2] ./ du[2], "\n")
             # print("CHECK \t", integrator.dt, "\t", t1, "\t", t2, "\t", t3, "\t", t4, "\n")
-            # print(t, "\t", u[1], "\t", u[2], "\t", u[3], "\n\n")
+            print(t, "\t", u[1], "\t", u[2], "\t", u[3], "\n\n")
         end
 
         if (tcheck .>= 5.0 .* integrator.dt) && (wait % 100 == 0)
             return true
         elseif (tcheck .<= integrator.dt)
             return true
-        elseif (integrator.dt .<= 1e-4)
+        elseif (integrator.dt .<= 1e-7)
             return true
         else
             return false
@@ -183,9 +183,9 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
                 if cond1 && cond2 && (integrator.dt / t < 1e4)
                     u2_eq = true
                     u2_fix = u[2]
-                    if (t3 .> (t_max - t) .* 10)
-                        u2_kill = true
-                    end
+#                    if (t3 .> (t_max - t) .* 10)
+#                        u2_kill = true
+#                    end
                 end
             end
             
@@ -409,11 +409,10 @@ end
 
 
 #### TESTING ZONE
-# M_BH = 6.3
-# aBH = 0.7
-# massB = 2e-12
-# massB = 7e-13
-# f_a = 1e13
+# M_BH = 15.4
+# aBH = 0.98
+# massB = 1.68e-12
+# f_a = 4.2e11
 # tau_max = 1e8
 # alpha_max_cut = 0.5
 # solve_322 = true
