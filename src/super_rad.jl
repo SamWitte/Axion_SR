@@ -106,13 +106,13 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         wait += 1
         
         
-        if debug
+        if debug && (wait%100==0)
             # print("CHECK \t", integrator.dt, "\t", u[1] ./ du[1], "\t", u[2] ./ du[2], "\n")
             # print("CHECK \t", integrator.dt, "\t", t1, "\t", t2, "\t", t3, "\t", t4, "\n")
-            print(t, "\t", u[1], "\t", u[2], "\t", u[3], "\n\n")
+            # print(t, "\t", u[1], "\t", u[2], "\t", u[3], "\n\n")
         end
 
-        if (tcheck .>= 5.0 .* integrator.dt) && (wait % 100 == 0)
+        if (tcheck .>= 10.0 .* integrator.dt) && (wait % 100 == 0)
             return true
         elseif (tcheck .<= integrator.dt)
             return true
@@ -161,36 +161,45 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         if u2_kill
             terminate!(integrator)
         end
-        if u1_eq||u2_eq
+        if u1_eq&&u2_eq
             return true
         end
         du = get_du(integrator)
         t3 = abs.(integrator.u[3] ./ du[3])
         # watch out for stable equilibrium of 322 state
+        cVal1 = log.(u[1])
+        cVal2 = log.(u[2])
         if ((wait % 1e4) == 0)
             if (length(u2_rough) > 2)
-                cond1 = (abs.( (log.(u[1]) .- u1_rough[end]) ./ log.(u[1])) .< 1e-1)
-                cond2 = (abs.( (log.(u[1]) .- u1_rough[end-1]) ./ log.(u[1])) .< 1e-1)
-                # print(cond1, "\t", cond2, "\n")
+                
+                if isinf.(cVal1)
+                    cVal1 = -100
+                end
+                cond1 = (abs.( (cVal1 .- u1_rough[end]) ./ log.(u[1])) .< 1e-1)
+                cond2 = (abs.( (cVal1 .- u1_rough[end-1]) ./ log.(u[1])) .< 1e-1)
                 if cond1 && cond2 && (integrator.dt / t < 1e4)
                     u1_eq = true
                     u1_fix = u[1]
+                    
                 end
                 
-                cond1 = (abs.( (log.(u[2]) .- u2_rough[end]) ./ log.(u[2])) .< 1e-1)
-                cond2 = (abs.( (log.(u[2]) .- u2_rough[end-1]) ./ log.(u[2])) .< 1e-1)
-                # print("CHECK \t", integrator.dt, "\t", t1, "\t", t2, "\t", t3, "\t", t4, "\n")
+                
+                if isinf.(cVal2)
+                    cVal2 = -100
+                end
+                cond1 = (abs.( (cVal2 .- u2_rough[end]) ./ log.(u[2])) .< 1e-1)
+                cond2 = (abs.( (cVal2 .- u2_rough[end-1]) ./ log.(u[2])) .< 1e-1)
+                # print("CHECK \t", t, "\t", integrator.dt, "\t", u[1], "\t",u[2], "\n")
+               
                 if cond1 && cond2 && (integrator.dt / t < 1e4)
                     u2_eq = true
                     u2_fix = u[2]
-#                    if (t3 .> (t_max - t) .* 10)
-#                        u2_kill = true
-#                    end
                 end
             end
             
-            push!(u2_rough, log.(u[2]))
-            push!(u1_rough, log.(u[1]))
+            push!(u2_rough, cVal2)
+            push!(u1_rough, cVal1)
+        
         end
         if u1_eq||u2_eq
             return true

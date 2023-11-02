@@ -5,7 +5,7 @@ using DelimitedFiles
 include("super_rad.jl")
 # using PyCall
 
-# Random.seed!(1234)
+Random.seed!(1234)
 
 
 solve_322 = true
