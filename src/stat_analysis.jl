@@ -102,7 +102,7 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
             if SpinBH < 0.0
                 SpinBH = 0.0
             end
-            print(SpinBH, "\t", 10 .^log_m, "\t", 10 .^log_f, "\n")
+            print(MassBH, "\t", SpinBH, "\t", 10 .^log_m, "\t", 10 .^log_f, "\n")
             final_spin = super_rad_check(MassBH, SpinBH, 10 .^log_m, 10 .^log_f, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=false, solve_322=solve_322)
             
             if final_spin > SpinBH_c[i]
