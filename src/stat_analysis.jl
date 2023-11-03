@@ -171,8 +171,8 @@ end
 function mcmc_func_minimize(data, Fname; lg_m_low=-20, lg_m_high=-18, lg_f_high=19, lg_f_low=18, tau_max=1e4, alpha_max_cut=0.2, use_input_table=true, solve_322=true)
     numdims = 2
     numwalkers = 10
-    thinning = 2
-    numsamples_perwalker = 5000
+    thinning = 1
+    numsamples_perwalker = 2000
     burnin = 500
 
     function llhood(x)

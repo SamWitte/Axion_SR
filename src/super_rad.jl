@@ -48,6 +48,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     u1_fix = nothing
     u2_eq = false
     u2_fix = nothing
+    u4_fix = nothing
     u2_kill = false
     u2_rough = []
     u1_rough = []
@@ -70,7 +71,6 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     function affect_e2max!(integrator)
         integrator.u[1] = Emax2
         if !u1_eq
-
             set_proposed_dt!(integrator, integrator.dt .* 0.2)
         end
     end
@@ -121,14 +121,14 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         wait += 1
         
         
-        if debug && (wait%1==0)
+        if debug && (wait%10==0)
             # print("CHECK \t", integrator.dt, "\t", u[1] ./ du[1], "\t", u[2] ./ du[2], "\n")
             # print("CHECK \t", integrator.dt, "\t", t1, "\t", t2, "\t", t3, "\t", t4, "\n")
             # print(tcheck, "\n")
-            # print(t, "\t", u[1], "\t", u[2], "\t", u[3], "\t", u[4], "\n\n")
+            print(t, "\t", u[1], "\t", u[2], "\t", u[3], "\t", u[4], "\n\n")
         end
 
-        if (tcheck .>= 10.0 .* integrator.dt) && (wait % 10 == 0)
+        if (tcheck .>= 1000.0 .* integrator.dt) && (wait % 1000 == 0)
             return true
         elseif (tcheck .<= integrator.dt)
             return true
@@ -167,9 +167,9 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         end
         
         t3 = abs.(integrator.u[3] ./ du[3])
-        if u1_eq&&u2_eq&&(t3 > 100.0 * t_max)
-            terminate!(integrator)
-        end
+#        if u1_eq&&u2_eq&&(t3 > 100.0 * t_max)
+#            terminate!(integrator)
+#        end
         # t4 = abs.(integrator.u[4] ./ du[4])
     
         
@@ -178,9 +178,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         
         
         if (tcheck .<= integrator.dt)
-            
             set_proposed_dt!(integrator, integrator.dt .* 0.5)
-        elseif (integrator.dt .<= 1e-4)
+        elseif (integrator.dt .<= 1e-7)
             terminate!(integrator)
         else
             set_proposed_dt!(integrator, integrator.dt .* 1.2)
@@ -205,26 +204,27 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
                 if isinf.(cVal1)
                     cVal1 = -100
                 end
-                cond1 = (abs.( (cVal1 .- u1_rough[end]) ./ log.(u[1])) .< 1e-1)
-                cond2 = (abs.( (cVal1 .- u1_rough[end-1]) ./ log.(u[1])) .< 1e-1)
+                cond1 = (abs.( (cVal1 .- u1_rough[end]) ./ log.(u[1])) .< 1e-2)
+                cond2 = (abs.( (cVal1 .- u1_rough[end-1]) ./ log.(u[1])) .< 1e-2)
                 # print(t, "\t", cond1, "\t", cond2, "\t", integrator.dt / t, "\n" )
-                if cond1 && cond2 && (integrator.dt / t < 1e4)
+                if cond1 && cond2 && (integrator.dt / t < 1e5)
                     u1_eq = true
                     u1_fix = u[1]
-                    
+                    u4_fix = u[4]
                 end
                 
                 
                 if isinf.(cVal2)
                     cVal2 = -100
                 end
-                cond1 = (abs.( (cVal2 .- u2_rough[end]) ./ log.(u[2])) .< 1e-1)
-                cond2 = (abs.( (cVal2 .- u2_rough[end-1]) ./ log.(u[2])) .< 1e-1)
+                cond1 = (abs.( (cVal2 .- u2_rough[end]) ./ log.(u[2])) .< 1e-2)
+                cond2 = (abs.( (cVal2 .- u2_rough[end-1]) ./ log.(u[2])) .< 1e-2)
                 # print("CHECK \t", t, "\t", integrator.dt, "\t", u[1], "\t",u[2], "\n")
                
-                if cond1 && cond2 && (integrator.dt / t < 1e4)
+                if cond1 && cond2 && (integrator.dt / t < 1e5)
                     u2_eq = true
                     u2_fix = u[2]
+                    u4_fix = u[4]
                 end
             end
             
@@ -242,14 +242,17 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         du = get_du(integrator)
         if u1_eq && !u2_eq
             du[1] = 0.0
-            set_u!(integrator, [u1_fix, integrator.u[2], integrator.u[3], integrator.u[4]])
+            du[4] = 0.0
+            set_u!(integrator, [u1_fix, integrator.u[2], integrator.u[3], u4_fix])
         elseif u2_eq && !u1_eq
             du[2] = 0.0
-            set_u!(integrator, [integrator.u[1], u2_fix, integrator.u[3], integrator.u[4]])
+            du[4] = 0.0
+            set_u!(integrator, [integrator.u[1], u2_fix, integrator.u[3], u4_fix])
         elseif u1_eq && u2_eq
             du[1] = 0.0
             du[2] = 0.0
-            set_u!(integrator, [u1_fix, u2_fix, integrator.u[3], integrator.u[4]])
+            du[4] = 0.0
+            set_u!(integrator, [u1_fix, u2_fix, integrator.u[3], u4_fix])
             
         end
     end
@@ -270,18 +273,18 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         elseif integrator.u[3] .< 0.0
             integrator.u[3] = 0.0
         end
-        
-        set_proposed_dt!(integrator, integrator.dt .* 0.3)
+#         set_proposed_dt!(integrator, integrator.dt .* 0.3)
     end
     
     
         
-    cbackEmax = ContinuousCallback(c_e2max, affect_e2max!, interp_points=10, abstol=1e-2)
+    cbackEmax = ContinuousCallback(c_e2max, affect_e2max!, interp_points=10, abstol=0.01)
     cbackdt = DiscreteCallback(check_timescale, affect_timescale!)
     cback_equil = DiscreteCallback(check_eq, affect_eq!)
     cbackspin = DiscreteCallback(check_spin, affect_spin!)
     
-    cbset = CallbackSet(cback_equil, cbackEmax, cbackdt, cbackspin)
+    # cbset = CallbackSet(cback_equil, cbackEmax, cbackdt, cbackspin)
+    cbset = CallbackSet(cback_equil, cbackdt, cbackspin)
     prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-6, abstol=1e-6)
     
     rP = 1.0 .+ sqrt.(1 - aBH.^2)
@@ -304,8 +307,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     spinBH = [sol.u[i][3] for i in 1:length(sol.u)]
     MassB = [sol.u[i][4] for i in 1:length(sol.u)]
     if debug
-        print("Initial \t", state211[1], "\t", state322[1], "\t", spinBH[1], "\t", MassB[1], "\n")
-        print("Final \t", state211[end], "\t", state322[end], "\t", spinBH[end], "\t", MassB[end], "\n")
+        print("Initial \t", state211[1] ./ Emax2, "\t", state322[1] ./ Emax2, "\t", spinBH[1], "\t", MassB[1], "\n")
+        print("Final \t", state211[end] ./ Emax2, "\t", state322[end] ./ Emax2, "\t", spinBH[end], "\t", MassB[end], "\n")
     end
 
 
@@ -389,6 +392,7 @@ function RHS_ax!(du, u, Mvars, t)
     
     SR211 = sr_rates(2, 1, 1, mu, u[4], u[3], impose_low_cut=impose_low_cut)
     SR322 = sr_rates(3, 2, 2, mu, u[4], u[3], impose_low_cut=impose_low_cut)
+    # print((SR211 ./ hbar .* 3.15e7).^(-1) , "\t", (SR322 ./ hbar .* 3.15e7).^(-1),"\n")
     
     if u[1] .> Emax2
         SR211 *= 0.0
@@ -415,7 +419,7 @@ function RHS_ax!(du, u, Mvars, t)
     
 #     du[1] = kSR_211 .* alph.^8 .* (u[3] .- 2 .* alph .* rP) .* u[1]
     du[1] = SR211 .* u[1] ./ mu
-    du[1] += - 2 .* k322BH .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* u[1].^2
+    du[1] += - 2 .* k322BH .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* u[1].^2 .* u[2]
     du[1] += k2I_333 .* alph.^8 .* (M_pl ./ fa).^4 .* u[2].^2 .* u[1]
     du[1] += -2 .* kGW_22 .* alph.^14 .* u[1].^2
     du[1] += -3 .* kI_222 .* alph.^21 .* (M_pl ./ fa).^4 .* u[1].^3
@@ -460,14 +464,15 @@ end
 
 
 #### TESTING ZONE
-M_BH = 6.563371537522594
-aBH = 0.7089954249788044
+M_BH = 6.40734465
+aBH = 0.71460675
 # massB = 7.085035451615764e-13
-massB = 1.5e-12
-f_a = 3.0e12
-tau_max = 1e7
+massB = 5e-13
+f_a = 1.9965983578359972e19
+tau_max = 1e8
 alpha_max_cut = 0.5
 solve_322 = true
-super_rad_check(M_BH, aBH, massB, f_a, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=true, solve_322=solve_322)
+impose_low_cut=0.01
+# super_rad_check(M_BH, aBH, massB, f_a, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=true, solve_322=solve_322, impose_low_cut=impose_low_cut)
 ########################
 
