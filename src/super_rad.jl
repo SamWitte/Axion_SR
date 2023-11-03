@@ -60,7 +60,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     end
     
     
-    Mvars = [mu, fa, Emax2, solve_322]
+    Mvars = [mu, fa, Emax2, solve_322, aBH, M_BH]
     tspan = (0.0, t_max)
     saveat = (tspan[2] .- tspan[1]) ./ n_times
 
@@ -99,6 +99,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         if u1_eq || u2_eq
             SR211 = sr_rates(2, 1, 1, mu, u[4], u[3])
             SR322 = sr_rates(3, 2, 2, mu, u[4], u[3])
+            
+            
             if u1_eq
                 t1 = 1e100
                 integrator.u[1] = u1_fix
@@ -160,6 +162,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
             end
             SR211 = sr_rates(2, 1, 1, mu, integrator.u[4], integrator.u[3])
             SR322 = sr_rates(3, 2, 2, mu, integrator.u[4], integrator.u[3])
+            
             du[3] = - SR211 .* integrator.u[1] ./ mu .- 2 .* SR322 .* integrator.u[2] ./ mu
         end
         
@@ -352,7 +355,7 @@ function RHS_ax!(du, u, Mvars, t)
     # [e211, e322, aBH, MBH]
     # mu [mass eV], fa[1/GeV]
     
-    mu, fa, Emax2, solve_322  = Mvars
+    mu, fa, Emax2, solve_322, aBH_i, M_BH_i  = Mvars
     
     alph = GNew .* u[4] .* mu #
     rP = nothing
@@ -379,7 +382,7 @@ function RHS_ax!(du, u, Mvars, t)
     
     SR211 = sr_rates(2, 1, 1, mu, u[4], u[3])
     SR322 = sr_rates(3, 2, 2, mu, u[4], u[3])
-
+    
     if u[1] .> Emax2
         SR211 *= 0.0
         kSR_211 *= 0.0
@@ -450,10 +453,10 @@ end
 
 #### TESTING ZONE
 M_BH = 6.563371537522594
-aBH = 0.9089954249788044
-massB = 3.385035451615764e-12
-f_a = 9.905008101471962e9
-tau_max = 1e8
+aBH = 0.7089954249788044
+massB = 2.085035451615764e-12
+f_a = 2.0e13
+tau_max = 1e7
 alpha_max_cut = 0.5
 solve_322 = true
 # super_rad_check(M_BH, aBH, massB, f_a, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=true, solve_322=solve_322)
