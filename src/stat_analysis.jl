@@ -9,7 +9,7 @@ Random.seed!(1234)
 
 
 solve_322 = true
-tau_max = 1e7
+tau_max = 1e8
 alpha_max_cut = 0.2
 lg_m_low = -13
 lg_m_high = -10

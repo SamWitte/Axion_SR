@@ -9,7 +9,7 @@ include("Constants.jl")
 
 
 
-function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_cut=0.2, debug=false, solve_322=true)
+function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_cut=0.2, debug=false, solve_322=true, impose_low_cut=0.01)
    
     alph = GNew .* M_BH .* massB #
     if debug
@@ -22,7 +22,7 @@ function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_c
         return aBH
     end
     
-    final_spin = solve_system(massB, f_a, aBH, M_BH, tau_max, debug=debug, solve_322=solve_322)
+    final_spin = solve_system(massB, f_a, aBH, M_BH, tau_max, debug=debug, solve_322=solve_322, impose_low_cut=impose_low_cut)
     # print("Spin diff.. \t ", aBH, "\t", final_spin, "\t", alph, "\n")
     return final_spin
     
@@ -36,7 +36,7 @@ function emax_211(MBH, mu, aBH)
     return (emax_N ./ emax_D)
 end
     
-function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_322=true)
+function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_322=true, impose_low_cut=0.01)
     
     
     
@@ -60,7 +60,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     end
     
     
-    Mvars = [mu, fa, Emax2, solve_322, aBH, M_BH]
+    Mvars = [mu, fa, Emax2, solve_322, aBH, M_BH, impose_low_cut]
     tspan = (0.0, t_max)
     saveat = (tspan[2] .- tspan[1]) ./ n_times
 
@@ -97,8 +97,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
             t2 = 1e100
         end
         if u1_eq || u2_eq
-            SR211 = sr_rates(2, 1, 1, mu, u[4], u[3])
-            SR322 = sr_rates(3, 2, 2, mu, u[4], u[3])
+            SR211 = sr_rates(2, 1, 1, mu, u[4], u[3], impose_low_cut=impose_low_cut)
+            SR322 = sr_rates(3, 2, 2, mu, u[4], u[3], impose_low_cut=impose_low_cut)
             
             
             if u1_eq
@@ -160,8 +160,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
                 t2 = 1e100
                 integrator.u[2] = u2_fix
             end
-            SR211 = sr_rates(2, 1, 1, mu, integrator.u[4], integrator.u[3])
-            SR322 = sr_rates(3, 2, 2, mu, integrator.u[4], integrator.u[3])
+            SR211 = sr_rates(2, 1, 1, mu, integrator.u[4], integrator.u[3], impose_low_cut=impose_low_cut)
+            SR322 = sr_rates(3, 2, 2, mu, integrator.u[4], integrator.u[3], impose_low_cut=impose_low_cut)
             
             du[3] = - SR211 .* integrator.u[1] ./ mu .- 2 .* SR322 .* integrator.u[2] ./ mu
         end
@@ -322,10 +322,10 @@ function ergL(n, l, m, massB, MBH)
 end
 
 
-function sr_rates(n, l, m, massB, MBH, aBH)
+function sr_rates(n, l, m, massB, MBH, aBH; impose_low_cut=0.01)
     alph = GNew .* MBH .* massB
     
-    if (alph ./ l < 0.05)&&(MBH < 1e2)
+    if (alph ./ l < impose_low_cut)&&(MBH < 1e2)
         # We expect binaries to disrupt.
         return 0.0
     end
@@ -362,7 +362,7 @@ function RHS_ax!(du, u, Mvars, t)
     # [e211, e322, aBH, MBH]
     # mu [mass eV], fa[1/GeV]
     
-    mu, fa, Emax2, solve_322, aBH_i, M_BH_i  = Mvars
+    mu, fa, Emax2, solve_322, aBH_i, M_BH_i, impose_low_cut  = Mvars
     
     alph = GNew .* u[4] .* mu #
     rP = nothing
@@ -387,8 +387,8 @@ function RHS_ax!(du, u, Mvars, t)
     kSR_211 = 4e-2 # kSR_211
     
     
-    SR211 = sr_rates(2, 1, 1, mu, u[4], u[3])
-    SR322 = sr_rates(3, 2, 2, mu, u[4], u[3])
+    SR211 = sr_rates(2, 1, 1, mu, u[4], u[3], impose_low_cut=impose_low_cut)
+    SR322 = sr_rates(3, 2, 2, mu, u[4], u[3], impose_low_cut=impose_low_cut)
     
     if u[1] .> Emax2
         SR211 *= 0.0
@@ -415,12 +415,13 @@ function RHS_ax!(du, u, Mvars, t)
     
 #     du[1] = kSR_211 .* alph.^8 .* (u[3] .- 2 .* alph .* rP) .* u[1]
     du[1] = SR211 .* u[1] ./ mu
-    du[1] += - 2 .* k322BH .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* u[1].^2 .* u[2]
+    du[1] += - 2 .* k322BH .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* u[1].^2
     du[1] += k2I_333 .* alph.^8 .* (M_pl ./ fa).^4 .* u[2].^2 .* u[1]
     du[1] += -2 .* kGW_22 .* alph.^14 .* u[1].^2
     du[1] += -3 .* kI_222 .* alph.^21 .* (M_pl ./ fa).^4 .* u[1].^3
+    du[1] += kGW_3t2 .* alph.^10 .* u[1] .* u[2]
 ######  not being used
-#     du[1] += -kGW_23 .* alph.^16 .* u[1] .* u[2] .+ kGW_3t2 .* alph.^10 .* u[1] .* u[2]
+#     du[1] += -kGW_23 .* alph.^16 .* u[1] .* u[2]
 #     du[1] += -2 .* kI_223 .* alph.^23 .* (M_pl ./ fa).^4 .* u[1].^2 .* u[2]
 #     du[1] += kI_233 .* alph.^25 .* (M_pl ./ fa).^4 .* u[1] .* u[2].^2
     
@@ -461,8 +462,9 @@ end
 #### TESTING ZONE
 M_BH = 6.563371537522594
 aBH = 0.7089954249788044
-massB = 3.085035451615764e-13
-f_a = 1.0e12 / 2
+# massB = 7.085035451615764e-13
+massB = 1.5e-12
+f_a = 3.0e12
 tau_max = 1e7
 alpha_max_cut = 0.5
 solve_322 = true
