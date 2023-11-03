@@ -11,16 +11,30 @@ Random.seed!(1234)
 solve_322 = true
 tau_max = 1e8
 alpha_max_cut = 0.2
+use_input_table = true
+Fname = "Test_322_"
+
+###### Low Mass Region
 lg_m_low = -13
 lg_m_high = -10
 lg_f_high = 19
 lg_f_low = 9
-Fname = "Test_322_"
+data = open(readdlm, "BH_data/Doddy_full.dat")
+data = open(readdlm, "BH_data/Masha_Vals.dat")
+########################
+###### High Mass Region
+lg_m_low = -20
+lg_m_high = -16.5
+lg_f_high = 19
+lg_f_low = 13
+data = open(readdlm, "BH_data/Doddy_SMBH.dat")
+data = open(readdlm, "BH_data/Masha_SMBH.dat")
+########################
 
 
-# data = open(readdlm, "data_in/TestData.dat")
-use_input_table = true
-data = open(readdlm, "BH_data/Doddy_Vals.dat")
+
+
+
 
 function prior(theta, lg_m_low, lg_m_high, lg_f_low, lg_f_high)
     log_m, log_f = theta
