@@ -5,7 +5,7 @@ using DelimitedFiles
 include("super_rad.jl")
 # using PyCall
 
-Random.seed!(1234)
+# Random.seed!(1234)
 
 
 solve_322 = true
@@ -13,6 +13,11 @@ tau_max = 1e8
 alpha_max_cut = 0.2
 use_input_table = true
 Fname = "Test_322_"
+
+numwalkers=10
+thinning=1
+numsamples_perwalker=2000
+burnin=500
 
 ###### Low Mass Region
 lg_m_low = -13
@@ -182,12 +187,9 @@ function initialize_walkers(numwalkers, lg_m_low, lg_m_high, lg_f_low, lg_f_high
     return x0
 end
 
-function mcmc_func_minimize(data, Fname; lg_m_low=-20, lg_m_high=-18, lg_f_high=19, lg_f_low=18, tau_max=1e4, alpha_max_cut=0.2, use_input_table=true, solve_322=true)
+function mcmc_func_minimize(data, Fname; lg_m_low=-20, lg_m_high=-18, lg_f_high=19, lg_f_low=18, tau_max=1e4, alpha_max_cut=0.2, use_input_table=true, solve_322=true, numwalkers=10, thinning=1, numsamples_perwalker=2000, burnin=500)
     numdims = 2
-    numwalkers = 10
-    thinning = 1
-    numsamples_perwalker = 2000
-    burnin = 500
+
 
     function llhood(x)
         return log_probability(x, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high, tau_max=tau_max, alpha_max_cut=alpha_max_cut, use_input_table=use_input_table, solve_322=solve_322)
@@ -206,4 +208,4 @@ function mcmc_func_minimize(data, Fname; lg_m_low=-20, lg_m_high=-18, lg_f_high=
     
 end
         
-mcmc_func_minimize(data, Fname, lg_m_low=lg_m_low, lg_m_high=lg_m_high, lg_f_high=lg_f_high, lg_f_low=lg_f_low, tau_max=tau_max, alpha_max_cut=alpha_max_cut, use_input_table=use_input_table, solve_322=solve_322)
+mcmc_func_minimize(data, Fname, lg_m_low=lg_m_low, lg_m_high=lg_m_high, lg_f_high=lg_f_high, lg_f_low=lg_f_low, tau_max=tau_max, alpha_max_cut=alpha_max_cut, use_input_table=use_input_table, solve_322=solve_322, numwalkers=numwalkers, thinning=thinning, numsamples_perwalker=numsamples_perwalker, burnin=burnin)
