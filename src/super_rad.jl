@@ -207,7 +207,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
                 cond1 = (abs.( (cVal1 .- u1_rough[end]) ./ log.(u[1])) .< 1e-2)
                 cond2 = (abs.( (cVal1 .- u1_rough[end-1]) ./ log.(u[1])) .< 1e-2)
                 # print(t, "\t", cond1, "\t", cond2, "\t", integrator.dt / t, "\n" )
-                if cond1 && cond2 && (integrator.dt / t < 1e5) && (u[1] .> 1e-15)
+                if cond1 && cond2 && (integrator.dt / t < 1e5) && (u[1] .> 1e-30)
                     u1_eq = true
                     u1_fix = u[1]
                     u4_fix = u[4]
@@ -221,7 +221,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
                 cond2 = (abs.( (cVal2 .- u2_rough[end-1]) ./ log.(u[2])) .< 1e-2)
                 # print("CHECK \t", t, "\t", integrator.dt, "\t", u[1], "\t",u[2], "\n")
                
-                if cond1 && cond2 && (integrator.dt / t < 1e5) && (u[2] .> 1e-15)
+                if cond1 && cond2 && (integrator.dt / t < 1e5) && (u[2] .> 1e-30)
                     u2_eq = true
                     u2_fix = u[2]
                     u4_fix = u[4]
@@ -473,6 +473,6 @@ tau_max = 1e7
 alpha_max_cut = 0.5
 solve_322 = true
 impose_low_cut=0.01
-super_rad_check(M_BH, aBH, massB, f_a, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=true, solve_322=solve_322, impose_low_cut=impose_low_cut)
+# super_rad_check(M_BH, aBH, massB, f_a, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=true, solve_322=solve_322, impose_low_cut=impose_low_cut)
 ########################
 
