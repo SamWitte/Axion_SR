@@ -324,6 +324,13 @@ end
 
 function sr_rates(n, l, m, massB, MBH, aBH)
     alph = GNew .* MBH .* massB
+    
+    if (alph ./ l < 0.05)&&(MBH < 1e2)
+        # We expect binaries to disrupt.
+        return 0.0
+    end
+    
+    
     rP = nothing
     if aBH .> 0.998
         rP = 1.0 .+ sqrt.(1 - 0.998 .^2)
@@ -454,11 +461,11 @@ end
 #### TESTING ZONE
 M_BH = 6.563371537522594
 aBH = 0.7089954249788044
-massB = 2.085035451615764e-12
-f_a = 2.0e13
+massB = 3.085035451615764e-13
+f_a = 1.0e12 / 2
 tau_max = 1e7
 alpha_max_cut = 0.5
 solve_322 = true
-# super_rad_check(M_BH, aBH, massB, f_a, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=true, solve_322=solve_322)
+super_rad_check(M_BH, aBH, massB, f_a, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=true, solve_322=solve_322)
 ########################
 

@@ -9,7 +9,7 @@ Random.seed!(1234)
 
 
 solve_322 = true
-tau_max = 1e8
+tau_max = 1e7
 alpha_max_cut = 0.2
 lg_m_low = -13
 lg_m_high = -10
@@ -104,7 +104,7 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
             end
             print(MassBH, "\t", SpinBH, "\t", 10 .^log_m, "\t", 10 .^log_f, "\n")
             final_spin = super_rad_check(MassBH, SpinBH, 10 .^log_m, 10 .^log_f, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=false, solve_322=solve_322)
-            print(final_spin, "\n\n")
+            # print(final_spin, "\n\n")
             if final_spin > SpinBH_c[i]
                 sum_loglike += -0.5 * (SpinBH_c[i] - final_spin).^2 / SpinBH_errU[i].^2
             else
