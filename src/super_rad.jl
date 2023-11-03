@@ -69,7 +69,10 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     end
     function affect_e2max!(integrator)
         integrator.u[1] = Emax2
-        set_proposed_dt!(integrator, integrator.dt .* 0.2)
+        if !u1_eq
+
+            set_proposed_dt!(integrator, integrator.dt .* 0.2)
+        end
     end
     function check_timescale(u, t, integrator)
         alph = GNew .* u[4] .* mu
@@ -93,26 +96,37 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         if (2 .* OmegaH .< ergL(3, 2, 2, mu, u[4]))
             t2 = 1e100
         end
-        if u1_eq
-            t1 = 1e100
-        end
-        if u2_eq
-            t2 = 1e100
+        if u1_eq || u2_eq
+            SR211 = sr_rates(2, 1, 1, mu, u[4], u[3])
+            SR322 = sr_rates(3, 2, 2, mu, u[4], u[3])
+            if u1_eq
+                t1 = 1e100
+                integrator.u[1] = u1_fix
+            end
+            if u2_eq
+                t2 = 1e100
+                integrator.u[2] = u2_fix
+            end
+            
+            du[3] = - SR211 .* u[1] ./ mu .- 2 .* SR322 .* u[2] ./ mu
         end
         t3 = abs.(u[3] ./ du[3])
         t4 = abs.(u[4] ./ du[4])
         
-        tcheck = minimum([t1 t2 t3 t4])
+       
+#        tcheck = minimum([t1 t2 t3 t4])
+        tcheck = minimum([t1 t2 t3])
         wait += 1
         
         
-        if debug && (wait%1000==0)
+        if debug && (wait%1==0)
             # print("CHECK \t", integrator.dt, "\t", u[1] ./ du[1], "\t", u[2] ./ du[2], "\n")
             # print("CHECK \t", integrator.dt, "\t", t1, "\t", t2, "\t", t3, "\t", t4, "\n")
-            # print(t, "\t", u[1], "\t", u[2], "\t", u[3], "\n\n")
+            # print(tcheck, "\n")
+            # print(t, "\t", u[1], "\t", u[2], "\t", u[3], "\t", u[4], "\n\n")
         end
 
-        if (tcheck .>= 10.0 .* integrator.dt) && (wait % 100 == 0)
+        if (tcheck .>= 10.0 .* integrator.dt) && (wait % 10 == 0)
             return true
         elseif (tcheck .<= integrator.dt)
             return true
@@ -135,20 +149,33 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         if (2 .* OmegaH .< ergL(3, 2, 2, mu, integrator.u[4]))
             t2 = 1e100
         end
-        if u1_eq
-            t1 = 1e100
+        if u1_eq || u2_eq
+            if u1_eq
+                t1 = 1e100
+                integrator.u[1] = u1_fix
+            end
+            if u2_eq
+                t2 = 1e100
+                integrator.u[2] = u2_fix
+            end
+            SR211 = sr_rates(2, 1, 1, mu, integrator.u[4], integrator.u[3])
+            SR322 = sr_rates(3, 2, 2, mu, integrator.u[4], integrator.u[3])
+            du[3] = - SR211 .* integrator.u[1] ./ mu .- 2 .* SR322 .* integrator.u[2] ./ mu
         end
-        if u2_eq
-            t2 = 1e100
-        end
+        
         t3 = abs.(integrator.u[3] ./ du[3])
-        t4 = abs.(integrator.u[4] ./ du[4])
+        if u1_eq&&u2_eq&&(t3 > 100.0 * t_max)
+            terminate!(integrator)
+        end
+        # t4 = abs.(integrator.u[4] ./ du[4])
     
         
-        tcheck = minimum([t1 t2 t3 t4])
-    
-                
+#        tcheck = minimum([t1 t2 t3 t4])
+        tcheck = minimum([t1 t2 t3])
+        
+        
         if (tcheck .<= integrator.dt)
+            
             set_proposed_dt!(integrator, integrator.dt .* 0.5)
         elseif (integrator.dt .<= 1e-4)
             terminate!(integrator)
@@ -217,6 +244,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
             du[2] = 0.0
             set_u!(integrator, [integrator.u[1], u2_fix, integrator.u[3], integrator.u[4]])
         elseif u1_eq && u2_eq
+            du[1] = 0.0
+            du[2] = 0.0
             set_u!(integrator, [u1_fix, u2_fix, integrator.u[3], integrator.u[4]])
             
         end
@@ -238,6 +267,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         elseif integrator.u[3] .< 0.0
             integrator.u[3] = 0.0
         end
+        
         set_proposed_dt!(integrator, integrator.dt .* 0.3)
     end
     
@@ -419,13 +449,13 @@ end
 
 
 #### TESTING ZONE
-# M_BH = 6.44
-# aBH = 0.943
-# massB = 2.805e-12
-# f_a = 3.15e14
-# tau_max = 1e8
-# alpha_max_cut = 0.5
-# solve_322 = true
+M_BH = 6.563371537522594
+aBH = 0.9089954249788044
+massB = 3.385035451615764e-12
+f_a = 9.905008101471962e9
+tau_max = 1e8
+alpha_max_cut = 0.5
+solve_322 = true
 # super_rad_check(M_BH, aBH, massB, f_a, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=true, solve_322=solve_322)
 ########################
 
