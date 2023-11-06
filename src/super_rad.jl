@@ -89,13 +89,13 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         
       
         t1 = abs.(u[1] ./ du[1])
-        if (OmegaH .< ergL(2, 1, 1, mu, u[4]))||(u[1] < (GNew .* u[4].^2 .* M_to_eV).^(-1))
-            t1 = 1e100
-        end
+#        if (OmegaH .< ergL(2, 1, 1, mu, u[4]))||(u[1] < (GNew .* u[4].^2 .* M_to_eV).^(-1))
+#            t1 = 1e100
+#        end
         t2 = abs.(u[2] ./ du[2])
-        if (2 .* OmegaH .< ergL(3, 2, 2, mu, u[4]))
-            t2 = 1e100
-        end
+#        if (2 .* OmegaH .< ergL(3, 2, 2, mu, u[4]))
+#            t2 = 1e100
+#        end
         if u1_eq || u2_eq
             SR211 = sr_rates(2, 1, 1, mu, u[4], u[3], impose_low_cut=impose_low_cut)
             SR322 = sr_rates(3, 2, 2, mu, u[4], u[3], impose_low_cut=impose_low_cut)
@@ -121,14 +121,14 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         wait += 1
         
         
-        if debug && (wait%10==0)
+        if debug && (wait%1==0)
             # print("CHECK \t", integrator.dt, "\t", u[1] ./ du[1], "\t", u[2] ./ du[2], "\n")
             # print("CHECK \t", integrator.dt, "\t", t1, "\t", t2, "\t", t3, "\t", t4, "\n")
             # print(tcheck, "\n")
-            print(t, "\t", u[1], "\t", u[2], "\t", u[3], "\t", u[4], "\n\n")
+            # print(t, "\t", u[1], "\t", u[2], "\t", u[3], "\t", u[4], "\n\n")
         end
 
-        if (tcheck .>= 1000.0 .* integrator.dt) && (wait % 1000 == 0)
+        if (tcheck .>= 100.0 .* integrator.dt) && (wait % 10 == 0)
             return true
         elseif (tcheck .<= integrator.dt)
             return true
@@ -144,13 +144,13 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
 
         t1 = abs.(integrator.u[1] ./ du[1])
         # OmegaH = integrator.u[3] ./ (2 .* (GNew .* integrator.u[4]) .* (1 .+ sqrt.(1 .- integrator.u[3].^2)))
-        if (OmegaH .< ergL(2, 1, 1, mu, integrator.u[4]))||(integrator.u[1] < (GNew .* integrator.u[4].^2 .* M_to_eV).^(-1))
-            t1 = 1e100
-        end
+#        if (OmegaH .< ergL(2, 1, 1, mu, integrator.u[4]))||(integrator.u[1] < (GNew .* integrator.u[4].^2 .* M_to_eV).^(-1))
+#            t1 = 1e100
+#        end
         t2 = abs.(integrator.u[2] ./ du[2])
-        if (2 .* OmegaH .< ergL(3, 2, 2, mu, integrator.u[4]))
-            t2 = 1e100
-        end
+#        if (2 .* OmegaH .< ergL(3, 2, 2, mu, integrator.u[4]))
+#            t2 = 1e100
+#        end
         if u1_eq || u2_eq
             if u1_eq
                 t1 = 1e100
@@ -178,7 +178,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         
         
         if (tcheck .<= integrator.dt)
-            set_proposed_dt!(integrator, integrator.dt .* 0.5)
+            set_proposed_dt!(integrator, tcheck .* 0.5)
         elseif (integrator.dt .<= 1e-7)
             terminate!(integrator)
         else
@@ -464,15 +464,17 @@ end
 
 
 #### TESTING ZONE
-M_BH = 6.40734465
-aBH = 0.71460675
+M_BH = 37.7257
+aBH = 0.738
 # massB = 7.085035451615764e-13
-massB = 1e-12
-f_a = 1e11
-tau_max = 1e7
-alpha_max_cut = 0.5
+massB = 1.38707e-12
+f_a = 4.011e15
+tau_max = 1e8
+alpha_max_cut = 1.0
 solve_322 = true
 impose_low_cut=0.01
-# super_rad_check(M_BH, aBH, massB, f_a, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=true, solve_322=solve_322, impose_low_cut=impose_low_cut)
+# debug=true
+# fs = super_rad_check(M_BH, aBH, massB, f_a, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=debug, solve_322=solve_322, impose_low_cut=impose_low_cut)
+# print("Final spin \t", fs, "\n")
 ########################
 
