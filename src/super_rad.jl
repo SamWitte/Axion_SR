@@ -178,7 +178,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         
         
         if (tcheck .<= integrator.dt)
-            set_proposed_dt!(integrator, tcheck .* 0.5)
+            set_proposed_dt!(integrator, tcheck .* 0.1)
         elseif (integrator.dt .<= 1e-7)
             terminate!(integrator)
         else
@@ -464,11 +464,10 @@ end
 
 
 #### TESTING ZONE
-M_BH = 37.7257
-aBH = 0.738
-# massB = 7.085035451615764e-13
-massB = 1.38707e-12
-f_a = 4.011e15
+M_BH = 10.730978606
+aBH = 0.9335787
+massB = 4.5961104e-12
+f_a = 3.813433455e14
 tau_max = 1e8
 alpha_max_cut = 1.0
 solve_322 = true
