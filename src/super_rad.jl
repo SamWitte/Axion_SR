@@ -210,6 +210,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
                 if cond1 && cond2 && (integrator.dt / t < 1e5) && (u[1] .> 1e-30)
                     u1_eq = true
                     u1_fix = u[1]
+                    u2_eq = true
+                    u2_fix = u[2]
                     u4_fix = u[4]
                 end
                 
@@ -224,6 +226,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
                 if cond1 && cond2 && (integrator.dt / t < 1e5) && (u[2] .> 1e-30)
                     u2_eq = true
                     u2_fix = u[2]
+                    u1_eq = true
+                    u1_fix = u[1]
                     u4_fix = u[4]
                 end
             end
@@ -464,15 +468,15 @@ end
 
 
 #### TESTING ZONE
-M_BH = 10.730978606
-aBH = 0.9335787
-massB = 4.5961104e-12
-f_a = 3.813433455e14
+M_BH = 9.0850432104
+aBH = 0.907515615
+massB = 2.813925014e-12
+f_a = 6.15407859e13
 tau_max = 1e8
 alpha_max_cut = 1.0
 solve_322 = true
 impose_low_cut=0.01
-# debug=true
+debug=true
 # fs = super_rad_check(M_BH, aBH, massB, f_a, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=debug, solve_322=solve_322, impose_low_cut=impose_low_cut)
 # print("Final spin \t", fs, "\n")
 ########################
