@@ -13,19 +13,8 @@ const G = 6.674e-11
 
 
 
-function tde_like(MassBH, aBH; plot=false)
-    N_psi = 100  # Number of angles I throw stars in at (linearly spaced between 0 and pi/2).
-    N_spin = 150  # Number of absolute values of spins linearly spaced between 0 and 0.9999
+function tde_like(MassBH, aBH, max_mass_matrix; plot=false)
     
-    
-    nameF = "input_info/max_mass_matrix_$(N_psi)_$(N_spin).txt"
-    if isfile(nameF)
-        max_mass_matrix = readdlm(nameF)
-    else
-        _, max_mass_matrix = get_hills_masses(N_psi, N_spin)  # Need this matrix for tidal force likelihood
-        writedlm(nameF, max_mass_matrix)
-    end
-
     prior_spins(a) = ones(size(a))  # agnostic spin prior.
     if plot
         p_a, a = one_d_spin_fixed_mass(1e8 * Ms, prior_spins, max_mass_matrix)
