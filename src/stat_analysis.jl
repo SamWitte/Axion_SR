@@ -73,6 +73,16 @@ else
     elseif input_data == "Andy"
         data = open(readdlm, "BH_data/TDE_test.dat")
         use_input_table = false
+        
+        N_psi = 100  # Number of angles I throw stars in at (linearly spaced between 0 and pi/2).
+        N_spin = 150  # Number of absolute values of spins linearly spaced between 0 and 0.9999
+        nameMassMatrix = "input_info/max_mass_matrix_$(N_psi)_$(N_spin).txt"
+        if isfile(nameMassMatrix)
+            max_mass_matrix = readdlm(nameMassMatrix)
+        else
+            _, max_mass_matrix = get_hills_masses(N_psi, N_spin)  # Need this matrix for tidal force likelihood
+            writedlm(nameMassMatrix, max_mass_matrix)
+        end
     else
         print("No Data! \n\n")
     end
@@ -209,7 +219,7 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
             
             spinBH_sample = rand() .* 0.998
             final_spin = super_rad_check(MassBH, spinBH_sample, 10 .^log_m, 10 .^log_f, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=false, solve_322=solve_322, impose_low_cut=alpha_min_cut)
-            loglike = tde_like(MassBH, final_spin; plot=false)
+            loglike = tde_like(MassBH, final_spin, max_mass_matrix; plot=false)
             # print(MassBH, "\t", 10 .^log_m, "\t", 10 .^log_f, "\t", spinBH_sample, "\t", final_spin, "\t", loglike, "\n")
             sum_loglike += loglike
             
