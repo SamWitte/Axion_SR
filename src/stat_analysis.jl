@@ -71,7 +71,8 @@ else
         data = open(readdlm, "BH_data/Masha_SMBH.dat")
         use_input_table = true
     elseif input_data == "Andy"
-        data = open(readdlm, "BH_data/TDE_test.dat")
+        # data = open(readdlm, "BH_data/TDE_test.dat")
+        data = open(readdlm, "BH_data/TDE_twoBest.dat")
         use_input_table = false
         
         N_psi = 100  # Number of angles I throw stars in at (linearly spaced between 0 and pi/2).
@@ -105,17 +106,17 @@ function prior(theta, lg_m_low, lg_m_high, lg_f_low, lg_f_high)
     return -Inf
 end
 
-function log_probability(theta, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high; tau_max=1e4, alpha_max_cut=0.2, use_input_table=true, solve_322=true, impose_low_cut=1e-100)
+function log_probability(theta, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high; tau_max=1e4, alpha_max_cut=0.2, use_input_table=true, solve_322=true, impose_low_cut=1e-100, max_mass_matrix=nothing)
 
     lp = prior(theta, lg_m_low, lg_m_high, lg_f_low, lg_f_high)
     if !isfinite.(lp)
         return -Inf
     end
 
-    return lp + log_likelihood(theta, data, tau_max=tau_max, alpha_max_cut=alpha_max_cut, use_input_table=use_input_table, solve_322=solve_322, impose_low_cut=impose_low_cut)
+    return lp + log_likelihood(theta, data, tau_max=tau_max, alpha_max_cut=alpha_max_cut, use_input_table=use_input_table, solve_322=solve_322, impose_low_cut=impose_low_cut, max_mass_matrix=max_mass_matrix)
 end
 
-function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_table=true, solve_322=true, impose_low_cut=1e-100)
+function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_table=true, solve_322=true, impose_low_cut=1e-100, max_mass_matrix=nothing)
     
     log_m, log_f = theta
     sum_loglike = 0.0
@@ -190,6 +191,7 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
         # Indx = data[:, 1]
         # DataEntry = data[:, 2]
         # DataLabel = data[:, 3]
+        ##### LOG 10 Values ########
         MassBH_c = data[:, 1]
         MassBH_errU = data[:, 2]
         MassBH_errD = data[:, 3]
@@ -209,10 +211,10 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
             end
             
             while !val_found
-                MassBH = rand(d_mass,1)[1]
-                if (p_or_neg == 0) && (MassBH >= MassBH_c[i])
+                MassBH = 10 .^rand(d_mass,1)[1]
+                if (p_or_neg == 0) && (MassBH >= 10 .^MassBH_c[i])
                     val_found = true
-                elseif (p_or_neg == 1) && (MassBH <= MassBH_c[i]) && (MassBH > 0)
+                elseif (p_or_neg == 1) && (MassBH <= 10 .^MassBH_c[i]) && (MassBH > 0)
                     val_found = true
                 end
             end
@@ -220,7 +222,7 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
             spinBH_sample = rand() .* 0.998
             final_spin = super_rad_check(MassBH, spinBH_sample, 10 .^log_m, 10 .^log_f, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=false, solve_322=solve_322, impose_low_cut=alpha_min_cut)
             loglike = tde_like(MassBH, final_spin, max_mass_matrix; plot=false)
-            # print(MassBH, "\t", 10 .^log_m, "\t", 10 .^log_f, "\t", spinBH_sample, "\t", final_spin, "\t", loglike, "\n")
+            print(MassBH, "\t", 10 .^log_m, "\t", 10 .^log_f, "\t", spinBH_sample, "\t", final_spin, "\t", loglike, "\n")
             sum_loglike += loglike
             
         end
@@ -260,12 +262,12 @@ function initialize_walkers(numwalkers, lg_m_low, lg_m_high, lg_f_low, lg_f_high
     return x0
 end
 
-function mcmc_func_minimize(data, Fname; lg_m_low=-20, lg_m_high=-18, lg_f_high=19, lg_f_low=18, tau_max=1e4, alpha_max_cut=0.2, alpha_min_cut=1e-100, use_input_table=true, solve_322=true, numwalkers=10, thinning=1, numsamples_perwalker=2000, burnin=500)
+function mcmc_func_minimize(data, Fname; lg_m_low=-20, lg_m_high=-18, lg_f_high=19, lg_f_low=18, tau_max=1e4, alpha_max_cut=0.2, alpha_min_cut=1e-100, use_input_table=true, solve_322=true, numwalkers=10, thinning=1, numsamples_perwalker=2000, burnin=500, max_mass_matrix=nothing)
     numdims = 2
 
 
     function llhood(x)
-        return log_probability(x, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high, tau_max=tau_max, alpha_max_cut=alpha_max_cut, use_input_table=use_input_table, solve_322=solve_322, impose_low_cut=alpha_min_cut)
+        return log_probability(x, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high, tau_max=tau_max, alpha_max_cut=alpha_max_cut, use_input_table=use_input_table, solve_322=solve_322, impose_low_cut=alpha_min_cut, max_mass_matrix=max_mass_matrix)
     end
 
     x0 = initialize_walkers(numwalkers, lg_m_low, lg_m_high, lg_f_low, lg_f_high)
@@ -281,4 +283,4 @@ function mcmc_func_minimize(data, Fname; lg_m_low=-20, lg_m_high=-18, lg_f_high=
     
 end
         
-mcmc_func_minimize(data, Fname, lg_m_low=lg_m_low, lg_m_high=lg_m_high, lg_f_high=lg_f_high, lg_f_low=lg_f_low, tau_max=tau_max, alpha_max_cut=alpha_max_cut, alpha_min_cut=alpha_min_cut, use_input_table=use_input_table, solve_322=solve_322, numwalkers=numwalkers, thinning=thinning, numsamples_perwalker=numsamples_perwalker, burnin=burnin)
+mcmc_func_minimize(data, Fname, lg_m_low=lg_m_low, lg_m_high=lg_m_high, lg_f_high=lg_f_high, lg_f_low=lg_f_low, tau_max=tau_max, alpha_max_cut=alpha_max_cut, alpha_min_cut=alpha_min_cut, use_input_table=use_input_table, solve_322=solve_322, numwalkers=numwalkers, thinning=thinning, numsamples_perwalker=numsamples_perwalker, burnin=burnin, max_mass_matrix=max_mass_matrix)

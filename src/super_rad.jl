@@ -20,6 +20,8 @@ function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_c
             print("Need higher-level system... \n")
         end
         return aBH
+    elseif alph .< impose_low_cut
+        return aBH
     end
     
     final_spin = solve_system(massB, f_a, aBH, M_BH, tau_max, debug=debug, solve_322=solve_322, impose_low_cut=impose_low_cut)
