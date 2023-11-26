@@ -33,8 +33,8 @@ function tde_like(MassBH, aBH, max_mass_matrix; plot=false)
     p_a, a = one_d_spin_fixed_mass(MassBH * Ms, prior_spins, max_mass_matrix)
 
     prob = p_a[argmin(abs.(a .- aBH))]
-    if prob <= 0
-        prob = 1e-100
+    if prob <= 1e-5
+        prob = 1e-5
     end
     return log.(prob)
 end
