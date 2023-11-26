@@ -13,7 +13,7 @@ using Dates
 
 LowMass = false
 input_data = "Andy" # Doddy, Masha, or Andy
-alpha_max_cut = 0.2
+alpha_max_cut = 1.0
 alpha_min_cut = 0.01
 
 Ftag = "_"
@@ -75,8 +75,8 @@ else
         data = open(readdlm, "BH_data/TDE_twoBest.dat")
         use_input_table = false
         
-        N_psi = 100  # Number of angles I throw stars in at (linearly spaced between 0 and pi/2).
-        N_spin = 150  # Number of absolute values of spins linearly spaced between 0 and 0.9999
+        N_psi = 200  # Number of angles I throw stars in at (linearly spaced between 0 and pi/2).
+        N_spin = 300  # Number of absolute values of spins linearly spaced between 0 and 0.9999
         nameMassMatrix = "input_info/max_mass_matrix_$(N_psi)_$(N_spin).txt"
         if isfile(nameMassMatrix)
             max_mass_matrix = readdlm(nameMassMatrix)

@@ -31,7 +31,7 @@ function tde_like(MassBH, aBH, max_mass_matrix; plot=false)
     end
     
     p_a, a = one_d_spin_fixed_mass(MassBH * Ms, prior_spins, max_mass_matrix)
-
+    
     prob = p_a[argmin(abs.(a .- aBH))]
     if prob <= 1e-5
         prob = 1e-5
@@ -197,12 +197,13 @@ function one_d_spin_fixed_mass(Mbh, prior_spin, max_mass_matrix; prior_star=noth
         
         p_a[i] = val[1]
     end
-    # print(size(p_a[Int(N_spin / 2)+1:end]),"\t", size(reverse(p_a[1:Int(N_spin / 2)])), "\n")
+    
     p_a = p_a[Int(N_spin / 2)+1:end] .+ reverse(p_a[1:Int(N_spin / 2)])
     
+    if !all(p_a .== 0.0)
+        p_a ./= sum(p_a .* da_)
+    end
     
-    p_a ./= sum(p_a .* da_)
-
     return p_a, a_[Int(N_spin / 2)+1:end]
 end
 
