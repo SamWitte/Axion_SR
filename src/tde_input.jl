@@ -33,8 +33,8 @@ function tde_like(MassBH, aBH, max_mass_matrix; plot=false)
     p_a, a = one_d_spin_fixed_mass(MassBH * Ms, prior_spins, max_mass_matrix)
     
     prob = p_a[argmin(abs.(a .- aBH))]
-    if prob <= 1e-5
-        prob = 1e-5
+    if prob <= 1e-10
+        prob = 1e-10
     end
     return log.(prob)
 end
@@ -146,7 +146,7 @@ function StellarMassDistributionFunction(;Mmin=0.01 * Ms, Mmax=2.0 * Ms, N=10000
 end
 
 function one_d_spin_fixed_mass(Mbh, prior_spin, max_mass_matrix; prior_star=nothing, prior_psi=nothing,
-                                N_star=100, Mstar_min=0.1, Mstar_max=1, eta=1)
+                                N_star=100, Mstar_min=0.1, Mstar_max=1, eta=1, return_all=true)
 
     Mstar_min *= Ms
     Mstar_max *= Ms
@@ -203,9 +203,23 @@ function one_d_spin_fixed_mass(Mbh, prior_spin, max_mass_matrix; prior_star=noth
     if !all(p_a .== 0.0)
         p_a ./= sum(p_a .* da_)
     end
-    
-    return p_a, a_[Int(N_spin / 2)+1:end]
+    if return_all
+        return p_a, a_[Int(N_spin / 2)+1:end]
+    else
+        found_val = false
+        min_a = 0.0
+        for i in 1:length(p_a)
+         
+            if (p_a[i] .> 0.0)&&(found_val==false)
+                min_a = a_[Int(N_spin / 2)+1:end][i]
+                found_val = true
+            end
+        end
+        return min_a
+    end
 end
+
+
 
 
 

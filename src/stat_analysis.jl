@@ -219,7 +219,11 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
                 end
             end
             
-            spinBH_sample = rand() .* 0.998
+            prior_spins(a) = ones(size(a))  # agnostic spin prior.
+            min_spin = one_d_spin_fixed_mass(MassBH .* Ms, prior_spins, max_mass_matrix; return_all=false)
+                                
+            spinBH_sample = rand() .* (0.998 .- min_spin) .+ min_spin
+            
             final_spin = super_rad_check(MassBH, spinBH_sample, 10 .^log_m, 10 .^log_f, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=false, solve_322=solve_322, impose_low_cut=alpha_min_cut)
             loglike = tde_like(MassBH, final_spin, max_mass_matrix; plot=false)
             print(MassBH, "\t", 10 .^log_m, "\t", 10 .^log_f, "\t", spinBH_sample, "\t", final_spin, "\t", loglike, "\n")
