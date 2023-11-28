@@ -33,7 +33,7 @@ end
 function emax_211(MBH, mu, aBH)
     alph = GNew .* MBH .* mu
     
-    emax_N = 1 .- 8 .* alph.^2 .+ 8 .* alph.^3 .* aBH .- sqrt.(1 .- 16 .* alph.^2 .+ 32 .* aBH .* alph.^3 - 16 .* aBH.^2 .* alph.^4)
+    emax_N = 1 .- 8 .* alph.^2 .+ 8 .* alph.^3 .* aBH .- sqrt.(abs.(1 .- 16 .* alph.^2 .+ 32 .* aBH .* alph.^3 - 16 .* aBH.^2 .* alph.^4)) # abs just in case...
     emax_D = 8 .* (-alph.^3 .+ aBH .* alph.^4)
     return (emax_N ./ emax_D)
 end

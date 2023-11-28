@@ -53,10 +53,10 @@ if LowMass
     Fname *= "_"*input_data*Ftag
 else
     ###### High Mass Region
-    lg_m_low = -20
-    lg_m_high = -16.5
+    lg_m_low = -19.3
     lg_f_high = 19
     lg_f_low = 13
+    lg_m_high = -16.0
     
     if isnothing.(tau_max_override)
         tau_max = 1e10
@@ -65,12 +65,15 @@ else
     end
     
     if input_data == "Doddy"
+        lg_m_high = -15.5
         data = open(readdlm, "BH_data/Doddy_SMBH.dat")
         use_input_table = true
     elseif input_data == "Masha"
+        lg_m_high = -15.5
         data = open(readdlm, "BH_data/Masha_SMBH.dat")
         use_input_table = true
     elseif input_data == "Andy"
+        lg_m_high = -18.0
         # data = open(readdlm, "BH_data/TDE_test.dat")
         data = open(readdlm, "BH_data/TDE_twoBest.dat")
         use_input_table = false
