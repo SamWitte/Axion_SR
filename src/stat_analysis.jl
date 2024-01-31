@@ -42,7 +42,7 @@ if LowMass
         data = open(readdlm, "BH_data/Doddy_full.dat")
         use_input_table = true
     elseif input_data == "Masha"
-        data = open(readdlm, "BH_data/Masha_Vals.dat")
+        data = open(readdlm, "BH_data/Masha_Vals.dat")[2:end, :]
         use_input_table = true
     else
         print("No Data! \n\n")
@@ -131,6 +131,9 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
         SpinBH_c = data[:, 4]
         SpinBH_errU = data[:, 5]
         SpinBH_errD = data[:, 6]
+        age = data[:, 7]
+        Mc = data[:, 8]
+        orbitT = data[:, 9]
         
         num_data = length(MassBH_c)
         
@@ -181,8 +184,22 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
                 SpinBH = 0.0
             end
             print(MassBH, "\t", SpinBH, "\t", 10 .^log_m, "\t", 10 .^log_f, "\n")
-            final_spin = super_rad_check(MassBH, SpinBH, 10 .^log_m, 10 .^log_f, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=false, solve_322=solve_322, impose_low_cut=alpha_min_cut)
-            # print(final_spin, "\n\n")
+            if age[i] < tau_max
+                maxtime = age[i]
+            else
+                maxtime = tau_max
+            end
+            
+            alph = GNew .* M_BH .* massB #
+            day_to_inVeV = 24.0 * 60 * 60 / 6.58e-16
+            test_I6 = (Mc[i] ./ MassBH) * 144 * pi^2 * sqrt.(3) ./ (SpinBH .* alph.^7 .* (1 .+ Mc[i] ./ MassBH) .* (10 .^log_m .* orbitT .* day_to_inVeV).^2) # from 2011.11646
+            test_I7 = SpinBH * alph.^5 .* (10 .^log_m .* orbitT .* day_to_inVeV) ./ 6.0
+            if (test_I6 .> 1.0) || (test_I7 .< 1.0)
+                final_spin = SpinBH_c[i]
+            else
+                final_spin = super_rad_check(MassBH, SpinBH, 10 .^log_m, 10 .^log_f, tau_max=maxtime, alpha_max_cut=alpha_max_cut, debug=false, solve_322=solve_322, impose_low_cut=alpha_min_cut)
+            end
+
             if final_spin > SpinBH_c[i]
                 sum_loglike += -0.5 * (SpinBH_c[i] - final_spin).^2 / SpinBH_errU[i].^2
             else
@@ -227,6 +244,9 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
                                 
             spinBH_sample = rand() .* (0.998 .- min_spin) .+ min_spin
             
+            alph = GNew .* MassBH .* 10 .^log_m #
+            day_to_inVeV = 24.0 * 60 * 60 / 6.58e-16
+
             final_spin = super_rad_check(MassBH, spinBH_sample, 10 .^log_m, 10 .^log_f, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=false, solve_322=solve_322, impose_low_cut=alpha_min_cut)
             loglike = tde_like(MassBH, final_spin, max_mass_matrix; plot=false)
             print(MassBH, "\t", 10 .^log_m, "\t", 10 .^log_f, "\t", spinBH_sample, "\t", final_spin, "\t", loglike, "\n")
