@@ -190,10 +190,10 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
                 maxtime = tau_max
             end
             
-            alph = GNew .* M_BH .* massB #
+            alph = GNew .* MassBH .* 10 .^log_m #
             day_to_inVeV = 24.0 * 60 * 60 / 6.58e-16
-            test_I6 = (Mc[i] ./ MassBH) * 144 * pi^2 * sqrt.(3) ./ (SpinBH .* alph.^7 .* (1 .+ Mc[i] ./ MassBH) .* (10 .^log_m .* orbitT .* day_to_inVeV).^2) # from 2011.11646
-            test_I7 = SpinBH * alph.^5 .* (10 .^log_m .* orbitT .* day_to_inVeV) ./ 6.0
+            test_I6 = (Mc[i] ./ MassBH) * 144 * pi^2 * sqrt.(3) ./ (SpinBH .* alph.^7 .* (1 .+ Mc[i] ./ MassBH) .* (10 .^log_m .* orbitT[i] .* day_to_inVeV).^2) # from 2011.11646
+            test_I7 = SpinBH * alph.^5 .* (10 .^log_m .* orbitT[i] .* day_to_inVeV) ./ 6.0
             if (test_I6 .> 1.0) || (test_I7 .< 1.0)
                 final_spin = SpinBH_c[i]
             else
@@ -244,8 +244,8 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
                                 
             spinBH_sample = rand() .* (0.998 .- min_spin) .+ min_spin
             
-            alph = GNew .* MassBH .* 10 .^log_m #
-            day_to_inVeV = 24.0 * 60 * 60 / 6.58e-16
+            # alph = GNew .* MassBH .* 10 .^log_m #
+            # day_to_inVeV = 24.0 * 60 * 60 / 6.58e-16
 
             final_spin = super_rad_check(MassBH, spinBH_sample, 10 .^log_m, 10 .^log_f, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=false, solve_322=solve_322, impose_low_cut=alpha_min_cut)
             loglike = tde_like(MassBH, final_spin, max_mass_matrix; plot=false)
