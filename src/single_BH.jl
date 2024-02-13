@@ -8,13 +8,13 @@ using Dates
 fout = ""
 sve = true
 
-f_a = 5e12
-m_a = 2.5e-12
-MassBH = 10.0
-SpinBH = 0.9
+f_a = 1e15
+m_a = 3e-13
+MassBH = 14.8
+SpinBH = 0.99
 alpha_max_cut = 1.0
 impose_low_cut = 1e-3
-tau_max = 1e10
+tau_max = 5e6
 return_all_info = true
 
 

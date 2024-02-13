@@ -20,7 +20,7 @@ function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_c
             print("Need higher-level system... \n")
         end
         return aBH
-    elseif (alph .> 0.3)&&(f_a .> 2.5e17)
+    elseif (alph .> 0.3)&&(f_a .< 2.5e17)
         return aBH
     elseif alph .< impose_low_cut
         return aBH
@@ -445,7 +445,8 @@ end
 
 function ergL(n, l, m, massB, MBH)
     alph = GNew .* MBH .* massB
-    return massB .* (1.0 .- alph.^2 ./ (2 .* (n .+ l .+ 1).^2))
+    # return massB .* (1.0 .- alph.^2 ./ (2 .* (n .+ l .+ 1).^2))
+    return massB .* (1.0 .- alph.^2 ./ (2 .* n.^2))
 end
 
 
@@ -470,13 +471,20 @@ function sr_rates(n, l, m, massB, MBH, aBH; impose_low_cut=0.01)
     end
     rP *= (GNew .* MBH)
     OmegaH = aBH ./ (2 .* (GNew .* MBH) .* (1 .+ sqrt.(1 .- aBH.^2)))
-    Anl = 2 .^(4 .* l .+ 2) .* factorial(Int(2 .* l .+ n .+ 1)) ./ ((l .+ n .+ 1).^(2 .* l .+ 4) .* factorial(n))
+    Anl = 2 .^(4 .* l .+ 1) .* factorial(Int(l .+ n)) ./ (n.^(2 .* l .+ 4) .* factorial(n .- l .- 1))
     Anl *= (factorial(Int(l)) ./ (factorial(Int(2 .* l)) .* factorial(Int(2 .* l .+ 1)))).^2
     Chilm = 1.0
     for k in 1:Int(l)
-        Chilm *= (k.^2 .* (1.0 - aBH.^2) .+ 4 .* rP.^2 .* (m .* ergL(n, l, m, massB, MBH) .- massB).^2)
+        # Chilm *= (k.^2 .* (1.0 - aBH.^2) .+ 4 .* rP.^2 .* (m .* ergL(n, l, m, massB, MBH) .- massB).^2)
+        Chilm *= (k.^2 .* (1.0 .- aBH.^2) .+ (aBH * m .- 2 .* (rP ./ (GNew .* MBH)) .* alph).^2)
     end
     Gamma_nlm = 2 * massB .* rP .* (m .* OmegaH .- ergL(n, l, m, massB, MBH)) .* alph.^(4 .* l + 4) .* Anl .* Chilm
+    
+    if (n==2)&&(l==1)&&(m==1)
+        Gamma_nlm_TEST = 4e-2 .* alph.^8 .* (aBH .- 2 .* alph .* (1 .+ sqrt.(1.0 .- aBH.^2))) .* massB
+        # Gamma_nlm_TEST = 1e-7 ./ (GNew .* MBH) .* exp.(-3.7 .* alph)
+        print(Gamma_nlm, "\t", Gamma_nlm_TEST, "\n")
+    end
     if Gamma_nlm > 0.0
         return Gamma_nlm
     else
