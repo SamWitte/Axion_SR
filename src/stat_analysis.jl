@@ -53,7 +53,7 @@ if LowMass
     Fname *= "_"*input_data*Ftag
 else
     ###### High Mass Region
-    lg_m_low = -19.3
+    lg_m_low = -21.0
     lg_f_high = 19
     lg_f_low = 13
     lg_m_high = -16.0
@@ -65,8 +65,8 @@ else
     end
     
     if input_data == "Doddy"
-        lg_m_high = -15.5
-        data = open(readdlm, "BH_data/Doddy_SMBH.dat")
+        lg_m_high = -16.0
+        data = open(readdlm, "BH_data/Doddy_SMBH.dat")[2:end, :]
         use_input_table = true
     elseif input_data == "Masha"
         lg_m_high = -15.5
