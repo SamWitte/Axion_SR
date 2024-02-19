@@ -99,8 +99,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         kSR_211 = 4e-2 # kSR_211
         
         
-        SR211 = sr_rates(2, 1, 1, mu, u[4], u[3], impose_low_cut=impose_low_cut)
-        SR322 = sr_rates(3, 2, 2, mu, u[4], u[3], impose_low_cut=impose_low_cut)
+        SR211 = sr_rates(2, 1, 1, mu, u[4], u[3], impose_low_cut=impose_low_cut, solve_322=solve_322)
+        SR322 = sr_rates(3, 2, 2, mu, u[4], u[3], impose_low_cut=impose_low_cut, solve_322=solve_322)
         # print((SR211 ./ hbar .* 3.15e7).^(-1) , "\t", (SR322 ./ hbar .* 3.15e7).^(-1),"\n")
         
         if u[1] .> Emax2
@@ -212,8 +212,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
 #        end
 
         if u1_eq || u2_eq
-            SR211 = sr_rates(2, 1, 1, mu, u[4], u[3], impose_low_cut=impose_low_cut)
-            SR322 = sr_rates(3, 2, 2, mu, u[4], u[3], impose_low_cut=impose_low_cut)
+            SR211 = sr_rates(2, 1, 1, mu, u[4], u[3], impose_low_cut=impose_low_cut, solve_322=solve_322)
+            SR322 = sr_rates(3, 2, 2, mu, u[4], u[3], impose_low_cut=impose_low_cut, solve_322=solve_322)
             
             
             if u1_eq
@@ -275,8 +275,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
                 t2 = 1e100
                 integrator.u[2] = u2_fix
             end
-            SR211 = sr_rates(2, 1, 1, mu, integrator.u[4], integrator.u[3], impose_low_cut=impose_low_cut)
-            SR322 = sr_rates(3, 2, 2, mu, integrator.u[4], integrator.u[3], impose_low_cut=impose_low_cut)
+            SR211 = sr_rates(2, 1, 1, mu, integrator.u[4], integrator.u[3], impose_low_cut=impose_low_cut, solve_322=solve_322)
+            SR322 = sr_rates(3, 2, 2, mu, integrator.u[4], integrator.u[3], impose_low_cut=impose_low_cut, solve_322=solve_322)
             
             du[3] = - SR211 .* integrator.u[1] ./ mu .- 2 .* SR322 .* integrator.u[2] ./ mu
         end
@@ -450,7 +450,11 @@ function ergL(n, l, m, massB, MBH)
 end
 
 
-function sr_rates(n, l, m, massB, MBH, aBH; impose_low_cut=0.01)
+function sr_rates(n, l, m, massB, MBH, aBH; impose_low_cut=0.01, solve_322=true)
+    if (n==3)&&(l==2)&&(m==1)&&(solve_322==false)
+        return 0.0
+    end
+    
     alph = GNew .* MBH .* massB
     
     if (alph ./ l < impose_low_cut)&&(MBH < 1e2)
@@ -480,11 +484,11 @@ function sr_rates(n, l, m, massB, MBH, aBH; impose_low_cut=0.01)
     end
     Gamma_nlm = 2 * massB .* rP .* (m .* OmegaH .- ergL(n, l, m, massB, MBH)) .* alph.^(4 .* l + 4) .* Anl .* Chilm
     
-    if (n==2)&&(l==1)&&(m==1)
-        Gamma_nlm_TEST = 4e-2 .* alph.^8 .* (aBH .- 2 .* alph .* (1 .+ sqrt.(1.0 .- aBH.^2))) .* massB
-        # Gamma_nlm_TEST = 1e-7 ./ (GNew .* MBH) .* exp.(-3.7 .* alph)
-        print(Gamma_nlm, "\t", Gamma_nlm_TEST, "\n")
-    end
+#    if (n==2)&&(l==1)&&(m==1)
+#        #Gamma_nlm_TEST = 4e-2 .* alph.^8 .* (aBH .- 2 .* alph .* (1 .+ sqrt.(1.0 .- aBH.^2))) .* massB
+#        # Gamma_nlm_TEST = 1e-7 ./ (GNew .* MBH) .* exp.(-3.7 .* alph)
+#        # print(Gamma_nlm, "\t", Gamma_nlm_TEST, "\n")
+#    end
     if Gamma_nlm > 0.0
         return Gamma_nlm
     else
