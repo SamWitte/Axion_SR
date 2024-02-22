@@ -12,7 +12,7 @@ using Dates
 
 
 LowMass = false
-input_data = "Andy" # Doddy, Masha, or Andy
+input_data = "Andy" # Doddy, Masha, Andy, Cyg
 alpha_max_cut = 1.0
 alpha_min_cut = 0.01
 
@@ -43,6 +43,9 @@ if LowMass
         use_input_table = true
     elseif input_data == "Masha"
         data = open(readdlm, "BH_data/Masha_Vals.dat")[2:end, :]
+        use_input_table = true
+    elseif input_data == "Cyg"
+        data = open(readdlm, "BH_data/CygX1.dat")[2:end, :]
         use_input_table = true
     else
         print("No Data! \n\n")

@@ -298,7 +298,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
             terminate!(integrator)
         else
 #        elseif (wait % 5 == 0)
-            set_proposed_dt!(integrator, integrator.dt .* 1.1)
+            set_proposed_dt!(integrator, integrator.dt .* 1.05)
         end
     end
     
@@ -314,7 +314,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         # watch out for stable equilibrium of 322 state
         cVal1 = log.(u[1])
         cVal2 = log.(u[2])
-        if ((wait % 3e2) == 0)
+        if ((wait % 1e3) == 0)
             if (length(u2_rough) > 2)
                 
                 if isinf.(cVal1)
