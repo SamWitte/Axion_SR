@@ -321,7 +321,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         # watch out for stable equilibrium of 322 state
         # cVal1 = log.(u[1])
         # cVal2 = log.(u[2])
-        
+        alph = GNew .* u[4] .* mu
         SR211 = sr_rates(2, 1, 1, mu, integrator.u[4], integrator.u[3], impose_low_cut=impose_low_cut, solve_322=solve_322)
         SR322 = sr_rates(3, 2, 2, mu, integrator.u[4], integrator.u[3], impose_low_cut=impose_low_cut, solve_322=solve_322)
         k322BH = 4e-7  # k^322xBH_211x211
