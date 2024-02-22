@@ -42,13 +42,6 @@ end
     
 function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_322=true, impose_low_cut=0.01, return_all_info=false)
     
-    al = GNew .* M_BH .* mu
-    test = sr_rates(2, 1, 1, mu, M_BH, aBH)
-    test2 = 4e-2 .* al.^8 .* (aBH .- 2 .* al .* (1 .+ sqrt.(1 - aBH.^2))) .* mu
-    test3 = sr_rates(3, 2, 2, mu, M_BH, aBH)
-    test4 = 8e-5 .* al.^12 .* (aBH .- al .* (1 .+ sqrt.(1 - aBH.^2))) .* mu
-    print(test, "\t", test2, "\t", test3, "\t", test4, "\n")
-    
     y0 = [1.0 ./ (GNew .* M_BH.^2 .* M_to_eV), 1.0 ./ (GNew .* M_BH.^2 .* M_to_eV), aBH, M_BH]
     wait = 0
 
