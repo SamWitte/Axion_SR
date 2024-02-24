@@ -9,7 +9,7 @@ include("Constants.jl")
 
 
 
-function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_cut=0.2, debug=false, solve_322=true, impose_low_cut=0.01)
+function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_cut=0.2, debug=false, solve_322=true, impose_low_cut=0.01, input_data="None")
    
     alph = GNew .* M_BH .* massB #
     if debug
@@ -20,11 +20,12 @@ function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_c
             print("Need higher-level system... \n")
         end
         return aBH
-    elseif (alph .> 0.3)&&(f_a .< 2.5e17)
-        return aBH
     elseif alph .< impose_low_cut
         return aBH
     end
+    if input_data != "Doddy"
+        elseif (alph .> 0.3)&&(f_a .< 2.6e17)
+    return aBH
     
     final_spin = solve_system(massB, f_a, aBH, M_BH, tau_max, debug=debug, solve_322=solve_322, impose_low_cut=impose_low_cut)
     # print("Spin diff.. \t ", aBH, "\t", final_spin, "\t", alph, "\n")
