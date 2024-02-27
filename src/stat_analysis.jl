@@ -25,6 +25,7 @@ thinning=1
 numsamples_perwalker=2000
 burnin=500
 
+max_mass_matrix=nothing
 
 if LowMass
     ###### Low Mass Region
