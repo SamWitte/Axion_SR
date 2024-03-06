@@ -13,6 +13,7 @@ using Dates
 
 LowMass = false
 input_data = "Andy" # Doddy, Masha, Andy, Cyg
+one_BH = nothing
 alpha_max_cut = 1.0
 alpha_min_cut = 0.01
 
@@ -41,10 +42,18 @@ if LowMass
     end
     
     if input_data == "Doddy"
-        data = open(readdlm, "BH_data/Doddy_full.dat")[2:end, :]
+        if isnothing(one_BH)
+            data = open(readdlm, "BH_data/Doddy_full.dat")[2:end, :]
+        else
+            data = open(readdlm, "BH_data/"*one_BH)[2:end, :]
+        end
         use_input_table = true
     elseif input_data == "Masha"
-        data = open(readdlm, "BH_data/Masha_Vals.dat")[2:end, :]
+        if isnothing(one_BH)
+            data = open(readdlm, "BH_data/Masha_Vals.dat")[2:end, :]
+        else
+            data = open(readdlm, "BH_data/"*one_BH)[2:end, :]
+        end
         use_input_table = true
     elseif input_data == "Cyg"
         data = open(readdlm, "BH_data/CygX1.dat")[2:end, :]
@@ -56,6 +65,9 @@ if LowMass
     Fname = "LowMassRegion_TauMax_"*string(round(tau_max, sigdigits=2))
     Fname *= "_alpha_maxmin_"*string(round(alpha_max_cut, sigdigits=2))*"_"*string(round(alpha_min_cut, sigdigits=2))
     Fname *= "_"*input_data*Ftag
+    if !isnothing(one_BH)
+        Fname *= "_"*one_BH
+    end
 else
     ###### High Mass Region
     lg_m_low = -21.0

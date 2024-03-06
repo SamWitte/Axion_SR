@@ -9,7 +9,7 @@ include("Constants.jl")
 
 
 
-function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_cut=0.2, debug=false, solve_322=true, impose_low_cut=0.01, input_data="None")
+function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_cut=0.2, debug=false, solve_322=true, impose_low_cut=0.01, input_data="Masha")
    
     alph = GNew .* M_BH .* massB #
     if debug
@@ -28,7 +28,7 @@ function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_c
         return aBH
     end
     
-    final_spin = solve_system(massB, f_a, aBH, M_BH, tau_max, debug=debug, solve_322=solve_322, impose_low_cut=impose_low_cut)
+    final_spin = solve_system(massB, f_a, aBH, M_BH, tau_max, debug=debug, solve_322=solve_322, impose_low_cut=impose_low_cut, input_data=input_data)
     # print("Spin diff.. \t ", aBH, "\t", final_spin, "\t", alph, "\n")
     return final_spin
     
@@ -42,7 +42,7 @@ function emax_211(MBH, mu, aBH)
     return (emax_N ./ emax_D)
 end
     
-function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_322=true, impose_low_cut=0.01, return_all_info=false)
+function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_322=true, impose_low_cut=0.01, return_all_info=false, input_data="Masha")
     
     y0 = [1.0 ./ (GNew .* M_BH.^2 .* M_to_eV), 1.0 ./ (GNew .* M_BH.^2 .* M_to_eV), aBH, M_BH]
     wait = 0
@@ -107,13 +107,24 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
             SR211 *= 0.0
             kSR_211 *= 0.0
         end
-        k322BH = 4e-7  # k^322xBH_211x211
-        k2I_333 = 1e-8 # k^211xInfinity_322x322
-        kGW_22 = 1e-2 # k^GW_211x211
-        kGW_3t2 = 5e-6 # k^GW_{322->211}
-        kI_222 = 1.5e-8 # k^Infinity_(211)^3
-        kSR_322 = 8e-5
-        kGW_33 = 3e-8
+        
+        if input_data == "Doddy"
+            k322BH = 0.0
+            k2I_333 = 0.0
+            kGW_22 = 0.0
+            kGW_3t2 = 0.0
+            kI_222 = 0.0
+            kSR_322 = 0.0
+            kGW_33 = 0.0
+        else
+            k322BH = 4e-7  # k^322xBH_211x211
+            k2I_333 = 1e-8 # k^211xInfinity_322x322
+            kGW_22 = 1e-2 # k^GW_211x211
+            kGW_3t2 = 5e-6 # k^GW_{322->211}
+            kI_222 = 1.5e-8 # k^Infinity_(211)^3
+            kSR_322 = 8e-5
+            kGW_33 = 3e-8
+        end
         
         kGW_23 = 0.0 # k^GW_211x322
         kI_223 = 0.0 # ??? k^Infinity_{(211)^2 x 322}
