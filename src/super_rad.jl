@@ -15,6 +15,7 @@ function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_c
     if debug
         print("Alpha \t", alph, "\n")
     end
+    
     if alph .> alpha_max_cut
         if debug
             print("Need higher-level system... \n")
@@ -23,9 +24,11 @@ function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_c
     elseif alph .< impose_low_cut
         return aBH
     end
+    
     if input_data != "Doddy"
-        elseif (alph .> 0.3)&&(f_a .< 2.6e17)
-        return aBH
+        if (alph .> 0.3)&&(f_a .< 2.6e17)
+            return aBH
+        end
     end
     
     final_spin = solve_system(massB, f_a, aBH, M_BH, tau_max, debug=debug, solve_322=solve_322, impose_low_cut=impose_low_cut, input_data=input_data)
