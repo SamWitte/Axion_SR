@@ -343,10 +343,12 @@ function mcmc_func_minimize(data, Fname; lg_m_low=-20, lg_m_high=-18, lg_f_high=
     chain, llhoodvals = AffineInvariantMCMC.sample(llhood, numwalkers, x0, burnin, 1)
     print("Starting main run...\n")
     chain, llhoodvals = AffineInvariantMCMC.sample(llhood, numwalkers, chain[:, :, end], numsamples_perwalker, thinning)
-    rHvals = rhat(chain)
-    essVals = ess(chain)
+    
     print("Finished main run...\n")
     flatchain, flatllhoodvals = AffineInvariantMCMC.flattenmcmcarray(chain, llhoodvals)
+    rHvals = rhat(flatchain)
+    essVals = ess(flatchain)
+    
     print("Convergence... (rhat - 1) \t ", rHvals - 1.0, "\n")
     print("Convergence... ess \t ", essVals, "\n")
     
