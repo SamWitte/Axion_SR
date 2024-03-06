@@ -13,7 +13,7 @@ using MCMCDiagnosticTools
 
 
 LowMass = true
-input_data = "Masha" # Doddy, Masha, Andy, Me
+input_data = "Me" # Doddy, Masha, Andy, Me
 one_BH = "CygX1" # "CygX1" or "M33X7" or nothing
 alpha_max_cut = 1.0
 alpha_min_cut = 0.01
@@ -226,7 +226,7 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
             
             # masha cut
             a_max = 4 .* alph ./ (1 .+ 4 .* alph.^2)
-            # print(alph, "\t", SpinBH, "\t",final_spin, "\t", a_max, "\t", 10 .^log_m, "\t", 10 .^log_f, "\n")
+            print(alph, "\t", SpinBH, "\t",final_spin, "\t", a_max, "\t", 10 .^log_m, "\t", 10 .^log_f, "\n")
             if (input_data == "Masha")&&((final_spin .- a_max) .> 0.01)
                 final_spin = SpinBH_c[i]
             end
@@ -319,13 +319,15 @@ function BH_mass_from_obs(val, label)
     end
 end
 
-function initialize_walkers(numwalkers, lg_m_low, lg_m_high, lg_f_low, lg_f_high)
+function initialize_walkers(numwalkers, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high)
     len_mass = abs.(lg_m_high - lg_m_low )
     len_fa = abs.(lg_f_high .- lg_f_low)
+    mu_std = log10.(0.2 ./ (data[1, 1] .* GNew))
     
     x0 = rand(2, numwalkers)
-    x0[1, :] .*= len_mass
-    x0[1, :] .+= lg_m_low
+    # x0[1, :] .*= len_mass
+    # x0[1, :] .+= lg_m_low
+    x0[1, :] .= mu_std
     x0[2, :] .*= len_fa
     x0[2, :] .+= lg_f_low
     return x0
@@ -339,7 +341,8 @@ function mcmc_func_minimize(data, Fname; lg_m_low=-20, lg_m_high=-18, lg_f_high=
         return log_probability(x, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high, tau_max=tau_max, alpha_max_cut=alpha_max_cut, use_input_table=use_input_table, solve_322=solve_322, impose_low_cut=alpha_min_cut, max_mass_matrix=max_mass_matrix, input_data=input_data)
     end
 
-    x0 = initialize_walkers(numwalkers, lg_m_low, lg_m_high, lg_f_low, lg_f_high)
+    x0 = initialize_walkers(numwalkers, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high)
+    print("Init walkers \t", x0, "\n")
     print("Starting burn-in...\n")
     chain, llhoodvals = AffineInvariantMCMC.sample(llhood, numwalkers, x0, burnin, 1)
     print("Starting main run...\n")
@@ -347,8 +350,8 @@ function mcmc_func_minimize(data, Fname; lg_m_low=-20, lg_m_high=-18, lg_f_high=
     
     print("Finished main run...\n")
     flatchain, flatllhoodvals = AffineInvariantMCMC.flattenmcmcarray(chain, llhoodvals)
-    rHvals = rhat(flatchain)
-    essVals = ess(flatchain)
+    rHvals = rhat(flatchain')
+    essVals = ess(flatchain')
     
     print("Convergence... (rhat - 1) \t ", rHvals - 1.0, "\n")
     print("Convergence... ess \t ", essVals, "\n")
@@ -357,5 +360,7 @@ function mcmc_func_minimize(data, Fname; lg_m_low=-20, lg_m_high=-18, lg_f_high=
     writedlm("output_mcmc/"*Fname*"_likevals.dat", flatllhoodvals')
     
 end
-        
-# mcmc_func_minimize(data, Fname, lg_m_low=lg_m_low, lg_m_high=lg_m_high, lg_f_high=lg_f_high, lg_f_low=lg_f_low, tau_max=tau_max, alpha_max_cut=alpha_max_cut, alpha_min_cut=alpha_min_cut, use_input_table=use_input_table, solve_322=solve_322, numwalkers=numwalkers, thinning=thinning, numsamples_perwalker=numsamples_perwalker, burnin=burnin, max_mass_matrix=max_mass_matrix, input_data=input_data)
+   
+if abspath(PROGRAM_FILE) == @__FILE__
+    mcmc_func_minimize(data, Fname, lg_m_low=lg_m_low, lg_m_high=lg_m_high, lg_f_high=lg_f_high, lg_f_low=lg_f_low, tau_max=tau_max, alpha_max_cut=alpha_max_cut, alpha_min_cut=alpha_min_cut, use_input_table=use_input_table, solve_322=solve_322, numwalkers=numwalkers, thinning=thinning, numsamples_perwalker=numsamples_perwalker, burnin=burnin, max_mass_matrix=max_mass_matrix, input_data=input_data)
+end
