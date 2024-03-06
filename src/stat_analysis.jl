@@ -5,6 +5,7 @@ using DelimitedFiles
 include("super_rad.jl")
 include("tde_input.jl")
 using Dates
+using MCMCDiagnosticTools
 # using PyCall
 
 
@@ -342,9 +343,11 @@ function mcmc_func_minimize(data, Fname; lg_m_low=-20, lg_m_high=-18, lg_f_high=
     chain, llhoodvals = AffineInvariantMCMC.sample(llhood, numwalkers, x0, burnin, 1)
     print("Starting main run...\n")
     chain, llhoodvals = AffineInvariantMCMC.sample(llhood, numwalkers, chain[:, :, end], numsamples_perwalker, thinning)
+    rHvals = rhat(chain)
     print("Finished main run...\n")
     flatchain, flatllhoodvals = AffineInvariantMCMC.flattenmcmcarray(chain, llhoodvals)
-
+    print("Convergence... (rhat - 1) \t ", rHvals - 1.0, "\n")
+    
     writedlm("output_mcmc/"*Fname*"_mcmc.dat", flatchain')
     writedlm("output_mcmc/"*Fname*"_likevals.dat", flatllhoodvals')
     
