@@ -13,7 +13,7 @@ using MCMCDiagnosticTools
 
 
 LowMass = true
-input_data = "Masha" # Doddy, Masha, Andy, Cyg
+input_data = "Masha" # Doddy, Masha, Andy, Me
 one_BH = "CygX1" # "CygX1" or "M33X7" or nothing
 alpha_max_cut = 1.0
 alpha_min_cut = 0.01
@@ -56,8 +56,8 @@ if LowMass
             data = open(readdlm, "BH_data/"*one_BH*".dat")[2:end, :]
         end
         use_input_table = true
-    elseif input_data == "Cyg"
-        data = open(readdlm, "BH_data/CygX1.dat")[2:end, :]
+    elseif input_data == "Me"
+        data = open(readdlm, "BH_data/"*one_BH*".dat")[2:end, :]
         use_input_table = true
     else
         print("No Data! \n\n")
