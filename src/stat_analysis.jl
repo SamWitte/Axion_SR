@@ -237,7 +237,8 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
             Nmax = 1e76 .* (MassBH ./ 10.0).^2
             SR211 = sr_rates(2, 1, 1, 10 .^log_m, MassBH, SpinBH, impose_low_cut=impose_low_cut, solve_322=false) ./ hbar .* 3.15e7
             bose_thresh = maxtime .* SR211 .* (exp.(lnBose) ./ Nmax)
-            if (input_data == "Doddy")&&(lnBose .< bose_thresh)
+            # print(lnBose, "\t", bose_thresh, "\n")
+            if (input_data == "Doddy")&&(lnBose .> bose_thresh)
                 final_spin = SpinBH_c[i]
             end
             if final_spin > SpinBH_c[i]
@@ -357,4 +358,4 @@ function mcmc_func_minimize(data, Fname; lg_m_low=-20, lg_m_high=-18, lg_f_high=
     
 end
         
-mcmc_func_minimize(data, Fname, lg_m_low=lg_m_low, lg_m_high=lg_m_high, lg_f_high=lg_f_high, lg_f_low=lg_f_low, tau_max=tau_max, alpha_max_cut=alpha_max_cut, alpha_min_cut=alpha_min_cut, use_input_table=use_input_table, solve_322=solve_322, numwalkers=numwalkers, thinning=thinning, numsamples_perwalker=numsamples_perwalker, burnin=burnin, max_mass_matrix=max_mass_matrix, input_data=input_data)
+# mcmc_func_minimize(data, Fname, lg_m_low=lg_m_low, lg_m_high=lg_m_high, lg_f_high=lg_f_high, lg_f_low=lg_f_low, tau_max=tau_max, alpha_max_cut=alpha_max_cut, alpha_min_cut=alpha_min_cut, use_input_table=use_input_table, solve_322=solve_322, numwalkers=numwalkers, thinning=thinning, numsamples_perwalker=numsamples_perwalker, burnin=burnin, max_mass_matrix=max_mass_matrix, input_data=input_data)
