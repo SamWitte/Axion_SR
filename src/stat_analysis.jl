@@ -45,14 +45,14 @@ if LowMass
         if isnothing(one_BH)
             data = open(readdlm, "BH_data/Doddy_full.dat")[2:end, :]
         else
-            data = open(readdlm, "BH_data/"*one_BH)[2:end, :]
+            data = open(readdlm, "BH_data/"*one_BH*".dat")[2:end, :]
         end
         use_input_table = true
     elseif input_data == "Masha"
         if isnothing(one_BH)
             data = open(readdlm, "BH_data/Masha_Vals.dat")[2:end, :]
         else
-            data = open(readdlm, "BH_data/"*one_BH)[2:end, :]
+            data = open(readdlm, "BH_data/"*one_BH*".dat")[2:end, :]
         end
         use_input_table = true
     elseif input_data == "Cyg"
