@@ -11,17 +11,17 @@ using Dates
 # Random.seed!(1234)
 
 
-LowMass = false
-input_data = "Andy" # Doddy, Masha, Andy, Cyg
-one_BH = nothing
+LowMass = true
+input_data = "Masha" # Doddy, Masha, Andy, Cyg
+one_BH = "CygX1" # "CygX1" or "M33X7" or nothing
 alpha_max_cut = 1.0
 alpha_min_cut = 0.01
 
 
 Ftag = "_"
-tau_max_override = nothing
+tau_max_override = 5e6
 
-numwalkers=10
+numwalkers=2
 thinning=1
 numsamples_perwalker=2000
 burnin=500
@@ -31,7 +31,7 @@ max_mass_matrix=nothing
 if LowMass
     ###### Low Mass Region
     lg_m_low = -13
-    lg_m_high = -10
+    lg_m_high = log10.(4e-10)
     lg_f_high = 19
     lg_f_low = 9
     
@@ -200,7 +200,7 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
             if SpinBH < 0.0
                 SpinBH = 0.0
             end
-#            print(MassBH, "\t", SpinBH, "\t", 10 .^log_m, "\t", 10 .^log_f, "\n")
+
             if age[i] < tau_max
                 maxtime = age[i]
             else
@@ -222,11 +222,14 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
 
             ### Likelihood part
             
+            
             # masha cut
             a_max = 4 .* alph ./ (1 .+ 4 .* alph.^2)
+            # print(alph, "\t", SpinBH, "\t",final_spin, "\t", a_max, "\t", 10 .^log_m, "\t", 10 .^log_f, "\n")
             if (input_data == "Masha")&&((final_spin .- a_max) .> 0.01)
                 final_spin = SpinBH_c[i]
             end
+            # print(final_spin, "\n")
             
             ## add doddy constraint on bosenova
             lnBose = log.(5 .* 1e78 .* (2.0 .^4 ./ alph.^3) .* (MassBH ./ 10.0).^2 .* (10 .^log_f ./ M_pl).^2)
