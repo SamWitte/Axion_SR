@@ -26,7 +26,7 @@ function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_c
     end
     
     if input_data != "Doddy"
-        if (alph .> 0.3)&&(f_a .< 2.6e17)
+        if (alph .> 0.4)&&(f_a .< 2.6e17)
             return aBH
         end
     end
