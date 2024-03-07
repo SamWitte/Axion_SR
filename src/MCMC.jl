@@ -132,6 +132,7 @@ if LowMass
     if !isnothing(one_BH)
         Fname *= "_"*one_BH
     end
+    Fname *= "_Nsamps_$(numsamples_perwalker)_"
 else
     ###### High Mass Region
     lg_m_low = -21.0
@@ -175,6 +176,7 @@ else
     Fname = "HighMassRegion_TauMax_"*string(round(tau_max, sigdigits=2))
     Fname *= "_alpha_maxmin_"*string(round(alpha_max_cut, sigdigits=2))*"_"*string(round(alpha_min_cut, sigdigits=2))
     Fname *= "_"*input_data*Ftag
+    Fname *= "_Nsamps_$(numsamples_perwalker)_"
 end
 solve_322 = true
 
