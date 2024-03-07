@@ -22,7 +22,7 @@ alpha_min_cut = 0.01
 Ftag = "_"
 tau_max_override = 5e6
 
-numwalkers=2
+numwalkers=10
 thinning=1
 numsamples_perwalker=2000
 burnin=500
@@ -226,7 +226,7 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
             
             # masha cut
             a_max = 4 .* alph ./ (1 .+ 4 .* alph.^2)
-            print(alph, "\t", SpinBH, "\t",final_spin, "\t", a_max, "\t", 10 .^log_m, "\t", 10 .^log_f, "\n")
+            # print(alph, "\t", SpinBH, "\t",final_spin, "\t", a_max, "\t", 10 .^log_m, "\t", 10 .^log_f, "\n")
             if (input_data == "Masha")&&((final_spin .- a_max) .> 0.01)
                 final_spin = SpinBH_c[i]
             end
@@ -325,9 +325,9 @@ function initialize_walkers(numwalkers, data, lg_m_low, lg_m_high, lg_f_low, lg_
     mu_std = log10.(0.2 ./ (data[1, 1] .* GNew))
     
     x0 = rand(2, numwalkers)
-    # x0[1, :] .*= len_mass
-    # x0[1, :] .+= lg_m_low
-    x0[1, :] .= mu_std
+    x0[1, :] .*= len_mass
+    x0[1, :] .+= lg_m_low
+    # x0[1, :] .= mu_std
     x0[2, :] .*= len_fa
     x0[2, :] .+= lg_f_low
     return x0
