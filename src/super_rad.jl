@@ -25,8 +25,12 @@ function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_c
         return aBH
     end
     
-    if input_data != "Doddy"
+    if input_data == "Masha"
         if (alph .> 0.4)&&(f_a .< 2.6e17)
+            return aBH
+        end
+    elseif input_data == "Me"
+        if (alph .> 0.3)&&(f_a .< 2.6e17)
             return aBH
         end
     end
@@ -420,6 +424,11 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     state322 = [sol.u[i][2] for i in 1:length(sol.u)]
     spinBH = [sol.u[i][3] for i in 1:length(sol.u)]
     MassB = [sol.u[i][4] for i in 1:length(sol.u)]
+    
+    # alph = GNew .* M_BH .* mu
+    # bose_thresh_e = 1024 .* pi * (fa ./ M_pl).^2 ./ ( 9 .* alph.^3 )
+    # print("Condition two \t", state211[end] ./ bose_thresh_e, "\n")
+    
     if debug
         print("Initial \t", state211[1] ./ Emax2, "\t", state322[1] ./ Emax2, "\t", spinBH[1], "\t", MassB[1], "\n")
         print("Final \t", state211[end] ./ Emax2, "\t", state322[end] ./ Emax2, "\t", spinBH[end], "\t", MassB[end], "\n")

@@ -109,11 +109,11 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
 #            if (test_I6 .> 1.0) || (test_I7 .< 1.0)
 #                final_spin = SpinBH_c[i]
 #            else
-#                final_spin = super_rad_check(MassBH, SpinBH, 10 .^log_m, 10 .^log_f, tau_max=maxtime, alpha_max_cut=alpha_max_cut, debug=false, solve_322=solve_322, impose_low_cut=alpha_min_cut, input_data=input_data)
+#                final_spin = super_rad_check(MassBH, SpinBH, 10 .^log_m, 10 .^log_f, tau_max=maxtime, alpha_max_cut=alpha_max_cut, debug=false, solve_322=solve_322, impose_low_cut=impose_low_cut, input_data=input_data)
 #            end
 
             
-            final_spin = super_rad_check(MassBH, SpinBH, 10 .^log_m, 10 .^log_f, tau_max=maxtime, alpha_max_cut=alpha_max_cut, debug=false, solve_322=solve_322, impose_low_cut=alpha_min_cut, input_data=input_data)
+            final_spin = super_rad_check(MassBH, SpinBH, 10 .^log_m, 10 .^log_f, tau_max=maxtime, alpha_max_cut=alpha_max_cut, debug=false, solve_322=solve_322, impose_low_cut=impose_low_cut, input_data=input_data)
 
             ### Likelihood part
             
@@ -131,7 +131,8 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
             Nmax = 1e76 .* (MassBH ./ 10.0).^2
             SR211 = sr_rates(2, 1, 1, 10 .^log_m, MassBH, SpinBH, impose_low_cut=impose_low_cut, solve_322=false) ./ hbar .* 3.15e7
             bose_thresh = maxtime .* SR211 .* (exp.(lnBose) ./ Nmax)
-            # print(lnBose, "\t", bose_thresh, "\n")
+            
+            # print("Bose Check \t ",lnBose .> bose_thresh, "\n")
             if (input_data == "Doddy")&&(lnBose .> bose_thresh)
                 final_spin = SpinBH_c[i]
             end
