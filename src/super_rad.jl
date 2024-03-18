@@ -9,7 +9,7 @@ include("Constants.jl")
 
 
 
-function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_cut=0.2, debug=false, solve_322=true, impose_low_cut=0.01, input_data="Masha")
+function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_cut=0.2, debug=false, solve_322=true, solve_n4=false, impose_low_cut=0.01, input_data="Masha")
    
     alph = GNew .* M_BH .* massB #
     if debug
@@ -29,13 +29,13 @@ function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_c
         if (alph .> 0.4)&&(f_a .< 2.6e17)
             return aBH
         end
-    elseif input_data == "Me"
+    elseif (input_data == "Me")&&(!solve_n4)
         if (alph .> 0.3)&&(f_a .< 2.6e17)
             return aBH
         end
     end
     
-    final_spin = solve_system(massB, f_a, aBH, M_BH, tau_max, debug=debug, solve_322=solve_322, impose_low_cut=impose_low_cut, input_data=input_data)
+    final_spin = solve_system(massB, f_a, aBH, M_BH, tau_max, debug=debug, solve_322=solve_322, impose_low_cut=impose_low_cut, input_data=input_data, solve_n4=solve_n4)
     # print("Spin diff.. \t ", aBH, "\t", final_spin, "\t", alph, "\n")
     return final_spin
     
@@ -49,9 +49,14 @@ function emax_211(MBH, mu, aBH)
     return (emax_N ./ emax_D)
 end
     
-function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_322=true, impose_low_cut=0.01, return_all_info=false, input_data="Masha")
+function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_322=true, impose_low_cut=0.01, return_all_info=false, input_data="Masha", solve_n4=false)
+    e_init = 1.0 ./ (GNew .* M_BH.^2 .* M_to_eV)
+    if !solve_n4
+        y0 = [e_init, e_init, aBH, M_BH]
+    else
     
-    y0 = [1.0 ./ (GNew .* M_BH.^2 .* M_to_eV), 1.0 ./ (GNew .* M_BH.^2 .* M_to_eV), aBH, M_BH]
+        y0 = [e_init, e_init, e_init, e_init, e_init, aBH, M_BH]
+    end
     wait = 0
 
 
@@ -72,16 +77,16 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     end
     
     
-    Mvars = [mu, fa, Emax2, solve_322, aBH, M_BH, impose_low_cut]
+    Mvars = [mu, fa, Emax2, solve_322, aBH, M_BH, impose_low_cut, solve_n4]
     tspan = (0.0, t_max)
     saveat = (tspan[2] .- tspan[1]) ./ n_times
     
     function RHS_ax!(du, u, Mvars, t)
     
-        # [e211, e322, aBH, MBH]
+        # [e211, e322, aBH, MBH] or [e211, e322, e411, e422, e433, aBH, MBH]
         # mu [mass eV], fa[1/GeV]
         
-        mu, fa, Emax2, solve_322, aBH_i, M_BH_i, impose_low_cut  = Mvars
+        mu, fa, Emax2, solve_322, aBH_i, M_BH_i, impose_low_cut, solve_n4  = Mvars
        
         alph = GNew .* u[4] .* mu #
         rP = nothing
@@ -108,7 +113,11 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         
         SR211 = sr_rates(2, 1, 1, mu, u[4], u[3], impose_low_cut=impose_low_cut, solve_322=solve_322)
         SR322 = sr_rates(3, 2, 2, mu, u[4], u[3], impose_low_cut=impose_low_cut, solve_322=solve_322)
-        # print((SR211 ./ hbar .* 3.15e7).^(-1) , "\t", (SR322 ./ hbar .* 3.15e7).^(-1),"\n")
+        if solve_n4
+            SR433 = sr_rates(4, 3, 3, mu, u[4], u[3], impose_low_cut=impose_low_cut, solve_322=true)
+            SR422 = sr_rates(4, 2, 2, mu, u[4], u[3], impose_low_cut=impose_low_cut, solve_322=true)
+            SR411 = sr_rates(4, 1, 1, mu, u[4], u[3], impose_low_cut=impose_low_cut, solve_322=true)
+        end
         
         if u[1] .> Emax2
             SR211 *= 0.0
@@ -178,19 +187,67 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
             du[2] = 0.0
         end
         
+        if solve_n4
+            du[3] = SR411 .* u[3] ./ mu
+            du[4] = SR422 .* u[4] ./ mu
+            du[5] = SR433 .* u[5] ./ mu
+            
+            
+            du[4] += 1.5e-7 .* (alph.^11) .* (M_pl ./ fa).^4 .* rP .* u[4] .* u[1].^2
+            du[1] += -2 .* 1.5e-7 .* (alph.^11) .* (M_pl ./ fa).^4 .* rP .* u[4] .* u[1].^2
+                
+            du[3] += -2.5e-8 .* (alph.^11) .* (M_pl ./ fa).^4 .* rP .* u[1] .* u[2] .* u[3]
+            du[1] += -2.5e-8 .* (alph.^11) .* (M_pl ./ fa).^4 .* rP .* u[1] .* u[2] .* u[3]
+            du[2] += 2.5e-8 .* (alph.^11) .* (M_pl ./ fa).^4 .* rP .* u[1] .* u[2] .* u[3]
+            
+            du[3] += -2 .* 9.8e-11 .* (alph.^11) .* (M_pl ./ fa).^4 .* rP .* u[2] .* u[3].^2
+            du[2] += 9.8e-11 .* (alph.^11) .* (M_pl ./ fa).^4 .* rP .* u[2] .* u[3].^2
+            
+            du[5] += 9.1e-8 .* (alph.^11) .* (M_pl ./ fa).^4 .* rP .* u[1] .* u[2] .* u[5]
+            du[2] += -9.1e-8 .* (alph.^11) .* (M_pl ./ fa).^4 .* rP .* u[1] .* u[2] .* u[5]
+            du[3] += -9.1e-8 .* (alph.^11) .* (M_pl ./ fa).^4 .* rP .* u[1] .* u[2] .* u[5]
+            
+            # to infinity
+            du[3] += -3.8e-9 .* (alph.^8) .* (M_pl ./ fa).^4 .* u[1] .* u[2] .* u[3]
+            du[2] += -3.8e-9 .* (alph.^8) .* (M_pl ./ fa).^4 .* u[1] .* u[2] .* u[3]
+            du[1] += 3.8e-9 .* (alph.^8) .* (M_pl ./ fa).^4 .* u[1] .* u[2] .* u[3]
+            
+            du[1] += 2.6e-9 .* (alph.^8) .* (M_pl ./ fa).^4 .* u[1] .* u[2] .* u[5]
+            du[2] += -2.6e-9 .* (alph.^8) .* (M_pl ./ fa).^4 .* u[1] .* u[2] .* u[5]
+            du[5] += -2.6e-9 .* (alph.^8) .* (M_pl ./ fa).^4 .* u[1] .* u[2] .* u[5]
+            
+            du[1] += 9.2e-11 .* (alph.^8) .* (M_pl ./ fa).^4 .* u[1] .* u[5].^2
+            du[5] += - 2 .* 9.2e-11 .* (alph.^8) .* (M_pl ./ fa).^4 .* u[1] .* u[5].^2
+            
+            
+        end
         
     
-        # du[3] = - SR211 .* u[1] ./ mu .- 2 .* SR322 .* u[2] ./ mu
-        du[3] = - SR211 .* u[1] ./ mu .- SR322 .* u[2] ./ mu
-        du[4] = - SR211 .* u[1] ./ mu .- SR322 .* u[2] ./ mu
-        du[4] += k322BH .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* u[1].^2 .* u[2]
-        
-        # print(t, "\t", u[1] ./ Emax2, "\t", u[2] .* mu .* (GNew .* u[4]), "\t", u[3], "\t", u[4], "\n")
-        
-        du[1] *= mu ./ hbar .* 3.15e7
-        du[2] *= mu ./ hbar .* 3.15e7
-        du[3] *= mu ./ hbar .* 3.15e7
-        du[4] *= mu.^2 .* (GNew .* u[4].^2) ./ hbar .* 3.15e7
+        if solve_n4
+            du[3] = - SR211 .* u[1] ./ mu .- SR322 .* u[2] ./ mu
+            du[4] = - SR211 .* u[1] ./ mu .- SR322 .* u[2] ./ mu
+            du[4] += k322BH .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* u[1].^2 .* u[2]
+            
+            
+            du[1] *= mu ./ hbar .* 3.15e7
+            du[2] *= mu ./ hbar .* 3.15e7
+            du[3] *= mu ./ hbar .* 3.15e7
+            du[4] *= mu.^2 .* (GNew .* u[4].^2) ./ hbar .* 3.15e7
+        else
+            du[6] = - SR211 .* u[1] ./ mu .- SR322 .* u[2] ./ mu .- SR411 .* u[3] ./ mu .- SR422 .* u[4] ./ mu .- SR433 .* u[5] ./ mu
+            du[7] = - SR211 .* u[1] ./ mu .- SR322 .* u[2] ./ mu .- SR411 .* u[3] ./ mu .- SR422 .* u[4] ./ mu .- SR433 .* u[5] ./ mu
+            du[7] += k322BH .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* u[1].^2 .* u[2]
+            
+            
+            du[1] *= mu ./ hbar .* 3.15e7
+            du[2] *= mu ./ hbar .* 3.15e7
+            du[3] *= mu ./ hbar .* 3.15e7
+            du[4] *= mu ./ hbar .* 3.15e7
+            du[5] *= mu ./ hbar .* 3.15e7
+            
+            du[6] *= mu ./ hbar .* 3.15e7
+            du[7] *= mu.^2 .* (GNew .* u[4].^2) ./ hbar .* 3.15e7
+        end
         
         
         # print("Test \t", u[1] ./ du[1], "\t", u[2] ./ du[2], "\n")
@@ -298,7 +355,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
             SR211 = sr_rates(2, 1, 1, mu, integrator.u[4], integrator.u[3], impose_low_cut=impose_low_cut, solve_322=solve_322)
             SR322 = sr_rates(3, 2, 2, mu, integrator.u[4], integrator.u[3], impose_low_cut=impose_low_cut, solve_322=solve_322)
             
-            du[3] = - SR211 .* integrator.u[1] ./ mu .- 2 .* SR322 .* integrator.u[2] ./ mu
+            du[3] = - SR211 .* integrator.u[1] ./ mu .-  SR322 .* integrator.u[2] ./ mu
         end
         
         t3 = abs.(integrator.u[3] ./ du[3])
@@ -375,26 +432,36 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     
 
     function check_spin(u, t, integrator)
-        if u[3] .> (aBH .+ 0.01)
+        if !solve_n4
+            BHs_idx = 3
+        else
+            BHs_idx = 6
+        end
+        if u[BHs_idx] .> (aBH .+ 0.01)
             return true
-        elseif u[3] .<= 0.0
+        elseif u[BHs_idx] .<= 0.0
             return true
         else
             return false
         end
     end
     function affect_spin!(integrator)
-        if integrator.u[3] .> aBH
-            integrator.u[3] = aBH
-        elseif integrator.u[3] .< 0.0
-            integrator.u[3] = 0.0
+        if !solve_n4
+            BHs_idx = 3
+        else
+            BHs_idx = 6
+        end
+        if integrator.u[BHs_idx] .> aBH
+            integrator.u[BHs_idx] = aBH
+        elseif integrator.u[BHs_idx] .< 0.0
+            integrator.u[BHs_idx] = 0.0
         end
         set_proposed_dt!(integrator, integrator.dt .* 0.3)
     end
     
     
         
-    cbackEmax = ContinuousCallback(c_e2max, affect_e2max!, interp_points=10, abstol=0.01)
+    # cbackEmax = ContinuousCallback(c_e2max, affect_e2max!, interp_points=10, abstol=0.01)
     cbackdt = DiscreteCallback(check_timescale, affect_timescale!, save_positions=(false, true))
     cback_equil = DiscreteCallback(check_eq, affect_eq!, save_positions=(false, true))
     cbackspin = DiscreteCallback(check_spin, affect_spin!, save_positions=(false, true))
@@ -422,8 +489,17 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     
     state211 = [sol.u[i][1] for i in 1:length(sol.u)]
     state322 = [sol.u[i][2] for i in 1:length(sol.u)]
-    spinBH = [sol.u[i][3] for i in 1:length(sol.u)]
-    MassB = [sol.u[i][4] for i in 1:length(sol.u)]
+    if !solve_n4
+        spinBH = [sol.u[i][3] for i in 1:length(sol.u)]
+        MassB = [sol.u[i][4] for i in 1:length(sol.u)]
+        
+    else
+        state411 = [sol.u[i][3] for i in 1:length(sol.u)]
+        state422 = [sol.u[i][4] for i in 1:length(sol.u)]
+        state433 = [sol.u[i][5] for i in 1:length(sol.u)]
+        spinBH = [sol.u[i][6] for i in 1:length(sol.u)]
+        MassB = [sol.u[i][7] for i in 1:length(sol.u)]
+    end
     
     # alph = GNew .* M_BH .* mu
     # bose_thresh_e = 1024 .* pi * (fa ./ M_pl).^2 ./ ( 9 .* alph.^3 )
@@ -453,7 +529,7 @@ end
 
 
 function sr_rates(n, l, m, massB, MBH, aBH; impose_low_cut=0.01, solve_322=true)
-    if (n==3)&&(l==2)&&(m==1)&&(solve_322==false)
+    if (n==3)&&(l==2)&&(m==2)&&(solve_322==false)
         return 0.0
     end
     
