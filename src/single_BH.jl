@@ -8,13 +8,13 @@ using Dates
 fout = ""
 sve = true
 
-f_a = 5e14
-m_a = 8e-13
-MassBH = 10.0
+f_a = 1e18
+m_a = 1e-12
+MassBH = 14.8
 SpinBH = 0.9
 alpha_max_cut = 1.0
 impose_low_cut = 1e-3
-tau_max = 1e10
+tau_max = 5e6
 return_all_info = true
 solve_322 = true
 n_times = 10000
