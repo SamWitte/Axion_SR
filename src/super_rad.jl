@@ -3,9 +3,8 @@ using OrdinaryDiffEq
 using Statistics
 using Distributions
 using DelimitedFiles
-# using Dierckx
 include("Constants.jl")
-include("solve_sr_matching.jl")
+include("solve_sr_rates.jl")
 
 
 
@@ -79,7 +78,12 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     
     SR211 = find_im_part(mu, M_BH, aBH, 2, 1, 1, Ntot=400) ./ (GNew * M_BH)
     SR322 = find_im_part(mu, M_BH, aBH, 3, 2, 2, Ntot=800) ./ (GNew * M_BH)
+    # SR211 = sr_rates(2, 1, 1, mu, M_BH, aBH)
+    # SR322 = sr_rates(3, 2, 2, mu, M_BH, aBH)
     a_prev = aBH
+    if solve_n4
+        SR411 = find_im_part(mu, M_BH, aBH, 4, 1, 1, Ntot=800) ./ (GNew * M_BH)
+    end
     
     function RHS_ax!(du, u, Mvars, t)
     
@@ -123,7 +127,9 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         if abs.(u[3] - a_prev) > 0.001            
             SR211 = find_im_part(mu, u[massI], u[spinI], 2, 1, 1, Ntot=400) ./ (GNew * u[spinI])
             SR322 = find_im_part(mu, u[massI], u[spinI], 3, 2, 2, Ntot=800) ./ (GNew * u[spinI])
-       
+            # SR211 = sr_rates(2, 1, 1, mu, u[massI], u[spinI])
+            # SR322 = sr_rates(3, 2, 2, mu, u[massI], u[spinI])
+            
             if solve_n4
                 SR411 = find_im_part(mu, u[massI], u[spinI], 4, 1, 1, Ntot=400) ./ (GNew * u[spinI])
             end
@@ -423,13 +429,24 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         GR_322 = SR322 .* integrator.u[2] .+ k322BH .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* integrator.u[1].^2 .* integrator.u[2] .* mu
         if solve_n4
             GR_411 = SR411 .* integrator.u[3]
-            stable411 = abs.(du[3] ./ (GR_411 ./ hbar .* 3.15e7))
+            if SR411 > 0
+                stable411 = abs.(du[3] ./ (GR_411 ./ hbar .* 3.15e7))
+            else
+                stable411 = 0.0
+            end
         end
         
-        
-        stable211 = abs.(du[1] ./ (SR211 .* integrator.u[1] ./ hbar .* 3.15e7))
-        stable322 = abs.(du[2] ./ (GR_322 ./ hbar .* 3.15e7))
-
+        if SR211 > 0
+            stable211 = abs.(du[1] ./ (SR211 .* integrator.u[1] ./ hbar .* 3.15e7))
+        else
+            stable211 = 0.0
+        end
+        if SR322 > 0
+            stable322 = abs.(du[2] ./ (GR_322 ./ hbar .* 3.15e7))
+        else
+            stable322 = 0.0
+        end
+    
         
         if (stable211 .< eq_threshold)&&(stable322 .< eq_threshold)
             u1_eq = true
@@ -437,6 +454,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
             u2_fix = integrator.u[2]
             u4_fix = integrator.u[massI]
             if solve_n4
+                
                 if (stable411 .< eq_threshold)
                     u2_eq = true
                     u3_fix = integrator.u[3]

@@ -34,6 +34,10 @@ function parse_commandline()
         "--LowMass"
             arg_type = Bool
             default = true
+            
+        "--solve_n4"
+            arg_type = Bool
+            default = false
                         
         "--numwalkers"
             arg_type = Int
@@ -72,7 +76,7 @@ numwalkers = parsed_args["numwalkers"];
 thinning = parsed_args["thinning"];
 numsamples_perwalker = parsed_args["numsamples_perwalker"];
 burnin = parsed_args["burnin"];
-
+solve_n4 = parsed_args["solve_n4"]
 
 
 
@@ -133,6 +137,9 @@ if LowMass
         Fname *= "_"*one_BH
     end
     Fname *= "_Nsamps_$(numsamples_perwalker)_"
+    if solve_n4
+        Fname *= "_add411_"
+    end
 else
     ###### High Mass Region
     lg_m_low = -21.0
@@ -181,7 +188,7 @@ end
 solve_322 = true
 
 time0=Dates.now()
-@inbounds @fastmath mcmc_func_minimize(data, Fname, lg_m_low=lg_m_low, lg_m_high=lg_m_high, lg_f_high=lg_f_high, lg_f_low=lg_f_low, tau_max=tau_max, alpha_max_cut=alpha_max_cut, alpha_min_cut=alpha_min_cut, use_input_table=use_input_table, solve_322=solve_322, numwalkers=numwalkers, thinning=thinning, numsamples_perwalker=numsamples_perwalker, burnin=burnin, max_mass_matrix=max_mass_matrix, input_data=input_data)
+@inbounds @fastmath mcmc_func_minimize(data, Fname, lg_m_low=lg_m_low, lg_m_high=lg_m_high, lg_f_high=lg_f_high, lg_f_low=lg_f_low, tau_max=tau_max, alpha_max_cut=alpha_max_cut, alpha_min_cut=alpha_min_cut, use_input_table=use_input_table, solve_322=solve_322, numwalkers=numwalkers, thinning=thinning, numsamples_perwalker=numsamples_perwalker, burnin=burnin, max_mass_matrix=max_mass_matrix, input_data=input_data, solve_n4=solve_n4)
 
 time1=Dates.now()
 print("\n\n Run time: ", time1-time0, "\n")

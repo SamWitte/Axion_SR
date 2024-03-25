@@ -21,17 +21,17 @@ function prior(theta, lg_m_low, lg_m_high, lg_f_low, lg_f_high)
     return -Inf
 end
 
-function log_probability(theta, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high; tau_max=1e4, alpha_max_cut=0.2, use_input_table=true, solve_322=true, impose_low_cut=1e-100, max_mass_matrix=nothing, input_data="Masha")
+function log_probability(theta, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high; tau_max=1e4, alpha_max_cut=0.2, use_input_table=true, solve_322=true, impose_low_cut=1e-100, max_mass_matrix=nothing, input_data="Masha", solve_n4=false)
 
     lp = prior(theta, lg_m_low, lg_m_high, lg_f_low, lg_f_high)
     if !isfinite.(lp)
         return -Inf
     end
 
-    return lp + log_likelihood(theta, data, tau_max=tau_max, alpha_max_cut=alpha_max_cut, use_input_table=use_input_table, solve_322=solve_322, impose_low_cut=impose_low_cut, max_mass_matrix=max_mass_matrix, input_data=input_data)
+    return lp + log_likelihood(theta, data, tau_max=tau_max, alpha_max_cut=alpha_max_cut, use_input_table=use_input_table, solve_322=solve_322, impose_low_cut=impose_low_cut, max_mass_matrix=max_mass_matrix, input_data=input_data, solve_n4=solve_n4)
 end
 
-function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_table=true, solve_322=true, impose_low_cut=1e-100, max_mass_matrix=nothing, input_data="Masha")
+function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_table=true, solve_322=true, impose_low_cut=1e-100, max_mass_matrix=nothing, input_data="Masha", solve_n4=false)
     
     log_m, log_f = theta
     sum_loglike = 0.0
@@ -106,6 +106,8 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
             day_to_inVeV = 24.0 * 60 * 60 / 6.58e-16
             test_I6 = (Mc[i] ./ MassBH) * 144 * pi^2 * sqrt.(3) ./ (SpinBH .* alph.^7 .* (1 .+ Mc[i] ./ MassBH) .* (10 .^log_m .* orbitT[i] .* day_to_inVeV).^2) # from 2011.11646
             test_I7 = SpinBH * alph.^5 .* (10 .^log_m .* orbitT[i] .* day_to_inVeV) ./ 6.0
+            
+            # add this back at some point...
 #            if (test_I6 .> 1.0) || (test_I7 .< 1.0)
 #                final_spin = SpinBH_c[i]
 #            else
@@ -113,7 +115,7 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
 #            end
 
             
-            final_spin = super_rad_check(MassBH, SpinBH, 10 .^log_m, 10 .^log_f, tau_max=maxtime, alpha_max_cut=alpha_max_cut, debug=false, solve_322=solve_322, impose_low_cut=impose_low_cut, input_data=input_data)
+            final_spin = super_rad_check(MassBH, SpinBH, 10 .^log_m, 10 .^log_f, tau_max=maxtime, alpha_max_cut=alpha_max_cut, debug=false, solve_322=solve_322, impose_low_cut=impose_low_cut, input_data=input_data, solve_n4=solve_n4)
 
             ### Likelihood part
             
@@ -184,7 +186,7 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
             # alph = GNew .* MassBH .* 10 .^log_m #
             # day_to_inVeV = 24.0 * 60 * 60 / 6.58e-16
 
-            final_spin = super_rad_check(MassBH, spinBH_sample, 10 .^log_m, 10 .^log_f, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=false, solve_322=solve_322, impose_low_cut=alpha_min_cut, input_data=input_data)
+            final_spin = super_rad_check(MassBH, spinBH_sample, 10 .^log_m, 10 .^log_f, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=false, solve_322=solve_322, impose_low_cut=alpha_min_cut, input_data=input_data, solve_n4=solve_n4)
             loglike = tde_like(MassBH, final_spin, max_mass_matrix; plot=false)
 #            print(MassBH, "\t", 10 .^log_m, "\t", 10 .^log_f, "\t", spinBH_sample, "\t", final_spin, "\t", loglike, "\n")
             sum_loglike += loglike
@@ -228,12 +230,12 @@ function initialize_walkers(numwalkers, data, lg_m_low, lg_m_high, lg_f_low, lg_
     return x0
 end
 
-function mcmc_func_minimize(data, Fname; lg_m_low=-20, lg_m_high=-18, lg_f_high=19, lg_f_low=18, tau_max=1e4, alpha_max_cut=0.2, alpha_min_cut=1e-100, use_input_table=true, solve_322=true, numwalkers=10, thinning=1, numsamples_perwalker=2000, burnin=500, max_mass_matrix=nothing, input_data="Masha")
+function mcmc_func_minimize(data, Fname; lg_m_low=-20, lg_m_high=-18, lg_f_high=19, lg_f_low=18, tau_max=1e4, alpha_max_cut=0.2, alpha_min_cut=1e-100, use_input_table=true, solve_322=true, numwalkers=10, thinning=1, numsamples_perwalker=2000, burnin=500, max_mass_matrix=nothing, input_data="Masha", solve_n4=false)
     numdims = 2
 
 
     function llhood(x)
-        return log_probability(x, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high, tau_max=tau_max, alpha_max_cut=alpha_max_cut, use_input_table=use_input_table, solve_322=solve_322, impose_low_cut=alpha_min_cut, max_mass_matrix=max_mass_matrix, input_data=input_data)
+        return log_probability(x, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high, tau_max=tau_max, alpha_max_cut=alpha_max_cut, use_input_table=use_input_table, solve_322=solve_322, impose_low_cut=alpha_min_cut, max_mass_matrix=max_mass_matrix, input_data=input_data, solve_n4=solve_n4)
     end
 
     x0 = initialize_walkers(numwalkers, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high)
@@ -252,7 +254,7 @@ function mcmc_func_minimize(data, Fname; lg_m_low=-20, lg_m_high=-18, lg_f_high=
     print("Convergence... ess \t ", essVals, "\n")
     
     writedlm("output_mcmc/"*Fname*"_mcmc.dat", flatchain')
-    writedlm("output_mcmc/"*Fname*"_likevals.dat", flatllhoodvals')
+#    writedlm("output_mcmc/"*Fname*"_likevals.dat", flatllhoodvals')
     
 end
    
