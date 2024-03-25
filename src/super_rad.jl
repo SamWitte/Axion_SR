@@ -3,9 +3,9 @@ using OrdinaryDiffEq
 using Statistics
 using Distributions
 using DelimitedFiles
-using Dierckx
+# using Dierckx
 include("Constants.jl")
-
+include("solve_sr_matching.jl")
 
 
 
@@ -25,12 +25,10 @@ function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_c
         return aBH
     end
     
+    
     if input_data == "Masha"
-        if (alph .> 0.4)&&(f_a .< 2.6e17)
-            return aBH
-        end
-    elseif (input_data == "Me")&&(!solve_n4)
-        if (alph .> 0.3)&&(f_a .< 2.6e17)
+        OmegaH = aBH ./ (2 .* (GNew .* M_BH) .* (1 .+ sqrt.(1 .- aBH.^2)))
+        if (ergL(2, 1, 1, massB, M_BH) .>= OmegaH)&&(f_a .< 2.6e17)
             return aBH
         end
     end
@@ -79,6 +77,10 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     tspan = (0.0, t_max)
     saveat = (tspan[2] .- tspan[1]) ./ n_times
     
+    SR211 = find_im_part(mu, M_BH, aBH, 2, 1, 1, Ntot=400) ./ (GNew * M_BH)
+    SR322 = find_im_part(mu, M_BH, aBH, 3, 2, 2, Ntot=800) ./ (GNew * M_BH)
+    a_prev = aBH
+    
     function RHS_ax!(du, u, Mvars, t)
     
         # [e211, e322, aBH, MBH] or [e211, e322, e411, aBH, MBH]
@@ -117,16 +119,17 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
             end
         end
 
-        
-        kSR_211 = 4e-2 # kSR_211
-        
-        SR211 = sr_rates(2, 1, 1, mu, u[massI], u[spinI], impose_low_cut=impose_low_cut, solve_322=solve_322)
-        SR322 = sr_rates(3, 2, 2, mu, u[massI], u[spinI], impose_low_cut=impose_low_cut, solve_322=solve_322)
-        if solve_n4
-            SR411 = sr_rates(4, 1, 1, mu, u[massI], u[spinI], impose_low_cut=impose_low_cut, solve_322=true)
-            # print(SR411 ./ mu, "\t", SR211 ./ mu, "\n\n")
+
+        if abs.(u[3] - a_prev) > 0.001            
+            SR211 = find_im_part(mu, u[massI], u[spinI], 2, 1, 1, Ntot=400) ./ (GNew * u[spinI])
+            SR322 = find_im_part(mu, u[massI], u[spinI], 3, 2, 2, Ntot=800) ./ (GNew * u[spinI])
+       
+            if solve_n4
+                SR411 = find_im_part(mu, u[massI], u[spinI], 4, 1, 1, Ntot=400) ./ (GNew * u[spinI])
+            end
+            a_prev = u[3]
         end
-        
+
         
         if u[1] .> Emax2
             SR211 *= 0.0
@@ -279,12 +282,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
             t5 = abs.(u[3] ./ du[3])
         end
         
-    
-        if (u1_eq)||(u2_eq)
-            SR211 = sr_rates(2, 1, 1, mu, u[massI], u[spinI], impose_low_cut=impose_low_cut, solve_322=solve_322)
-            SR322 = sr_rates(3, 2, 2, mu, u[massI], u[spinI], impose_low_cut=impose_low_cut, solve_322=solve_322)
-            
-            
+        if (u1_eq)||(u2_eq)      
             t1 = 1e100
             integrator.u[1] = u1_fix
             t2 = 1e100
@@ -292,6 +290,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
             if u2_eq && solve_n4
                 t5 = 1e100
                 integrator.u[3] = u3_fix
+
             end
             
             du[spinI] = - SR211 .* u[1] ./ mu .-  2 .* SR322 .* u[2] ./ mu
@@ -344,7 +343,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         if solve_n4
             t5 = abs.(integrator.u[3] ./ du[3])
         end
-        
+
         if u1_eq || u2_eq
             
             
@@ -356,12 +355,9 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
                 t5 = 1e100
                 integrator.u[3] = u3_fix
             end
-            SR211 = sr_rates(2, 1, 1, mu, integrator.u[massI], integrator.u[spinI], impose_low_cut=impose_low_cut, solve_322=solve_322)
-            SR322 = sr_rates(3, 2, 2, mu, integrator.u[massI], integrator.u[spinI], impose_low_cut=impose_low_cut, solve_322=solve_322)
-            
+           
             du[spinI] = - SR211 .* integrator.u[1] ./ mu .-  2 .* SR322 .* integrator.u[2] ./ mu
             if solve_n4
-                SR411 = sr_rates(4, 1, 1, mu, integrator.u[massI], integrator.u[spinI], impose_low_cut=impose_low_cut, solve_322=solve_322)
                 du[spinI] += - SR411 .* integrator.u[3] ./ mu
             end
         end
@@ -372,7 +368,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         else
             tcheck = minimum([t1 t2 t3 t5])
         end
-        
+
         
         if (tcheck .<= integrator.dt)
             set_proposed_dt!(integrator, tcheck .* 0.1)
@@ -404,6 +400,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         if u2_eq
             return true
         end
+
         if u1_eq
             # check if 411 can change equilibrium!
             if !solve_n4
@@ -422,14 +419,10 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         
         
         t3 = abs.(integrator.u[spinI] ./ du[spinI])
-        
-        
-        SR211 = sr_rates(2, 1, 1, mu, integrator.u[massI], integrator.u[spinI], impose_low_cut=impose_low_cut, solve_322=solve_322)
-        SR322 = sr_rates(3, 2, 2, mu, integrator.u[massI], integrator.u[spinI], impose_low_cut=impose_low_cut, solve_322=solve_322)
+
         k322BH = 4e-7  # k^322xBH_211x211
         GR_322 = SR322 .* integrator.u[2] .+ k322BH .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* integrator.u[1].^2 .* integrator.u[2] .* mu
         if solve_n4
-            SR411 = sr_rates(4, 1, 1, mu, integrator.u[massI], integrator.u[spinI], impose_low_cut=impose_low_cut, solve_322=solve_322)
             GR_411 = SR411 .* integrator.u[3]
             stable411 = abs.(du[3] ./ (GR_411 ./ hbar .* 3.15e7))
         end
@@ -590,80 +583,3 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     return spinBH[end]
  
 end
-
-function ergL(n, l, m, massB, MBH)
-    alph = GNew .* MBH .* massB
-    # return massB .* (1.0 .- alph.^2 ./ (2 .* (n .+ l .+ 1).^2))
-    return massB .* (1.0 .- alph.^2 ./ (2 .* n.^2) - (1.0 ./ (8 * n) .+ 6 ./ (2 .* l .+ 1) - 2 ./ n) * alph.^4 ./ n^3)
-end
-
-
-function sr_rates(n, l, m, massB, MBH, aBH; impose_low_cut=0.01, solve_322=true)
-    if (n==3)&&(l==2)&&(m==2)&&(solve_322==false)
-        return 0.0
-    end
-    
-    
-    alph = GNew .* MBH .* massB
-    
-    if (alph ./ l < impose_low_cut)&&(MBH < 1e2)
-        # We expect binaries to disrupt.
-        return 0.0
-    end
-    
-    
-    rP = nothing
-    if aBH .> 0.998
-        rP = 1.0 .+ sqrt.(1 - 0.998 .^2)
-        aBH = 0.998
-    elseif aBH .< 0.0
-        rP = 2.0
-        aBH = 0.0
-    else
-        rP = 1.0 .+ sqrt.(1 - aBH.^2)
-    end
-    rP *= (GNew .* MBH)
-    OmegaH = aBH ./ (2 .* (GNew .* MBH) .* (1 .+ sqrt.(1 .- aBH.^2)))
-    Anl = 2 .^(4 .* l .+ 1) .* factorial(Int(l .+ n)) ./ (n.^(2 .* l .+ 4) .* factorial(n .- l .- 1))
-    Anl *= (factorial(Int(l)) ./ (factorial(Int(2 .* l)) .* factorial(Int(2 .* l .+ 1)))).^2
-    Chilm = 1.0
-    # erg = ergL(n, l, m, massB, MBH)
-    for k in 1:Int(l)
-        Chilm *= (k.^2 .* (1.0 .- aBH.^2) .+ (aBH * m .- 2 .* (rP ./ (GNew .* MBH)) .* alph).^2)
-        # Chilm *= (k.^2 .* (1.0 .- aBH.^2) .+ (aBH * m .- 2 .* (rP ./ (GNew .* MBH)) .* alph).^2)
-    end
-    Gamma_nlm = 2 * massB .* rP .* (m .* OmegaH .- ergL(n, l, m, massB, MBH)) .* alph.^(4 .* l + 4) .* Anl .* Chilm
-    
-    
-    ### THESE ARE MASHAS???
-#    if (n==2)&&(l==1)&&(m==1)
-#        Gamma_nlm = 4e-2 .* alph.^8 .* (aBH .- 2 .* alph .* (1 .+ sqrt.(1.0 .- aBH.^2))) .* massB
-#    end
-#    if (n==3)&&(l==2)&&(m==2)
-#        Gamma_nlm = 8e-5 .* alph.^12 .* (aBH .- alph .* (1 .+ sqrt.(1.0 .- aBH.^2))) .* massB
-#    end
-    if Gamma_nlm > 0.0
-        return Gamma_nlm
-    else
-        return 0.0
-    end
-end
-
-
-
-
-
-#### TESTING ZONE
-M_BH = 9.0850432104
-aBH = 0.907515615
-massB = 2.813925014e-12
-f_a = 6.15407859e13
-tau_max = 1e8
-alpha_max_cut = 1.0
-solve_322 = true
-impose_low_cut=0.01
-debug=true
-# fs = super_rad_check(M_BH, aBH, massB, f_a, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=debug, solve_322=solve_322, impose_low_cut=impose_low_cut)
-# print("Final spin \t", fs, "\n")
-########################
-
