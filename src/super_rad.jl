@@ -295,7 +295,6 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
             
             du[spinI] = - SR211 .* u[1] ./ mu .-  2 .* SR322 .* u[2] ./ mu
             if solve_n4
-                SR411 = sr_rates(4, 1, 1, mu, u[massI], u[spinI], impose_low_cut=impose_low_cut, solve_322=solve_322)
                 du[spinI] += - SR411 .* u[3] ./ mu
             end
         end
