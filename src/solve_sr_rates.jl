@@ -12,7 +12,7 @@ include("Constants.jl")
 
 function ergL(n, l, m, massB, MBH)
     alph = GNew .* MBH .* massB
-    return massB .* (1.0 .- alph.^2 ./ (2 .* (n .+ l .+ 1).^2))
+    return massB .* (1.0 .- alph.^2 ./ (2 .* n.^2) - alph.^4 ./ (8 * n.^4) + alph.^4 ./ (8 * n^3) * (-6 / (2 * l + 1) + 2 / n))
 end
 
 
@@ -62,7 +62,7 @@ end
 
 
 
-function find_im_part(mu, M, a, n, l, m; debug=false, Ntot=200)
+function find_im_part(mu, M, a, n, l, m; debug=false, Ntot=200, iter=50, xtol=1e-20)
     # n not used at moment, in reality l ~ n + l?
 
     OmegaH = a ./ (2 .* (GNew .* M) .* (1 .+ sqrt.(1 .- a.^2)))
@@ -118,7 +118,7 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot=200)
         end
         
         
-        sol = nlsolve(wrapper!, [real(w0), imag(w0)], autodiff = :forward, xtol=1e-20, ftol=1e-20, iterations=50)
+        sol = nlsolve(wrapper!, [real(w0), imag(w0)], autodiff = :forward, xtol=xtol, ftol=1e-20, iterations=iter)
         if debug
             print(sol, "\n\n")
             
