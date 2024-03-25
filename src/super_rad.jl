@@ -139,7 +139,6 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         
         if u[1] .> Emax2
             SR211 *= 0.0
-            kSR_211 *= 0.0
         end
         
         if input_data == "Doddy"
@@ -171,7 +170,6 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
             SR322 *= 0.0
         end
         if isnothing(u1_fix)
-        #     du[1] = kSR_211 .* alph.^8 .* (u[spinI] .- 2 .* alph .* rP) .* u[1]
             du[1] = SR211 .* u[1] ./ mu
             du[1] += - 2 .* k322BH .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* u[1].^2 .* u[2]
             du[1] += k2I_333 .* alph.^8 .* (M_pl ./ fa).^4 .* u[2].^2 .* u[1]
