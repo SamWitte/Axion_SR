@@ -6,7 +6,8 @@ include("tde_input.jl")
 using Dates
 
 fout = ""
-sve = true
+sve = false
+
 
 f_a = 1e18
 m_a = 1e-12
@@ -18,12 +19,18 @@ tau_max = 5e6
 return_all_info = true
 solve_322 = true
 n_times = 10000
-
+input_data="Masha"
 
 alph = GNew .* MassBH .* m_a
-print(alph, "\n")
+maxa = 4 .* alph ./ (1 .+ 4 .* alph.^2)
+print(alph, "\t", maxa, "\n")
 
-time, state211, state322, spin, massB = @time solve_system(m_a, f_a, SpinBH, MassBH, tau_max; impose_low_cut=impose_low_cut, return_all_info=return_all_info, solve_322=solve_322, n_times=n_times)
+solve_n4 = true
+if !solve_n4
+    time, state211, state322, spin, massB = @time solve_system(m_a, f_a, SpinBH, MassBH, tau_max; impose_low_cut=impose_low_cut, return_all_info=return_all_info, solve_322=solve_322, n_times=n_times, input_data=input_data)
+else
+    time, state211, state322, state411, spin, massB = @time solve_system(m_a, f_a, SpinBH, MassBH, tau_max; impose_low_cut=impose_low_cut, return_all_info=return_all_info, solve_322=solve_322, n_times=n_times, input_data=input_data, solve_n4=true)
+end
 
 if sve
     outSve = zeros(length(time), 5)
