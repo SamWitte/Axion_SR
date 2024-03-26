@@ -3,6 +3,7 @@ using OrdinaryDiffEq
 using Statistics
 using Distributions
 using DelimitedFiles
+using Interpolations
 include("Constants.jl")
 include("solve_sr_rates.jl")
 
@@ -47,7 +48,7 @@ function emax_211(MBH, mu, aBH)
 end
     
 function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_322=true, impose_low_cut=0.01, return_all_info=false, input_data="Masha", solve_n4=false)
-    e_init = 1.0 ./ (GNew .* M_BH.^2 .* M_to_eV)
+    e_init = 1.0 ./ (GNew .* M_BH.^2 .* M_to_eV) # unitless
     if !solve_n4
         y0 = [e_init, e_init, aBH, M_BH]
     else
@@ -78,14 +79,24 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     
     alph = GNew .* M_BH .* mu
     
-    SR211 = find_im_part(mu, M_BH, aBH, 2, 1, 1, Ntot=2000) ./ (GNew * M_BH)
-    SR322 = sr_rates(3, 2, 2, mu, M_BH, aBH)
-    # SR322 = find_im_part(mu, M_BH, aBH, 3, 2, 2, Ntot=2000) ./ (GNew * M_BH)
-    # SR211 = sr_rates(2, 1, 1, mu, M_BH, aBH)
-    # SR322 = sr_rates(3, 2, 2, mu, M_BH, aBH)
+    N_pts_interp = 30
+    xtol_slv = 1e-30
+    Ntot_slv = 2000
+    iter_slv = 50
+    
+    alist, pts211 = compute_gridded(mu, M_BH, aBH, 2, 1, 1; Ntot=Ntot_slv, iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp)
+    itp_211 = LinearInterpolation(alist, log10.(pts211))
+    SR211 = 10 .^itp_211(aBH)
+    
+    alist, pts322 = compute_gridded(mu, M_BH, aBH, 3, 2, 2; Ntot=Ntot_slv, iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp)
+    itp_322 = LinearInterpolation(alist, log10.(pts322))
+    SR322 = 10 .^itp_322(aBH)
+    
     a_prev = aBH
     if solve_n4
-        SR411 = find_im_part(mu, M_BH, aBH, 4, 1, 1, Ntot=2000) ./ (GNew * M_BH)
+        alist, pts411 = compute_gridded(mu, M_BH, aBH, 4, 1, 1; Ntot=Ntot_slv, iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp)
+        itp_411 = LinearInterpolation(alist, log10.(pts411))
+        SR411 = 10 .^itp_411(aBH)
     end
     
     function RHS_ax!(du, u, Mvars, t)
@@ -126,17 +137,27 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
             end
         end
 
-
-        if abs.(u[3] - a_prev) > 0.001            
-            SR211 = find_im_part(mu, u[massI], u[spinI], 2, 1, 1, Ntot=2000) ./ (GNew * u[spinI])
-            # SR322 = find_im_part(mu, u[massI], u[spinI], 3, 2, 2, Ntot=2000) ./ (GNew * u[spinI])
-            # SR211 = sr_rates(2, 1, 1, mu, u[massI], u[spinI])
-            SR322 = sr_rates(3, 2, 2, mu, u[massI], u[spinI])
-            
-            if solve_n4
-                SR411 = find_im_part(mu, u[massI], u[spinI], 4, 1, 1, Ntot=2000) ./ (GNew * u[spinI])
+        OmegaH = u[spinI] ./ (2 .* (GNew .* u[massI]) .* (1 .+ sqrt.(1 .- u[spinI].^2)))
+        
+        if abs.(u[spinI] - a_prev) > 0.001
+            if (OmegaH .< ergL(2, 1, 1, mu, u[massI], u[spinI]))
+                SR211 *= 0.0
+            else
+                SR211 = 10 .^itp_211(aBH)
             end
-            a_prev = u[3]
+            
+            if (2 .* OmegaH .< ergL(3, 2, 2, mu, u[massI], u[spinI]))
+                SR322 *= 0.0
+            else
+                SR322 = 10 .^itp_322(aBH)
+            end
+            
+            if solve_n4&&(u[3] > 1e-100)&&(OmegaH .> ergL(4, 1, 1, mu, u[massI], u[spinI]))
+                SR411 = 10 .^itp_411(aBH)
+            else
+                SR411 = 0.0
+            end
+            a_prev = u[spinI]
         end
 
         
@@ -150,7 +171,6 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
             kGW_22 = 0.0
             kGW_3t2 = 0.0
             kI_222 = 0.0
-            kSR_322 = 0.0
             kGW_33 = 0.0
         else
             k322BH = 4e-7  # k^322xBH_211x211
@@ -158,7 +178,6 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
             kGW_22 = 1e-2 # k^GW_211x211
             kGW_3t2 = 5e-6 # k^GW_{322->211}
             kI_222 = 1.5e-8 # k^Infinity_(211)^3
-            kSR_322 = 8e-5
             kGW_33 = 3e-8
         end
         
@@ -167,11 +186,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         kI_233 = 0.0 # ??? k^Infinity_{(211)x 322^2}
         kI_333 = 0.0 # ???
         
-        OmegaH = u[spinI] ./ (2 .* (GNew .* u[massI]) .* (1 .+ sqrt.(1 .- u[spinI].^2)))
-        if (2 .* OmegaH .< ergL(3, 2, 2, mu, u[massI], u[spinI]))
-            kSR_322 *= 0.0
-            SR322 *= 0.0
-        end
+
         if isnothing(u1_fix)
             du[1] = SR211 .* u[1] ./ mu
             du[1] += - 2 .* k322BH .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* u[1].^2 .* u[2]
@@ -190,7 +205,6 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
 
         
         if isnothing(u2_fix)
-            # du[2] = kSR_322 .* alph.^12 .* (u[spinI] .- alph .* rP) .* u[2]
             du[2] = SR322 .* u[2] ./ mu
             du[2] += k322BH .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* u[1].^2 .* u[2]
             du[2] += -2 .* k2I_333 .* alph.^8 .* (M_pl ./ fa).^4 .* u[2].^2 .* u[1]
@@ -207,9 +221,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         end
         
         if solve_n4
-            if (OmegaH .< ergL(4, 1, 1, mu, u[massI], u[spinI]))
-                SR411 *= 0.0
-            end
+
             du[3] = SR411 .* u[3] ./ mu
             
             du[3] += -2.5e-8 .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* u[1] .* u[2] .* u[3] # 211x411^{322 x BH}
@@ -239,8 +251,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
             du[3] *= mu ./ hbar .* 3.15e7
             du[4] *= mu.^2 .* (GNew .* u[4].^2) ./ hbar .* 3.15e7
         else
-            du[spinI] = - SR211 .* u[1] ./ mu .- 2 .* SR322 .* u[2] ./ mu .- SR411 .* u[3] ./ mu
-            du[massI] = - SR211 .* u[1] ./ mu .-  SR322 .* u[2] ./ mu .- SR411 .* u[3] ./ mu
+            du[spinI] = - SR211 .* u[1] ./ mu .- 2 .* SR322 .* u[2] ./ mu  .- SR411 .* u[3] ./ mu
+            du[massI] = - SR211 .* u[1] ./ mu .-  SR322 .* u[2] ./ mu  .- SR411 .* u[3] ./ mu
             du[massI] += k322BH .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* u[1].^2 .* u[2]
             du[massI] += 9.8e-11 .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* u[2] .* u[3].^2
 
@@ -250,7 +262,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
             du[3] *= mu ./ hbar .* 3.15e7
             
             du[spinI] *= mu ./ hbar .* 3.15e7
-            du[massI] *= mu.^2 .* (GNew .* u[4].^2) ./ hbar .* 3.15e7
+            du[massI] *= (mu .* u[massI]) .* (mu .* GNew .* u[massI]) ./ hbar .* 3.15e7
         end
         
         
@@ -285,8 +297,10 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
       
         t1 = abs.(u[1] ./ du[1])
         t2 = abs.(u[2] ./ du[2])
-        if solve_n4
+        if solve_n4&&(integrator.u[3] > 0.0)
             t5 = abs.(u[3] ./ du[3])
+        else
+            t5 = 1e100
         end
         
         if (u1_eq)||(u2_eq)      
@@ -321,14 +335,18 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         
         
         if debug && (wait%10==0)
-            print(t, "\t", u[1], "\t", u[2], "\t", u[3], "\t", u[4], "\n")
+            if solve_n4
+                print(t, "\t", u[1], "\t", u[2], "\t", u[3], "\t", u[4], "\t", u[5], "\n")
+            else
+                print(t, "\t", u[1], "\t", u[2], "\t", u[3], "\t", u[4], "\n")
+            end
         end
         
         if (tcheck .>= 100.0 .* integrator.dt) && (wait % 10 == 0)
             return true
         elseif (tcheck .<= integrator.dt)
             return true
-        elseif (integrator.dt .<= 1e-7)
+        elseif (integrator.dt .<= 1e-10)
             return true
         else
             return false
@@ -347,8 +365,10 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
 
         t1 = abs.(integrator.u[1] ./ du[1])
         t2 = abs.(integrator.u[2] ./ du[2])
-        if solve_n4
+        if solve_n4&&(integrator.u[3] > 0.0)
             t5 = abs.(integrator.u[3] ./ du[3])
+        else
+            t5 = 1e100
         end
 
         if u1_eq || u2_eq
@@ -382,6 +402,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         elseif (integrator.dt .<= 1e-10)
             terminate!(integrator)
         elseif (wait % 10 == 0)
+        # elseif (wait % 10 == 0)
             set_proposed_dt!(integrator, integrator.dt .* 1.05)
         end
     end
@@ -398,7 +419,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         
         alph = GNew .* u[massI] .* mu
         du = get_du(integrator)
-        eq_threshold = 1e-5
+        eq_threshold = 1e-3
         
         
         if u2_kill
@@ -415,7 +436,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
                 return true
             else
                 rP = 1.0 .+ sqrt.(1 - u[spinI].^2)
-                hold_n1 = (-2.5e-8 .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* u[1] .* u[2] .* u[3] + 3.8e-9 .* (alph.^8) .* (M_pl ./ fa).^4 .* u[1] .* u[2] .* u[3]) .* integrator.dt
+                hold_n1 = (-2.5e-8 .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* u[1] .* u[2] .* u[3] + 3.8e-9 .* (alph.^8) .* (M_pl ./ fa).^4 .* u[1] .* u[2] .* u[3]) .* mu .* integrator.dt ./ hbar .* 3.15e7
                 if abs.(hold_n1 ./ u[1]) .> eq_threshold
                     u1_eq = false
                     return false
@@ -537,14 +558,27 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         set_proposed_dt!(integrator, integrator.dt .* 0.3)
     end
     
+    function check_terminate_lvl(u, t, integrator)
+        if solve_n4&&(u[3] < 1e-100)
+            return true
+        else
+            return false
+        end
+    end
+    function affect_terminate_lvl!(integrator)
+        integrator.u[3] = 0.0
+        du = get_du(integrator)
+        du[3] = 0.0
+    end
     
         
 
     cbackdt = DiscreteCallback(check_timescale, affect_timescale!, save_positions=(false, true))
     cback_equil = DiscreteCallback(check_eq, affect_eq!, save_positions=(false, true))
     cbackspin = DiscreteCallback(check_spin, affect_spin!, save_positions=(false, true))
+    cback_term = DiscreteCallback(check_terminate_lvl, affect_terminate_lvl!, save_positions=(false, true))
     
-    cbset = CallbackSet(cback_equil, cbackdt, cbackspin)
+    cbset = CallbackSet(cback_equil, cbackdt, cbackspin, cback_term)
     
     prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-6, abstol=1e-6)
     # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-6, abstol=1e-10)

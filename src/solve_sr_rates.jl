@@ -63,7 +63,7 @@ end
 
 
 
-function find_im_part(mu, M, a, n, l, m; debug=false, Ntot=200, iter=50, xtol=1e-20)
+function find_im_part(mu, M, a, n, l, m; debug=false, Ntot=200, iter=50, xtol=1e-7)
     
     OmegaH = a ./ (2 .* (GNew .* M) .* (1 .+ sqrt.(1 .- a.^2)))
     
@@ -125,7 +125,7 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot=200, iter=50, xtol=1e
         end
         
         
-        sol = nlsolve(wrapper!, [real(w0), imag(w0)], autodiff = :forward, xtol=xtol, ftol=1e-20, iterations=iter, method = :newton)
+        sol = nlsolve(wrapper!, [real(w0), imag(w0)], autodiff = :forward, xtol=xtol, ftol=1e-20, iterations=iter)
 
         if debug
             print(sol, "\n\n")
@@ -143,4 +143,21 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot=200, iter=50, xtol=1e
     else
         return 0.0
     end
+end
+
+function compute_gridded(mu, M, a, n, l, m; Ntot=200, iter=50, xtol=1e-7, npts=30)
+    alist = LinRange(0.0, a, npts);
+    output = zeros(npts)
+    alph = GNew * M * mu
+    if alph < 0.1
+        mu_run = 0.1 / (GNew * M)
+        rescale = (alph ./ 0.1).^(4 * l + 5)
+    else
+        mu_run = mu
+        rescale = 1.0
+    end
+    for i in 1:length(alist)
+        output[i] = find_im_part(mu, M, alist[i], n, l, m, Ntot=Ntot, iter=iter, xtol=xtol) ./ (GNew * M)
+    end
+    return alist, output .* rescale
 end
