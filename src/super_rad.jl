@@ -27,7 +27,7 @@ function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_c
     
     if input_data == "Masha"
         OmegaH = aBH ./ (2 .* (GNew .* M_BH) .* (1 .+ sqrt.(1 .- aBH.^2)))
-        if (ergL(2, 1, 1, massB, M_BH) .>= OmegaH)&&(f_a .< 2.6e17)
+        if (ergL(2, 1, 1, massB, M_BH, aBH) .>= OmegaH)&&(f_a .< 2.6e17)
             return aBH
         end
     end
@@ -67,7 +67,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     
     Emax2 = 1.0
     OmegaH = aBH ./ (2 .* (GNew .* M_BH) .* (1 .+ sqrt.(1 .- aBH.^2)))
-    if (OmegaH .> ergL(2, 1, 1, mu, M_BH))
+    if (OmegaH .> ergL(2, 1, 1, mu, M_BH, aBH))
         Emax2 = emax_211(M_BH, mu, aBH)
     end
     
@@ -76,13 +76,16 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     tspan = (0.0, t_max)
     saveat = (tspan[2] .- tspan[1]) ./ n_times
     
-    SR211 = find_im_part(mu, M_BH, aBH, 2, 1, 1, Ntot=400) ./ (GNew * M_BH)
-    SR322 = find_im_part(mu, M_BH, aBH, 3, 2, 2, Ntot=800) ./ (GNew * M_BH)
+    alph = GNew .* M_BH .* mu
+    
+    SR211 = find_im_part(mu, M_BH, aBH, 2, 1, 1, Ntot=2000) ./ (GNew * M_BH)
+    SR322 = sr_rates(3, 2, 2, mu, M_BH, aBH)
+    # SR322 = find_im_part(mu, M_BH, aBH, 3, 2, 2, Ntot=2000) ./ (GNew * M_BH)
     # SR211 = sr_rates(2, 1, 1, mu, M_BH, aBH)
     # SR322 = sr_rates(3, 2, 2, mu, M_BH, aBH)
     a_prev = aBH
     if solve_n4
-        SR411 = find_im_part(mu, M_BH, aBH, 4, 1, 1, Ntot=800) ./ (GNew * M_BH)
+        SR411 = find_im_part(mu, M_BH, aBH, 4, 1, 1, Ntot=2000) ./ (GNew * M_BH)
     end
     
     function RHS_ax!(du, u, Mvars, t)
@@ -125,13 +128,13 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
 
 
         if abs.(u[3] - a_prev) > 0.001            
-            SR211 = find_im_part(mu, u[massI], u[spinI], 2, 1, 1, Ntot=400) ./ (GNew * u[spinI])
-            SR322 = find_im_part(mu, u[massI], u[spinI], 3, 2, 2, Ntot=800) ./ (GNew * u[spinI])
+            SR211 = find_im_part(mu, u[massI], u[spinI], 2, 1, 1, Ntot=2000) ./ (GNew * u[spinI])
+            # SR322 = find_im_part(mu, u[massI], u[spinI], 3, 2, 2, Ntot=2000) ./ (GNew * u[spinI])
             # SR211 = sr_rates(2, 1, 1, mu, u[massI], u[spinI])
-            # SR322 = sr_rates(3, 2, 2, mu, u[massI], u[spinI])
+            SR322 = sr_rates(3, 2, 2, mu, u[massI], u[spinI])
             
             if solve_n4
-                SR411 = find_im_part(mu, u[massI], u[spinI], 4, 1, 1, Ntot=400) ./ (GNew * u[spinI])
+                SR411 = find_im_part(mu, u[massI], u[spinI], 4, 1, 1, Ntot=2000) ./ (GNew * u[spinI])
             end
             a_prev = u[3]
         end
@@ -165,7 +168,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         kI_333 = 0.0 # ???
         
         OmegaH = u[spinI] ./ (2 .* (GNew .* u[massI]) .* (1 .+ sqrt.(1 .- u[spinI].^2)))
-        if (2 .* OmegaH .< ergL(3, 2, 2, mu, u[massI]))
+        if (2 .* OmegaH .< ergL(3, 2, 2, mu, u[massI], u[spinI]))
             kSR_322 *= 0.0
             SR322 *= 0.0
         end
@@ -204,7 +207,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         end
         
         if solve_n4
-            if (OmegaH .< ergL(4, 1, 1, mu, u[massI]))
+            if (OmegaH .< ergL(4, 1, 1, mu, u[massI], u[spinI]))
                 SR411 *= 0.0
             end
             du[3] = SR411 .* u[3] ./ mu
@@ -313,6 +316,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
             tcheck = minimum([t1 t2 t3 t5])
         end
         
+        
         wait += 1
         
         
@@ -375,9 +379,9 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         
         if (tcheck .<= integrator.dt)
             set_proposed_dt!(integrator, tcheck .* 0.1)
-        elseif (integrator.dt .<= 1e-7)
+        elseif (integrator.dt .<= 1e-10)
             terminate!(integrator)
-        elseif (wait % 5 == 0)
+        elseif (wait % 10 == 0)
             set_proposed_dt!(integrator, integrator.dt .* 1.05)
         end
     end
@@ -394,10 +398,11 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         
         alph = GNew .* u[massI] .* mu
         du = get_du(integrator)
-        eq_threshold = 1e-4
+        eq_threshold = 1e-5
         
         
         if u2_kill
+            print("HERE ???? \n\n\n")
             terminate!(integrator)
         end
         if u2_eq
@@ -445,6 +450,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
             stable322 = 0.0
         end
     
+        
         
         if (stable211 .< eq_threshold)&&(stable322 .< eq_threshold)
             u1_eq = true

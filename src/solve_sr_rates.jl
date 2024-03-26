@@ -10,9 +10,10 @@ using DifferentialEquations
 include("Constants.jl")
 
 
-function ergL(n, l, m, massB, MBH)
+function ergL(n, l, m, massB, MBH, a)
     alph = GNew .* MBH .* massB
-    return massB .* (1.0 .- alph.^2 ./ (2 .* n.^2) - alph.^4 ./ (8 * n.^4) + alph.^4 ./ (8 * n^3) * (-6 / (2 * l + 1) + 2 / n))
+    return massB .* (1.0 .- alph.^2 ./ (2 .* n.^2) - alph.^4 ./ (8 * n.^4) + alph.^4 ./ n^3 * (-6 / (2 * l + 1) + 2 / n) + 16 * a * m * alph.^5 ./ n^3 ./ (2*l * (2*l + 1) * (2*l+2)))
+    # return massB .* (1.0 .- alph.^2 ./ (2 .* (n + l + 1).^2))
 end
 
 
@@ -45,12 +46,12 @@ function sr_rates(n, l, m, massB, MBH, aBH; impose_low_cut=0.01, solve_322=true)
     Anl = 2 .^(4 .* l .+ 1) .* factorial(Int(l .+ n)) ./ (n.^(2 .* l .+ 4) .* factorial(n .- l .- 1))
     Anl *= (factorial(Int(l)) ./ (factorial(Int(2 .* l)) .* factorial(Int(2 .* l .+ 1)))).^2
     Chilm = 1.0
-    # erg = ergL(n, l, m, massB, MBH)
+    # erg = ergL(n, l, m, massB, MBH, aBH)
     for k in 1:Int(l)
         Chilm *= (k.^2 .* (1.0 .- aBH.^2) .+ (aBH * m .- 2 .* (rP ./ (GNew .* MBH)) .* alph).^2)
         # Chilm *= (k.^2 .* (1.0 .- aBH.^2) .+ (aBH * m .- 2 .* (rP ./ (GNew .* MBH)) .* alph).^2)
     end
-    Gamma_nlm = 2 * massB .* rP .* (m .* OmegaH .- ergL(n, l, m, massB, MBH)) .* alph.^(4 .* l + 4) .* Anl .* Chilm
+    Gamma_nlm = 2 * massB .* rP .* (m .* OmegaH .- ergL(n, l, m, massB, MBH, aBH)) .* alph.^(4 .* l + 4) .* Anl .* Chilm
     
 
     if Gamma_nlm > 0.0
@@ -63,26 +64,32 @@ end
 
 
 function find_im_part(mu, M, a, n, l, m; debug=false, Ntot=200, iter=50, xtol=1e-20)
-    # n not used at moment, in reality l ~ n + l?
-
+    
     OmegaH = a ./ (2 .* (GNew .* M) .* (1 .+ sqrt.(1 .- a.^2)))
-    if (ergL(n, l, m, mu, M) < m .* OmegaH)
-        
+    
+    if (ergL(n, l, m, mu, M, a) < m .* OmegaH)
+        alph = mu * GNew * M
+        if alph < 0.05
+            alph_ev = 0.05
+            rescale = (alph ./ 0.05).^(4 .* l + 5)
+        else
+            alph_ev = alph
+            rescale = 1.0
+        end
         
         b = sqrt.(1 - a.^2)
-        alph = GNew * M * mu
-        # w0 = alph .* (1 - alph.^2 ./ (2 .* (n + l + 1).^2)) * (1 + 1e-20 .* im)
-        w0 = ergL(n, l, m, mu, M) .* GNew * M * (1 + 1e-20 .* im)
-#        guess = sr_rates(n, l, m, mu, M, a)
+        
+        SR211_g = sr_rates(n, l, m, alph_ev ./ (GNew * M), M, a)
+        w0 = (ergL(n, l, m, alph_ev ./ (GNew * M), M, a) .+ im * SR211_g) .* GNew * M
         
         function wrapper!(F, x)
             wR = x[1]  # real
             wI = x[2]  # imag
             erg = wR + im * wI
             
-            q = - sqrt.(alph.^2 .- erg.^2)
+            q = - sqrt.(alph_ev.^2 .- erg.^2)
             
-            gam = im * a * sqrt.(erg.^2 .- alph.^2)
+            gam = im * a * sqrt.(erg.^2 .- alph_ev.^2)
             LLM = l * (l + 1)
             LLM += (-1 + 2 * l * (l + 1) - 2 * m.^2) * gam.^2 ./ (-3 + 4 * l * (l + 1))
             LLM += ((l - m - 1 * (l - m) * (l + m) * (l + m - 1)) ./ ((-3 + 2 * l) * (2 * l - 1).^2) - (l + 1 - m) * (2 * l - m) * (l + m + 1) * (2 + l + m) ./ ((3 + 2 * l).^2 * (5 + 2 * l))) * gam.^4 ./ (2 * (1 + 2 * l))
@@ -118,7 +125,8 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot=200, iter=50, xtol=1e
         end
         
         
-        sol = nlsolve(wrapper!, [real(w0), imag(w0)], autodiff = :forward, xtol=xtol, ftol=1e-20, iterations=iter)
+        sol = nlsolve(wrapper!, [real(w0), imag(w0)], autodiff = :forward, xtol=xtol, ftol=1e-20, iterations=iter, method = :newton)
+
         if debug
             print(sol, "\n\n")
             
@@ -128,7 +136,7 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot=200, iter=50, xtol=1e
             print(Ff, "\n")
         end
         if sol.zero[2] > 0
-            return sol.zero[2]  # im(G * M * omega)
+            return sol.zero[2] .* rescale  # im(G * M * omega)
         else
             return 0.0
         end
