@@ -159,5 +159,7 @@ function compute_gridded(mu, M, a, n, l, m; Ntot=200, iter=50, xtol=1e-7, npts=3
     for i in 1:length(alist)
         output[i] = find_im_part(mu, M, alist[i], n, l, m, Ntot=Ntot, iter=iter, xtol=xtol) ./ (GNew * M)
     end
-    return alist, output .* rescale
+    condit = output .<= 0.0
+    output[condit] .= 1e-100 .* rescale
+    return alist, output
 end

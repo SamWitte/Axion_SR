@@ -98,7 +98,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         itp_411 = LinearInterpolation(alist, log10.(pts411))
         SR411 = 10 .^itp_411(aBH)
     end
-    
+
     function RHS_ax!(du, u, Mvars, t)
     
         # [e211, e322, aBH, MBH] or [e211, e322, e411, aBH, MBH]
@@ -451,6 +451,14 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
 
         k322BH = 4e-7  # k^322xBH_211x211
         GR_322 = SR322 .* integrator.u[2] .+ k322BH .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* integrator.u[1].^2 .* integrator.u[2] .* mu
+        
+
+        k2I_333 = 1e-8 # k^211xInfinity_322x322
+        kGW_3t2 = 5e-6 # k^GW_{322->211}
+        GR_211 = SR211 .* integrator.u[1] .+ k2I_333 .* alph.^8 .* (M_pl ./ fa).^4 .* integrator.u[2].^2 .* integrator.u[1] .* mu
+        GR_211 += kGW_3t2 .* alph.^10 .* integrator.u[1] .* integrator.u[2] .* mu
+
+            
         if solve_n4
             GR_411 = SR411 .* integrator.u[3]
             if SR411 > 0
@@ -461,7 +469,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         end
         
         if SR211 > 0
-            stable211 = abs.(du[1] ./ (SR211 .* integrator.u[1] ./ hbar .* 3.15e7))
+            
+            stable211 = abs.(du[1] ./ (GR_211 ./ hbar .* 3.15e7))
         else
             stable211 = 0.0
         end
