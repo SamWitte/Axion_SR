@@ -8,7 +8,6 @@ include("Constants.jl")
 include("solve_sr_rates.jl")
 
 
-
 function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_cut=0.2, debug=false, solve_322=true, solve_n4=false, impose_low_cut=0.01, input_data="Masha", stop_on_a=0)
    
     alph = GNew .* M_BH .* massB #
@@ -770,7 +769,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     if solve_n4
         cbset = CallbackSet(cbackdt, cbackspin, cback_term)
         # cbset = CallbackSet(cbackspin, cback_term)
-        prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=1e-15) # rodas
+        prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-10, abstol=1e-20) # rodas
     else
         cbset = CallbackSet(cback_equil, cbackdt, cbackspin)
         # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=1e-15) # rodas
@@ -794,11 +793,10 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
 
 
     
-    sol = solve(prob, Rodas4P(), dt=dt_guess, saveat=saveat, callback=cbset)
-    # sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
-    # sol = solve(prob, AutoTsit5(Rodas5()), dt=dt_guess, saveat=saveat, callback=cbset)
     # sol = solve(prob, Rodas4P(), dt=dt_guess, saveat=saveat, callback=cbset)
-    # sol = solve(prob, Vern6(), dt=dt_guess, saveat=saveat, callback=cbset)
+    # sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
+    # sol = solve(prob, KenCarp4(), dt=dt_guess, saveat=saveat, callback=cbset)
+    sol = solve(prob, Tsit5(), dt=dt_guess, saveat=saveat, callback=cbset)
     
     
     state211 = [sol.u[i][1] for i in 1:length(sol.u)]
