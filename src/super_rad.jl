@@ -66,7 +66,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     u6_fix = nothing
     u2_kill = false
     
-    e2_maxBN = 1024 * pi * (f_a / M_pl).^2 ./ (9 * (GNew .* M_BH .* mu ).^3)
+    e2_maxBN = 1024 * pi * (fa / M_pl).^2 ./ (9 * (GNew .* M_BH .* mu ).^3)
     e3_maxBN = e2_maxBN .* (3 ./ 2).^4
     e4_maxBN = e2_maxBN .* (4 ./ 2).^4
     
