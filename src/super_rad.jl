@@ -760,26 +760,6 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
 
     end
     
-        
-
-    cbackdt = DiscreteCallback(check_timescale, affect_timescale!, save_positions=(false, true))
-    cback_equil = DiscreteCallback(check_eq, affect_eq!, save_positions=(false, true))
-    cbackspin = DiscreteCallback(check_spin, affect_spin!, save_positions=(false, true))
-    cback_term = DiscreteCallback(check_terminate_lvl, affect_terminate_lvl!, save_positions=(false, true))
-    if solve_n4
-        cbset = CallbackSet(cbackdt, cbackspin, cback_term)
-        # cbset = CallbackSet(cbackspin, cback_term)
-        prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-10, abstol=1e-20) # rodas
-    else
-        cbset = CallbackSet(cback_equil, cbackdt, cbackspin)
-        # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=1e-15) # rodas
-        prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-7, abstol=1e-15) # rodas
-    end
-    
-    
-    # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-10, abstol=1e-20) # rodas
-    # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-6, abstol=1e-10) #euler
-    
     rP = 1.0 .+ sqrt.(1 - aBH.^2)
     if (aBH .- 2 .* (GNew .* M_BH .* mu) .* rP) .> 0.0
         dt_guess = abs.(4e-2 .* (GNew .* M_BH .* mu ).^8 .* (aBH .- 2 .* (GNew .* M_BH .* mu) .* rP) .* mu / hbar .* 3.15e7).^(-1)
@@ -789,14 +769,34 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     if debug
         print("Time guess \t", dt_guess, "\n")
     end
-    
 
-
+    cbackdt = DiscreteCallback(check_timescale, affect_timescale!, save_positions=(false, true))
+    cback_equil = DiscreteCallback(check_eq, affect_eq!, save_positions=(false, true))
+    cbackspin = DiscreteCallback(check_spin, affect_spin!, save_positions=(false, true))
+    cback_term = DiscreteCallback(check_terminate_lvl, affect_terminate_lvl!, save_positions=(false, true))
+    if solve_n4
+        cbset = CallbackSet(cbackdt, cbackspin, cback_term)
+        # cbset = CallbackSet(cbackspin, cback_term)
+        # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-10, abstol=1e-20) #
+        # sol = solve(prob, AutoTsit5(Rodas4()), dt=dt_guess, saveat=saveat, callback=cbset)
+        
+        prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=1e-10)
+        # sol = solve(prob, AutoTsit5(KenCarp4()), dt=dt_guess, saveat=saveat, callback=cbset)
+        sol = solve(prob, Rosenbrock23(), dt=dt_guess, saveat=saveat, callback=cbset)
+        # sol = solve(prob, KenCarp4(), dt=dt_guess, saveat=saveat, callback=cbset)
+    else
+        cbset = CallbackSet(cback_equil, cbackdt, cbackspin)
+        # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=1e-15) # rodas
+        prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-7, abstol=1e-15) # rodas
+        sol = solve(prob, Rodas4P(), dt=dt_guess, saveat=saveat, callback=cbset)
+    end
     
-    # sol = solve(prob, Rodas4P(), dt=dt_guess, saveat=saveat, callback=cbset)
+    
+    # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-10, abstol=1e-20) # rodas
+    # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-6, abstol=1e-10) #euler
+    
     # sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
     # sol = solve(prob, KenCarp4(), dt=dt_guess, saveat=saveat, callback=cbset)
-    sol = solve(prob, Tsit5(), dt=dt_guess, saveat=saveat, callback=cbset)
     
     
     state211 = [sol.u[i][1] for i in 1:length(sol.u)]
