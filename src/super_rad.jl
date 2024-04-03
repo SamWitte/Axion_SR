@@ -786,9 +786,10 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         # sol = solve(prob, KenCarp4(), dt=dt_guess, saveat=saveat, callback=cbset)
     else
         cbset = CallbackSet(cback_equil, cbackdt, cbackspin)
-        # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=1e-15) # rodas
-        prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-7, abstol=1e-15) # rodas
-        sol = solve(prob, Rodas4P(), dt=dt_guess, saveat=saveat, callback=cbset)
+        # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=1e-15)
+        # sol = solve(prob, Rodas4P(), dt=dt_guess, saveat=saveat, callback=cbset)
+        prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=1e-10)
+        sol = solve(prob, Rosenbrock23(), dt=dt_guess, saveat=saveat, callback=cbset)
     end
     
     
