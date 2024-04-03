@@ -812,19 +812,29 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     
         cbset = CallbackSet(cbackdt, cbackspin, cback_term)
         
-        # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-10, abstol=1e-20) #
+        if (GNew .* M_BH .* mu ) < 0.1
+            abstol = 1e-30
+        else
+            abstol = 1e-15
+        end
+        prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-3, abstol=abstol) #
         # sol = solve(prob, AutoTsit5(Rodas4()), dt=dt_guess, saveat=saveat, callback=cbset)
         
-        prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=1e-15)
+        # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=1e-15)
         # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-12, abstol=1e-20)
-        # sol = solve(prob, Rosenbrock23(), dt=dt_guess, saveat=saveat, callback=cbset)
-        # sol = solve(prob, KenCarp4(), dt=dt_guess, saveat=saveat, callback=cbset)
-        sol = solve(prob, Rodas4(), dt=dt_guess, saveat=saveat, callback=cbset)
+        sol = solve(prob, Rosenbrock23(), dt=dt_guess, saveat=saveat, callback=cbset)
+        # sol = solve(prob, KenCarp5(), dt=dt_guess, saveat=saveat, callback=cbset)
+        # sol = solve(prob, Rodas4(), dt=dt_guess, saveat=saveat, callback=cbset)
     else
+        if (GNew .* M_BH .* mu ) < 0.1
+            abstol = 1e-30
+        else
+            abstol = 1e-15
+        end
         cbset = CallbackSet(cback_equil, cbackdt, cbackspin)
         # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=1e-15)
         # sol = solve(prob, Rodas4(), dt=dt_guess, saveat=saveat, callback=cbset)
-        prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=1e-20)
+        prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-4, abstol=abstol)
         sol = solve(prob, Rosenbrock23(), dt=dt_guess, saveat=saveat, callback=cbset)
     end
 
