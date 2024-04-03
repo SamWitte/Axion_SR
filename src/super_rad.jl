@@ -824,7 +824,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         cbset = CallbackSet(cback_equil, cbackdt, cbackspin)
         # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=1e-15)
         # sol = solve(prob, Rodas4(), dt=dt_guess, saveat=saveat, callback=cbset)
-        prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=1e-10)
+        prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=1e-20)
         sol = solve(prob, Rosenbrock23(), dt=dt_guess, saveat=saveat, callback=cbset)
     end
 
