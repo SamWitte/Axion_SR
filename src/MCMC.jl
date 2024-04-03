@@ -23,6 +23,10 @@ function parse_commandline()
             arg_type = Float64
             default = 0.0
             
+        "--eq_threshold"
+            arg_type = Float64
+            default = 1e-4
+            
         "--Ftag"
             arg_type = String
             default = "_"
@@ -82,6 +86,7 @@ numsamples_perwalker = parsed_args["numsamples_perwalker"];
 burnin = parsed_args["burnin"];
 solve_n4 = parsed_args["solve_n4"]
 stop_on_a = parsed_args["stop_on_a"]
+eq_threshold = parsed_args["eq_threshold"]
 
 
 print("Deets...\n\n")

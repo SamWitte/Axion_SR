@@ -21,17 +21,17 @@ function prior(theta, lg_m_low, lg_m_high, lg_f_low, lg_f_high)
     return -Inf
 end
 
-function log_probability(theta, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high; tau_max=1e4, alpha_max_cut=0.2, use_input_table=true, solve_322=true, impose_low_cut=1e-100, max_mass_matrix=nothing, input_data="Masha", solve_n4=false, stop_on_a=0.0)
+function log_probability(theta, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high; tau_max=1e4, alpha_max_cut=0.2, use_input_table=true, solve_322=true, impose_low_cut=1e-100, max_mass_matrix=nothing, input_data="Masha", solve_n4=false, stop_on_a=0.0, eq_threshold=1e-4)
 
     lp = prior(theta, lg_m_low, lg_m_high, lg_f_low, lg_f_high)
     if !isfinite.(lp)
         return -Inf
     end
 
-    return lp + log_likelihood(theta, data, tau_max=tau_max, alpha_max_cut=alpha_max_cut, use_input_table=use_input_table, solve_322=solve_322, impose_low_cut=impose_low_cut, max_mass_matrix=max_mass_matrix, input_data=input_data, solve_n4=solve_n4, stop_on_a=stop_on_a)
+    return lp + log_likelihood(theta, data, tau_max=tau_max, alpha_max_cut=alpha_max_cut, use_input_table=use_input_table, solve_322=solve_322, impose_low_cut=impose_low_cut, max_mass_matrix=max_mass_matrix, input_data=input_data, solve_n4=solve_n4, stop_on_a=stop_on_a, eq_threshold=eq_threshold)
 end
 
-function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_table=true, solve_322=true, impose_low_cut=1e-100, max_mass_matrix=nothing, input_data="Masha", solve_n4=false, stop_on_a=0.0)
+function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_table=true, solve_322=true, impose_low_cut=1e-100, max_mass_matrix=nothing, input_data="Masha", solve_n4=false, stop_on_a=0.0, eq_threshold=1e-4)
     
     log_m, log_f = theta
     sum_loglike = 0.0
@@ -115,7 +115,7 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
 #            end
 
             
-            final_spin = super_rad_check(MassBH, SpinBH, 10 .^log_m, 10 .^log_f, tau_max=maxtime, alpha_max_cut=alpha_max_cut, debug=false, solve_322=solve_322, impose_low_cut=impose_low_cut, input_data=input_data, solve_n4=solve_n4, stop_on_a=stop_on_a)
+            final_spin = super_rad_check(MassBH, SpinBH, 10 .^log_m, 10 .^log_f, tau_max=maxtime, alpha_max_cut=alpha_max_cut, debug=false, solve_322=solve_322, impose_low_cut=impose_low_cut, input_data=input_data, solve_n4=solve_n4, stop_on_a=stop_on_a, eq_threshold=eq_threshold)
 
             ### Likelihood part
             
@@ -230,12 +230,12 @@ function initialize_walkers(numwalkers, data, lg_m_low, lg_m_high, lg_f_low, lg_
     return x0
 end
 
-function mcmc_func_minimize(data, Fname; lg_m_low=-20, lg_m_high=-18, lg_f_high=19, lg_f_low=18, tau_max=1e4, alpha_max_cut=0.2, alpha_min_cut=1e-100, use_input_table=true, solve_322=true, numwalkers=10, thinning=1, numsamples_perwalker=2000, burnin=500, max_mass_matrix=nothing, input_data="Masha", solve_n4=false, stop_on_a=0.0)
+function mcmc_func_minimize(data, Fname; lg_m_low=-20, lg_m_high=-18, lg_f_high=19, lg_f_low=18, tau_max=1e4, alpha_max_cut=0.2, alpha_min_cut=1e-100, use_input_table=true, solve_322=true, numwalkers=10, thinning=1, numsamples_perwalker=2000, burnin=500, max_mass_matrix=nothing, input_data="Masha", solve_n4=false, stop_on_a=0.0, eq_threshold=1e-4)
     numdims = 2
 
 
     function llhood(x)
-        return log_probability(x, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high, tau_max=tau_max, alpha_max_cut=alpha_max_cut, use_input_table=use_input_table, solve_322=solve_322, impose_low_cut=alpha_min_cut, max_mass_matrix=max_mass_matrix, input_data=input_data, solve_n4=solve_n4, stop_on_a=stop_on_a)
+        return log_probability(x, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high, tau_max=tau_max, alpha_max_cut=alpha_max_cut, use_input_table=use_input_table, solve_322=solve_322, impose_low_cut=alpha_min_cut, max_mass_matrix=max_mass_matrix, input_data=input_data, solve_n4=solve_n4, stop_on_a=stop_on_a, eq_threshold=eq_threshold)
     end
 
     x0 = initialize_walkers(numwalkers, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high)

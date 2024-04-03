@@ -8,7 +8,7 @@ include("Constants.jl")
 include("solve_sr_rates.jl")
 
 
-function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_cut=0.2, debug=false, solve_322=true, solve_n4=false, impose_low_cut=0.01, input_data="Masha", stop_on_a=0)
+function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_cut=0.2, debug=false, solve_322=true, solve_n4=false, impose_low_cut=0.01, input_data="Masha", stop_on_a=0, eq_threshold=1e-4)
    
     alph = GNew .* M_BH .* massB #
     if debug
@@ -32,7 +32,7 @@ function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_c
         end
     end
     
-    final_spin = solve_system(massB, f_a, aBH, M_BH, tau_max, debug=debug, solve_322=solve_322, impose_low_cut=impose_low_cut, input_data=input_data, solve_n4=solve_n4, stop_on_a=stop_on_a)
+    final_spin = solve_system(massB, f_a, aBH, M_BH, tau_max, debug=debug, solve_322=solve_322, impose_low_cut=impose_low_cut, input_data=input_data, solve_n4=solve_n4, stop_on_a=stop_on_a, eq_threshold=eq_threshold)
     # print("Spin diff.. \t ", aBH, "\t", final_spin, "\t", alph, "\n")
     return final_spin
     
@@ -834,7 +834,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         cbset = CallbackSet(cback_equil, cbackdt, cbackspin)
         # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=1e-15)
         # sol = solve(prob, Rodas4(), dt=dt_guess, saveat=saveat, callback=cbset)
-        prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-4, abstol=abstol)
+        prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-3, abstol=abstol)
         sol = solve(prob, Rosenbrock23(), dt=dt_guess, saveat=saveat, callback=cbset)
     end
 
