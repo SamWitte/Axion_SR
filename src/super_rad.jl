@@ -66,6 +66,10 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     u6_fix = nothing
     u2_kill = false
     
+    e2_maxBN = 1024 * pi * (f_a / M_pl).^2 ./ (9 * (GNew .* M_BH .* mu ).^3)
+    e3_maxBN = e2_maxBN .* (3 ./ 2).^4
+    e4_maxBN = e2_maxBN .* (4 ./ 2).^4
+    
 
     
     Emax2 = 1.0
@@ -321,6 +325,34 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
             
             du[spinI] *= mu ./ hbar .* 3.15e7
             du[massI] *= (mu .* u[massI]) .* (mu .* GNew .* u[massI]) ./ hbar .* 3.15e7
+            
+            ## check bosenova
+            if (u[1] > e2_maxBN)
+                if du[1] > 0
+                    du[1] = 0.0
+                end
+            end
+            if (u[2] > e3_maxBN)
+                if du[2] > 0
+                    du[2] = 0.0
+                end
+            end
+            if (u[3] > e4_maxBN)
+                if du[3] > 0
+                    du[3] = 0.0
+                end
+            end
+            if (u[4] > e4_maxBN)
+                if du[4] > 0
+                    du[4] = 0.0
+                end
+            end
+            if (u[5] > e4_maxBN)
+                if du[5] > 0
+                    du[5] = 0.0
+                end
+            end            
+            
         end
         
         return
@@ -760,6 +792,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
 
     end
     
+    
     rP = 1.0 .+ sqrt.(1 - aBH.^2)
     if (aBH .- 2 .* (GNew .* M_BH .* mu) .* rP) .> 0.0
         dt_guess = abs.(4e-2 .* (GNew .* M_BH .* mu ).^8 .* (aBH .- 2 .* (GNew .* M_BH .* mu) .* rP) .* mu / hbar .* 3.15e7).^(-1)
@@ -774,31 +807,28 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     cback_equil = DiscreteCallback(check_eq, affect_eq!, save_positions=(false, true))
     cbackspin = DiscreteCallback(check_spin, affect_spin!, save_positions=(false, true))
     cback_term = DiscreteCallback(check_terminate_lvl, affect_terminate_lvl!, save_positions=(false, true))
+    
     if solve_n4
+    
         cbset = CallbackSet(cbackdt, cbackspin, cback_term)
-        # cbset = CallbackSet(cbackspin, cback_term)
+        
         # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-10, abstol=1e-20) #
         # sol = solve(prob, AutoTsit5(Rodas4()), dt=dt_guess, saveat=saveat, callback=cbset)
         
-        prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=1e-10)
-        # sol = solve(prob, AutoTsit5(KenCarp4()), dt=dt_guess, saveat=saveat, callback=cbset)
-        sol = solve(prob, Rosenbrock23(), dt=dt_guess, saveat=saveat, callback=cbset)
+        prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=1e-15)
+        # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-12, abstol=1e-20)
+        # sol = solve(prob, Rosenbrock23(), dt=dt_guess, saveat=saveat, callback=cbset)
         # sol = solve(prob, KenCarp4(), dt=dt_guess, saveat=saveat, callback=cbset)
+        sol = solve(prob, Rodas4(), dt=dt_guess, saveat=saveat, callback=cbset)
     else
         cbset = CallbackSet(cback_equil, cbackdt, cbackspin)
         # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=1e-15)
-        # sol = solve(prob, Rodas4P(), dt=dt_guess, saveat=saveat, callback=cbset)
+        # sol = solve(prob, Rodas4(), dt=dt_guess, saveat=saveat, callback=cbset)
         prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=1e-10)
         sol = solve(prob, Rosenbrock23(), dt=dt_guess, saveat=saveat, callback=cbset)
     end
-    
-    
-    # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-10, abstol=1e-20) # rodas
-    # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-6, abstol=1e-10) #euler
-    
+
     # sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
-    # sol = solve(prob, KenCarp4(), dt=dt_guess, saveat=saveat, callback=cbset)
-    
     
     state211 = [sol.u[i][1] for i in 1:length(sol.u)]
     state322 = [sol.u[i][2] for i in 1:length(sol.u)]
