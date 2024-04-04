@@ -103,8 +103,8 @@ max_mass_matrix=nothing
 
 if LowMass
     ###### Low Mass Region
-    lg_m_low = -14
-    lg_m_high = -10
+    lg_m_low = -13
+    lg_m_high = log10(3e-11)
     lg_f_high = 19
     lg_f_low = 9
     

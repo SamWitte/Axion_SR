@@ -794,11 +794,15 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     
     
     rP = 1.0 .+ sqrt.(1 - aBH.^2)
-    if (aBH .- 2 .* (GNew .* M_BH .* mu) .* rP) .> 0.0
-        dt_guess = abs.(4e-2 .* (GNew .* M_BH .* mu ).^8 .* (aBH .- 2 .* (GNew .* M_BH .* mu) .* rP) .* mu / hbar .* 3.15e7).^(-1)
+    t1 = (SR211 ./ hbar .* 3.15e7).^(-1)
+    t2 = (SR322 ./ hbar .* 3.15e7).^(-1)
+    if solve_n4
+        t3 = (SR433 ./ hbar .* 3.15e7).^(-1)
+        tlist = [t1 t2 t3]
     else
-        dt_guess = abs.(8e-5 .* (GNew .* M_BH .* mu ).^12 .* (aBH .- (GNew .* M_BH .* mu ) .* rP) .* mu / hbar .* 3.15e7).^(-1)
+        tlist = [t1 t2]
     end
+    dt_guess = minimum(tlist) 
     if debug
         print("Time guess \t", dt_guess, "\n")
     end
