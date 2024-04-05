@@ -802,7 +802,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     else
         tlist = [t1 t2]
     end
-    dt_guess = minimum(tlist) 
+    dt_guess = minimum(tlist)
     if debug
         print("Time guess \t", dt_guess, "\n")
     end
@@ -826,20 +826,21 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         
         # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=1e-15)
         # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-12, abstol=1e-20)
-        sol = solve(prob, Rosenbrock23(), dt=dt_guess, saveat=saveat, callback=cbset)
+        sol = solve(prob, Rosenbrock23(), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e5)
         # sol = solve(prob, KenCarp5(), dt=dt_guess, saveat=saveat, callback=cbset)
         # sol = solve(prob, Rodas4(), dt=dt_guess, saveat=saveat, callback=cbset)
     else
-        if (GNew .* M_BH .* mu ) < 0.1
-            abstol = 1e-30
-        else
-            abstol = 1e-15
-        end
+        
+        abstol = 1e-30
+        
         cbset = CallbackSet(cback_equil, cbackdt, cbackspin)
         # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=1e-15)
         # sol = solve(prob, Rodas4(), dt=dt_guess, saveat=saveat, callback=cbset)
+        
         prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-3, abstol=abstol)
+        # sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
         sol = solve(prob, Rosenbrock23(), dt=dt_guess, saveat=saveat, callback=cbset)
+        # sol = solve(prob, Rodas4(), dt=dt_guess, saveat=saveat, callback=cbset)
     end
 
     # sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
