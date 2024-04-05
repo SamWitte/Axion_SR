@@ -66,7 +66,11 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     u6_fix = nothing
     u2_kill = false
     
-    e2_maxBN = 1024 * pi * (fa / M_pl).^2 ./ (9 * (GNew .* M_BH .* mu ).^3)
+    if input_data != "Doddy"
+        e2_maxBN = 1024 * pi * (fa / M_pl).^2 ./ (9 * (GNew .* M_BH .* mu ).^3)
+    else
+        e2_maxBN = (5 .* 1e78 .* (2.0 .^4 ./ alph.^3) .* (MassBH ./ 10.0).^2 .* (10 .^log_f ./ M_pl).^2) .* e_init
+    end
     e3_maxBN = e2_maxBN .* (3 ./ 2).^4
     e4_maxBN = e2_maxBN .* (4 ./ 2).^4
     
@@ -292,6 +296,12 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
             du[5] += 9.1e-8 .* alph.^11 .* (M_pl ./ fa).^4  .* u[1]  .* u[2] .* u[5] # 211 x 322 -> 433 x BH
             du[1] += -9.1e-8 .* alph.^11 .* (M_pl ./ fa).^4  .* u[1]  .* u[2] .* u[5]
             du[2] += -9.1e-8 .* alph.^11 .* (M_pl ./ fa).^4  .* u[1]  .* u[2] .* u[5]
+            
+            
+            # test =  -9.1e-8 .* alph.^11 .* (M_pl ./ fa).^4  .* u[1]  .* u[2] .* u[5]
+            # test2 =  -1.1e-9 .* alph.^7 .* (M_pl ./ fa).^4 .* rP .* u[1] .* u[4] .* u[5]  # 211 x 422 -> 433 x 200 / BH
+            # test3 = -2.5e-8 .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* u[1] .* u[2] .* u[3]
+            # print(test, "\t", test2, "\t", test3, "\t", du[1], "\n")
             
         end
         
@@ -824,11 +834,13 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-3, abstol=abstol) #
         # sol = solve(prob, AutoTsit5(Rodas4()), dt=dt_guess, saveat=saveat, callback=cbset)
         
+        
         # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=1e-15)
         # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-12, abstol=1e-20)
         sol = solve(prob, Rosenbrock23(), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e5)
         # sol = solve(prob, KenCarp5(), dt=dt_guess, saveat=saveat, callback=cbset)
         # sol = solve(prob, Rodas4(), dt=dt_guess, saveat=saveat, callback=cbset)
+        # sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
     else
         
         abstol = 1e-30

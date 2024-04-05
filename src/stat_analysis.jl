@@ -129,15 +129,15 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
             # print(final_spin, "\n")
             
             ## add doddy constraint on bosenova
-            lnBose = log.(5 .* 1e78 .* (2.0 .^4 ./ alph.^3) .* (MassBH ./ 10.0).^2 .* (10 .^log_f ./ M_pl).^2)
-            Nmax = 1e76 .* (MassBH ./ 10.0).^2
-            SR211 = sr_rates(2, 1, 1, 10 .^log_m, MassBH, SpinBH, impose_low_cut=impose_low_cut, solve_322=false) ./ hbar .* 3.15e7
-            bose_thresh = maxtime .* SR211 .* (exp.(lnBose) ./ Nmax)
+            # lnBose = log.(5 .* 1e78 .* (2.0 .^4 ./ alph.^3) .* (MassBH ./ 10.0).^2 .* (10 .^log_f ./ M_pl).^2)
+            # Nmax = 1e76 .* (MassBH ./ 10.0).^2
+            # SR211 = sr_rates(2, 1, 1, 10 .^log_m, MassBH, SpinBH, impose_low_cut=impose_low_cut, solve_322=false) ./ hbar .* 3.15e7
+            # bose_thresh = maxtime .* SR211 .* (exp.(lnBose) ./ Nmax)
             
             # print("Bose Check \t ",lnBose .> bose_thresh, "\n")
-            if (input_data == "Doddy")&&(lnBose .> bose_thresh)
-                final_spin = SpinBH_c[i]
-            end
+            # if (input_data == "Doddy")&&(lnBose .> bose_thresh)
+            #    final_spin = SpinBH_c[i]
+            # end
             if final_spin > SpinBH_c[i]
                 sum_loglike += -0.5 * (SpinBH_c[i] - final_spin).^2 / SpinBH_errU[i].^2
             else
