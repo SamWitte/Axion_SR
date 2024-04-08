@@ -123,7 +123,8 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
             # masha cut
             a_max = 4 .* alph ./ (1 .+ 4 .* alph.^2)
             # print(alph, "\t", SpinBH, "\t",final_spin, "\t", a_max, "\t", 10 .^log_m, "\t", 10 .^log_f, "\n")
-            if (input_data == "Masha")&&((final_spin .- a_max) .> 0.02)
+            allwd_err = (SpinBH_c[i] - a_max) .* 0.1
+            if (input_data == "Masha")&&((final_spin .- a_max) .> allwd_err)
                 final_spin = SpinBH_c[i]
             end
             # print(final_spin, "\n")

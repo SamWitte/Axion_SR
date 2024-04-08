@@ -74,7 +74,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     e3_maxBN = e2_maxBN .* (3 ./ 2).^4
     e4_maxBN = e2_maxBN .* (4 ./ 2).^4
     
-
+    # print("Bnova thresh \t", e2_maxBN, "\t", e3_maxBN, "\t", e4_maxBN, "\n\n")
     
     Emax2 = 1.0
     OmegaH = aBH ./ (2 .* (GNew .* M_BH) .* (1 .+ sqrt.(1 .- aBH.^2)))
@@ -94,9 +94,13 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     Ntot_slv = 2000
     iter_slv = 50
     
-    alist, pts211 = compute_gridded(mu, M_BH, aBH, 2, 1, 1; Ntot=Ntot_slv, iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp)
-    itp_211 = LinearInterpolation(alist, log10.(pts211), extrapolation_bc=Line())
-    SR211 = 10 .^itp_211(aBH)
+    if input_data == "Masha"
+        SR211 = 4.2e-2 .* alph.^8 .* (aBH - 2 * alph .* (1 .+ sqrt.(1 - aBH.^2))) .* mu
+    else
+        alist, pts211 = compute_gridded(mu, M_BH, aBH, 2, 1, 1; Ntot=Ntot_slv, iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp)
+        itp_211 = LinearInterpolation(alist, log10.(pts211), extrapolation_bc=Line())
+        SR211 = 10 .^itp_211(aBH)
+    end
     
     alist, pts322 = compute_gridded(mu, M_BH, aBH, 3, 2, 2; Ntot=Ntot_slv, iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp)
     itp_322 = LinearInterpolation(alist, log10.(pts322), extrapolation_bc=Line())
@@ -115,6 +119,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         itp_433 = LinearInterpolation(alist, log10.(pts433), extrapolation_bc=Line())
         SR433 = 10 .^itp_433(aBH)
     end
+    
+    
 
     function RHS_ax!(du, u, Mvars, t)
     
@@ -167,7 +173,11 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         if (OmegaH .< ergL(2, 1, 1, mu, u[massI], u[spinI]))
             SR211 = 0.0
         else
-            SR211 = 10 .^itp_211(u[spinI])
+            if input_data == "Masha"
+                SR211 = 4.2e-2 .* alph.^8 .* (aBH - 2 * alph .* (1 .+ sqrt.(1 - aBH.^2))) .* mu
+            else
+                SR211 = 10 .^itp_211(u[spinI])
+            end
         end
         
         if (2 .* OmegaH .< ergL(3, 2, 2, mu, u[massI], u[spinI]))
