@@ -69,10 +69,10 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     alph = GNew .* M_BH .* mu
     if input_data != "Doddy"
         e2_maxBN = 1024 * pi * (fa / M_pl).^2 ./ (9 * (GNew .* M_BH .* mu ).^3)
-        # test = (5 .* 1e78 .* (2.0 .^4 ./ alph.^3) .* (M_BH ./ 10.0).^2 .* (fa ./ M_pl).^2) .* e_init
-        # print(test, "\t", e2_maxBN, "\n")
+        print("Max E211 \t", e2_maxBN, "\n")
     else
         e2_maxBN = (5 .* 1e78 .* (2.0 .^4 ./ alph.^3) .* (M_BH ./ 10.0).^2 .* (fa ./ M_pl).^2) .* e_init
+        print("Max E211 \t", e2_maxBN, "\n")
     end
     e3_maxBN = e2_maxBN .* (3 ./ 2).^4
     e4_maxBN = e2_maxBN .* (4 ./ 2).^4
@@ -329,6 +329,19 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
             du[2] *= mu ./ hbar .* 3.15e7
             du[3] *= mu ./ hbar .* 3.15e7
             du[4] *= mu.^2 .* (GNew .* u[4].^2) ./ hbar .* 3.15e7
+            
+            ## check bosenova
+            if (u[1] > e2_maxBN)
+                if du[1] > 0
+                    du[1] = 0.0
+                end
+            end
+            if (u[2] > e3_maxBN)
+                if du[2] > 0
+                    du[2] = 0.0
+                end
+            end
+            
         else
             du[spinI] = - SR211 .* u[1] ./ mu .- 2 .* SR322 .* u[2] ./ mu  .- SR411 .* u[3] ./ mu .- SR422 .* u[4] ./ mu .- SR433 .* u[5] ./ mu
             # print(SR211, "\t", SR322, "\t", SR411, "\t", SR422, "\t", SR433, "\n" )
