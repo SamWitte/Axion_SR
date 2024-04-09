@@ -71,7 +71,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         e2_maxBN = 1024 * pi * (fa / M_pl).^2 ./ (9 * (GNew .* M_BH .* mu ).^3)
         # print("Max E211 \t", e2_maxBN, "\n")
     else
-        e2_maxBN = (5 .* 1e78 .* (2.0 .^4 ./ alph.^3) .* (M_BH ./ 10.0).^2 .* (fa ./ M_pl).^2) .* e_init
+        e2_maxBN = 1024 * pi * (fa / M_pl).^2 ./ (9 * (GNew .* M_BH .* mu ).^3)
+        # e2_maxBN = (5 .* 1e78 .* (2.0 .^4 ./ alph.^3) .* (M_BH ./ 10.0).^2 .* (fa ./ M_pl).^2) .* e_init
         # e2_maxBN = 1e100
         # print("Max E211 \t", e2_maxBN, "\n")
     end
@@ -123,6 +124,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         alist, pts433 = compute_gridded(mu, M_BH, aBH, 4, 3, 3; Ntot=Ntot_slv, iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp)
         itp_433 = LinearInterpolation(alist, log10.(pts433), extrapolation_bc=Line())
         SR433 = 10 .^itp_433(aBH)
+        # print("time check 433 \t ", (SR433 ./ hbar .* 3.15e7)^(-1), "\n")
     end
     
     
@@ -317,7 +319,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
             # test =  -9.1e-8 .* alph.^11 .* (M_pl ./ fa).^4  .* u[1]  .* u[2] .* u[5]
             # test2 =  -1.1e-9 .* alph.^7 .* (M_pl ./ fa).^4 .* rP .* u[1] .* u[4] .* u[5]  # 211 x 422 -> 433 x 200 / BH
             # test3 = -2.5e-8 .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* u[1] .* u[2] .* u[3]
-            # print(test, "\t", test2, "\t", test3, "\t", du[1], "\n")
+            # print(SR433 .* u[5] ./ mu, "\t",  -2 * 9.2e-11 .* alph.^8 .* (M_pl ./ fa).^4  .* u[1] .* u[5].^2, "\t", - 2.6e-9 .* alph.^8 .* (M_pl ./ fa).^4  .* u[1] .* u[5] .* u[2], "\t", du[5], "\n")
             
         end
         
@@ -863,9 +865,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-3, abstol=abstol) #
         # sol = solve(prob, AutoTsit5(Rodas4()), dt=dt_guess, saveat=saveat, callback=cbset)
         
-        
-        # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=1e-15)
-        # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-12, abstol=1e-20)
+
         sol = solve(prob, Rosenbrock23(), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e5)
         # sol = solve(prob, KenCarp5(), dt=dt_guess, saveat=saveat, callback=cbset)
         # sol = solve(prob, Rodas4(), dt=dt_guess, saveat=saveat, callback=cbset)
