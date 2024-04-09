@@ -69,10 +69,11 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     alph = GNew .* M_BH .* mu
     if input_data != "Doddy"
         e2_maxBN = 1024 * pi * (fa / M_pl).^2 ./ (9 * (GNew .* M_BH .* mu ).^3)
-        print("Max E211 \t", e2_maxBN, "\n")
+        # print("Max E211 \t", e2_maxBN, "\n")
     else
         e2_maxBN = (5 .* 1e78 .* (2.0 .^4 ./ alph.^3) .* (M_BH ./ 10.0).^2 .* (fa ./ M_pl).^2) .* e_init
-        print("Max E211 \t", e2_maxBN, "\n")
+        # e2_maxBN = 1e100
+        # print("Max E211 \t", e2_maxBN, "\n")
     end
     e3_maxBN = e2_maxBN .* (3 ./ 2).^4
     e4_maxBN = e2_maxBN .* (4 ./ 2).^4
@@ -97,13 +98,13 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     Ntot_slv = 2000
     iter_slv = 50
     
-    # if input_data == "Masha"
-    #     SR211 = 4.2e-2 .* alph.^8 .* (aBH - 2 * alph .* (1 .+ sqrt.(1 - aBH.^2))) .* mu
-    # else
-    alist, pts211 = compute_gridded(mu, M_BH, aBH, 2, 1, 1; Ntot=Ntot_slv, iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp)
-    itp_211 = LinearInterpolation(alist, log10.(pts211), extrapolation_bc=Line())
-    SR211 = 10 .^itp_211(aBH)
-    # end
+    if input_data == "Masha"
+        SR211 = 4.2e-2 .* alph.^8 .* (aBH - 2 * alph .* (1 .+ sqrt.(1 - aBH.^2))) .* mu
+    else
+        alist, pts211 = compute_gridded(mu, M_BH, aBH, 2, 1, 1; Ntot=Ntot_slv, iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp)
+        itp_211 = LinearInterpolation(alist, log10.(pts211), extrapolation_bc=Line())
+        SR211 = 10 .^itp_211(aBH)
+    end
     
     alist, pts322 = compute_gridded(mu, M_BH, aBH, 3, 2, 2; Ntot=Ntot_slv, iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp)
     itp_322 = LinearInterpolation(alist, log10.(pts322), extrapolation_bc=Line())
@@ -176,11 +177,11 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         if (OmegaH .< ergL(2, 1, 1, mu, u[massI], u[spinI]))
             SR211 = 0.0
         else
-            # if input_data == "Masha"
-            #     SR211 = 4.2e-2 .* alph.^8 .* (aBH - 2 * alph .* (1 .+ sqrt.(1 - aBH.^2))) .* mu
-            # else
-            SR211 = 10 .^itp_211(u[spinI])
-            # end
+            if input_data == "Masha"
+                SR211 = 4.2e-2 .* alph.^8 .* (aBH - 2 * alph .* (1 .+ sqrt.(1 - aBH.^2))) .* mu
+            else
+                SR211 = 10 .^itp_211(u[spinI])
+            end
         end
         
         if (2 .* OmegaH .< ergL(3, 2, 2, mu, u[massI], u[spinI]))
