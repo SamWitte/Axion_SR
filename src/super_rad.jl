@@ -99,7 +99,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     iter_slv = 50
     
     if input_data == "Masha"
-        SR211 = 4.2e-2 .* alph.^8 .* (aBH - 2 * alph .* (1 .+ sqrt.(1 - aBH.^2))) .* mu
+        # SR211 = 4.2e-2 .* alph.^8 .* (aBH - 2 * alph .* (1 .+ sqrt.(1 - aBH.^2))) .* mu
+        SR211 = sr_rates(2, 1, 1, mu, u[massI], u[spinI], impose_low_cut=0.001, solve_322=true)
     else
         alist, pts211 = compute_gridded(mu, M_BH, aBH, 2, 1, 1; Ntot=Ntot_slv, iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp)
         itp_211 = LinearInterpolation(alist, log10.(pts211), extrapolation_bc=Line())
@@ -178,7 +179,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
             SR211 = 0.0
         else
             if input_data == "Masha"
-                SR211 = 4.2e-2 .* alph.^8 .* (aBH - 2 * alph .* (1 .+ sqrt.(1 - aBH.^2))) .* mu
+                # SR211 = 4.2e-2 .* alph.^8 .* (aBH - 2 * alph .* (1 .+ sqrt.(1 - aBH.^2))) .* mu
+                SR211 = sr_rates(2, 1, 1, mu, u[massI], u[spinI], impose_low_cut=0.001, solve_322=true)
             else
                 SR211 = 10 .^itp_211(u[spinI])
             end
