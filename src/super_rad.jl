@@ -100,8 +100,12 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     iter_slv = 50
     
     if input_data == "Masha"
-        # SR211 = 4.2e-2 .* alph.^8 .* (aBH - 2 * alph .* (1 .+ sqrt.(1 - aBH.^2))) .* mu
-        SR211 = sr_rates(2, 1, 1, mu, aBH, M_BH, impose_low_cut=0.001, solve_322=true)
+        # alist, pts211 = compute_gridded(mu, M_BH, aBH, 2, 1, 1; Ntot=Ntot_slv, iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp)
+        # itp_211 = LinearInterpolation(alist, log10.(pts211), extrapolation_bc=Line())
+        # SR211 = 10 .^itp_211(aBH)
+        
+        SR211 = 4.2e-2 .* alph.^8 .* (aBH - 2 * alph .* (1 .+ sqrt.(1 - aBH.^2))) .* mu
+        # SR211 = sr_rates(2, 1, 1, mu, aBH, M_BH, impose_low_cut=0.001, solve_322=true)
     else
         alist, pts211 = compute_gridded(mu, M_BH, aBH, 2, 1, 1; Ntot=Ntot_slv, iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp)
         itp_211 = LinearInterpolation(alist, log10.(pts211), extrapolation_bc=Line())
@@ -111,6 +115,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     alist, pts322 = compute_gridded(mu, M_BH, aBH, 3, 2, 2; Ntot=Ntot_slv, iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp)
     itp_322 = LinearInterpolation(alist, log10.(pts322), extrapolation_bc=Line())
     SR322 = 10 .^itp_322(aBH)
+    # SR322 = sr_rates(3, 2, 2, mu, aBH, M_BH, impose_low_cut=0.001, solve_322=true)
     
     if solve_n4
         alist, pts411 = compute_gridded(mu, M_BH, aBH, 4, 1, 1; Ntot=Ntot_slv, iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp)
@@ -181,8 +186,9 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
             SR211 = 0.0
         else
             if input_data == "Masha"
-                # SR211 = 4.2e-2 .* alph.^8 .* (aBH - 2 * alph .* (1 .+ sqrt.(1 - aBH.^2))) .* mu
-                SR211 = sr_rates(2, 1, 1, mu, u[massI], u[spinI], impose_low_cut=0.001, solve_322=true)
+                # SR211 = 10 .^itp_211(u[spinI])
+                SR211 = 4.2e-2 .* alph.^8 .* (aBH - 2 * alph .* (1 .+ sqrt.(1 - aBH.^2))) .* mu
+                # SR211 = sr_rates(2, 1, 1, mu, u[massI], u[spinI], impose_low_cut=0.001, solve_322=true)
             else
                 SR211 = 10 .^itp_211(u[spinI])
             end
@@ -880,8 +886,11 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         
         prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-3, abstol=abstol)
         # sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
-        sol = solve(prob, Rosenbrock23(), dt=dt_guess, saveat=saveat, callback=cbset)
-        # sol = solve(prob, Rodas4(), dt=dt_guess, saveat=saveat, callback=cbset)
+        if input_data != "Doddy"
+            sol = solve(prob, Rosenbrock23(), dt=dt_guess, saveat=saveat, callback=cbset)
+        else
+            sol = solve(prob, Rodas4(), dt=dt_guess, saveat=saveat, callback=cbset)
+        end
     end
 
     # sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)

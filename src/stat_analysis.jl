@@ -101,19 +101,7 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
             else
                 maxtime = tau_max
             end
-            
-            alph = GNew .* MassBH .* 10 .^log_m #
-            day_to_inVeV = 24.0 * 60 * 60 / 6.58e-16
-            test_I6 = (Mc[i] ./ MassBH) * 144 * pi^2 * sqrt.(3) ./ (SpinBH .* alph.^7 .* (1 .+ Mc[i] ./ MassBH) .* (10 .^log_m .* orbitT[i] .* day_to_inVeV).^2) # from 2011.11646
-            test_I7 = SpinBH * alph.^5 .* (10 .^log_m .* orbitT[i] .* day_to_inVeV) ./ 6.0
-            
-            # add this back at some point...
-#            if (test_I6 .> 1.0) || (test_I7 .< 1.0)
-#                final_spin = SpinBH_c[i]
-#            else
-#                final_spin = super_rad_check(MassBH, SpinBH, 10 .^log_m, 10 .^log_f, tau_max=maxtime, alpha_max_cut=alpha_max_cut, debug=false, solve_322=solve_322, impose_low_cut=impose_low_cut, input_data=input_data)
-#            end
-
+                
             
             final_spin = super_rad_check(MassBH, SpinBH, 10 .^log_m, 10 .^log_f, tau_max=maxtime, alpha_max_cut=alpha_max_cut, debug=false, solve_322=solve_322, impose_low_cut=impose_low_cut, input_data=input_data, solve_n4=solve_n4, stop_on_a=stop_on_a, eq_threshold=eq_threshold)
 
@@ -123,22 +111,12 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
             # masha cut
             a_max = 4 .* alph ./ (1 .+ 4 .* alph.^2)
             # print(alph, "\t", SpinBH, "\t",final_spin, "\t", a_max, "\t", 10 .^log_m, "\t", 10 .^log_f, "\n")
-            allwd_err = (SpinBH_c[i] - a_max) .* 0.1
+            # allwd_err = (SpinBH_c[i] - a_max) .* 0.1
+            allwd_err = 0.01
             if (input_data == "Masha")&&((final_spin .- a_max) .> allwd_err)
                 final_spin = SpinBH_c[i]
             end
-            # print(final_spin, "\n")
             
-            ## add doddy constraint on bosenova
-            # lnBose = log.(5 .* 1e78 .* (2.0 .^4 ./ alph.^3) .* (MassBH ./ 10.0).^2 .* (10 .^log_f ./ M_pl).^2)
-            # Nmax = 1e76 .* (MassBH ./ 10.0).^2
-            # SR211 = sr_rates(2, 1, 1, 10 .^log_m, MassBH, SpinBH, impose_low_cut=impose_low_cut, solve_322=false) ./ hbar .* 3.15e7
-            # bose_thresh = maxtime .* SR211 .* (exp.(lnBose) ./ Nmax)
-            
-            # print("Bose Check \t ",lnBose .> bose_thresh, "\n")
-            # if (input_data == "Doddy")&&(lnBose .> bose_thresh)
-            #    final_spin = SpinBH_c[i]
-            # end
             if final_spin > SpinBH_c[i]
                 sum_loglike += -0.5 * (SpinBH_c[i] - final_spin).^2 / SpinBH_errU[i].^2
             else
