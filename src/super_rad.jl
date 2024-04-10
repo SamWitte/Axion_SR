@@ -150,9 +150,9 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         
         alph = GNew .* u[massI] .* mu #
         rP = nothing
-        if u[spinI] .> 0.998
-            rP = 1.0 .+ sqrt.(1 - 0.998 .^2)
-            u[spinI] = 0.998
+        if u[spinI] .> maxSpin
+            rP = 1.0 .+ sqrt.(1 -maxSpin .^2)
+            u[spinI] = maxSpin
         elseif u[spinI] .< 0.0
             rP = 2.0
             u[spinI] = 0.0
@@ -419,8 +419,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         
         alph = GNew .* u[massI] .* mu
         rP = nothing
-        if u[spinI] .> 0.998
-            rP = 1.0 .+ sqrt.(1 - 0.998 .^2)
+        if u[spinI] .> maxSpin
+            rP = 1.0 .+ sqrt.(1 - maxSpin .^2)
         elseif u[spinI] .< 0.0
             rP = 2.0
             u[spinI] = 0.0

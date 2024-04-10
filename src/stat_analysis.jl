@@ -77,7 +77,7 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
             SpinBH = nothing
             val_found = false
             if p_or_neg == 0
-                SpinBH = rand(Uniform(SpinBH_c[i], 0.998))
+                SpinBH = rand(Uniform(SpinBH_c[i], maxSpin))
             else
                 d_spin = Normal(SpinBH_c[i], SpinBH_errD[i])
                 while !val_found
@@ -89,8 +89,8 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
             end
                 
 
-            if SpinBH > 0.998
-                SpinBH = 0.998
+            if SpinBH > maxSpin
+                SpinBH = maxSpin
             end
             if SpinBH < 0.0
                 SpinBH = 0.0
@@ -160,7 +160,7 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
             prior_spins(a) = ones(size(a))  # agnostic spin prior.
             min_spin = one_d_spin_fixed_mass(MassBH .* Ms, prior_spins, max_mass_matrix; return_all=false)
                                 
-            spinBH_sample = rand() .* (0.998 .- min_spin) .+ min_spin
+            spinBH_sample = rand() .* (maxSpin .- min_spin) .+ min_spin
             
             # alph = GNew .* MassBH .* 10 .^log_m #
             # day_to_inVeV = 24.0 * 60 * 60 / 6.58e-16

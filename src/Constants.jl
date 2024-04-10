@@ -12,6 +12,7 @@ const m_elec = 5.11e5
 const G_to_eV2 = 1.95e-2
 const e_charge = 0.3
 const a_fs = 1.0 ./ 137.0
+const maxSpin = 0.999
 
 # Seed 3-dim vector with dual partials for gradient calculation
 global seed = x -> [map(y -> Dual(y, (1., 0., 0.)), x[:,1]) map(y -> Dual(y, (0., 1., 0.)), x[:,2]) map(y -> Dual(y, (0., 0., 1.)), x[:,3])]

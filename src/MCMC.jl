@@ -25,7 +25,7 @@ function parse_commandline()
             
         "--eq_threshold"
             arg_type = Float64
-            default = 1e-4
+            default = 1e-6
             
         "--Ftag"
             arg_type = String

@@ -32,9 +32,9 @@ function sr_rates(n, l, m, massB, MBH, aBH; impose_low_cut=0.01, solve_322=true)
     
     
     rP = nothing
-    if aBH .> 0.998
-        rP = 1.0 .+ sqrt.(1 - 0.998 .^2)
-        aBH = 0.998
+    if aBH .> maxSpin
+        rP = 1.0 .+ sqrt.(1 - maxSpin .^2)
+        aBH = maxSpin
     elseif aBH .< 0.0
         rP = 2.0
         aBH = 0.0
