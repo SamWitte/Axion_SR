@@ -110,10 +110,13 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
             
             # masha cut
             # a_max = 4 .* alph ./ (1 .+ 4 .* alph.^2)
+            
             allwd_err = 0.01
             if (input_data == "Masha")
-                a_max = super_rad_check(MassBH, SpinBH, 10 .^log_m, 10 .^log_f, tau_max=maxtime, alpha_max_cut=alpha_max_cut, debug=false, solve_322=false, impose_low_cut=impose_low_cut, input_data=input_data, solve_n4=false, eq_threshold=eq_threshold)
-                if ((final_spin .- a_max) .> allwd_err)
+                a_max = super_rad_check(MassBH, SpinBH, 10 .^log_m, 1e19, tau_max=maxtime, alpha_max_cut=alpha_max_cut, debug=false, solve_322=false, impose_low_cut=impose_low_cut, input_data="Doddy", solve_n4=false, eq_threshold=eq_threshold)
+                
+                frac_SD = (SpinBH_c[i] - a_max) * 0.2
+                if ((final_spin .- a_max) .> frac_SD)
                     final_spin = SpinBH_c[i]
                 end
             end
