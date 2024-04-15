@@ -866,7 +866,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         if (GNew .* M_BH .* mu ) < 0.1
             abstol = 1e-30
         else
-            abstol = 1e-15
+            abstol = 1e-30
         end
         prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-3, abstol=abstol) #
         # sol = solve(prob, AutoTsit5(Rodas4()), dt=dt_guess, saveat=saveat, callback=cbset)
@@ -884,11 +884,13 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=1e-15)
         # sol = solve(prob, Rodas4(), dt=dt_guess, saveat=saveat, callback=cbset)
         
-        prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-3, abstol=abstol)
+        
         # sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
         if input_data != "Doddy"
+            prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-3, abstol=abstol, maxiters=5e5)
             sol = solve(prob, Rosenbrock23(), dt=dt_guess, saveat=saveat, callback=cbset)
         else
+            prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=abstol, maxiters=5e7)
             sol = solve(prob, Rodas4(), dt=dt_guess, saveat=saveat, callback=cbset)
         end
     end
@@ -912,7 +914,9 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
     # alph = GNew .* M_BH .* mu
     # bose_thresh_e = 1024 .* pi * (fa ./ M_pl).^2 ./ ( 9 .* alph.^3 )
     # print("Condition two \t", state211[end] ./ bose_thresh_e, "\n")
-    
+    # alph_out = GNew .* 14.28 .* mu
+    # maxa = 4 .* alph_out ./ (1 .+ 4 .* alph_out.^2)
+    # print("CHECK \t", maxa, "\n\n")
     if debug
         if !solve_n4
             # print("Initial \t", state211[1], "\t", state322[1], "\t", spinBH[1], "\t", MassB[1], "\n")
