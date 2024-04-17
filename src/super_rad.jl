@@ -8,7 +8,7 @@ include("Constants.jl")
 include("solve_sr_rates.jl")
 
 
-function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_cut=0.2, debug=false, solve_322=true, solve_n4=false, impose_low_cut=0.01, input_data="Masha", stop_on_a=0, eq_threshold=1e-4)
+function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_cut=10.0, debug=false, solve_322=true, solve_n4=false, impose_low_cut=0.01, input_data="Masha", stop_on_a=0, eq_threshold=1e-4)
    
     alph = GNew .* M_BH .* massB #
     if debug
@@ -46,7 +46,7 @@ function emax_211(MBH, mu, aBH)
     return (emax_N ./ emax_D)
 end
     
-function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_322=true, impose_low_cut=0.01, return_all_info=false, input_data="Masha", solve_n4=false, eq_threshold=1e-4, stop_on_a=0)
+function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve_322=true, impose_low_cut=0.01, return_all_info=false, input_data="Masha", solve_n4=false, eq_threshold=1e-4, stop_on_a=0)
     e_init = 1.0 ./ (GNew .* M_BH.^2 .* M_to_eV) # unitless
     if !solve_n4
         y0 = [e_init, e_init, aBH, M_BH]
@@ -878,8 +878,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
         # sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
     else
         
-        # abstol = 1e-30
-        abstol = 1e-15
+        abstol = 1e-30
+        # abstol = 1e-15
         
         cbset = CallbackSet(cback_equil, cbackdt, cbackspin)
         # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=1e-15)
@@ -893,7 +893,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=100, debug=true, solve_3
             sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
         else
             # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=abstol, maxiters=5e7)
-            prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-3, abstol=abstol, maxiters=5e5)
+            prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-7, abstol=abstol, maxiters=5e5)
             # sol = solve(prob, Rodas4(), dt=dt_guess, saveat=saveat, callback=cbset)
             sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
         end
