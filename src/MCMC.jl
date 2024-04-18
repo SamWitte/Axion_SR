@@ -197,7 +197,7 @@ end
 solve_322 = true
 
 time0=Dates.now()
-@inbounds @fastmath mcmc_func_minimize(data, Fname, lg_m_low=lg_m_low, lg_m_high=lg_m_high, lg_f_high=lg_f_high, lg_f_low=lg_f_low, tau_max=tau_max, alpha_max_cut=alpha_max_cut, alpha_min_cut=alpha_min_cut, use_input_table=use_input_table, solve_322=solve_322, numwalkers=numwalkers, thinning=thinning, numsamples_perwalker=numsamples_perwalker, burnin=burnin, max_mass_matrix=max_mass_matrix, input_data=input_data, solve_n4=solve_n4, stop_on_a=stop_on_a)
+@inbounds @fastmath mcmc_func_minimize(data, Fname, lg_m_low=lg_m_low, lg_m_high=lg_m_high, lg_f_high=lg_f_high, lg_f_low=lg_f_low, tau_max=tau_max, alpha_max_cut=alpha_max_cut, alpha_min_cut=alpha_min_cut, use_input_table=use_input_table, solve_322=solve_322, numwalkers=numwalkers, thinning=thinning, numsamples_perwalker=numsamples_perwalker, burnin=burnin, max_mass_matrix=max_mass_matrix, input_data=input_data, solve_n4=solve_n4, stop_on_a=stop_on_a, eq_threshold=eq_threshold)
 
 time1=Dates.now()
 print("\n\n Run time: ", time1-time0, "\n")
