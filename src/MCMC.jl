@@ -25,7 +25,11 @@ function parse_commandline()
             
         "--eq_threshold"
             arg_type = Float64
-            default = 1e-6
+            default = 1e-100
+        
+        "--abstol"
+            arg_type = Float64
+            default = 1e-30
             
         "--Ftag"
             arg_type = String
@@ -87,7 +91,7 @@ burnin = parsed_args["burnin"];
 solve_n4 = parsed_args["solve_n4"]
 stop_on_a = parsed_args["stop_on_a"]
 eq_threshold = parsed_args["eq_threshold"]
-
+abstol = parsed_args["abstol"]
 
 print("Deets...\n\n")
 print("Alpha cuts \t", alpha_min_cut, "\t", alpha_max_cut, "\n")
@@ -197,7 +201,7 @@ end
 solve_322 = true
 
 time0=Dates.now()
-@inbounds @fastmath mcmc_func_minimize(data, Fname, lg_m_low=lg_m_low, lg_m_high=lg_m_high, lg_f_high=lg_f_high, lg_f_low=lg_f_low, tau_max=tau_max, alpha_max_cut=alpha_max_cut, alpha_min_cut=alpha_min_cut, use_input_table=use_input_table, solve_322=solve_322, numwalkers=numwalkers, thinning=thinning, numsamples_perwalker=numsamples_perwalker, burnin=burnin, max_mass_matrix=max_mass_matrix, input_data=input_data, solve_n4=solve_n4, stop_on_a=stop_on_a, eq_threshold=eq_threshold)
+@inbounds @fastmath mcmc_func_minimize(data, Fname, lg_m_low=lg_m_low, lg_m_high=lg_m_high, lg_f_high=lg_f_high, lg_f_low=lg_f_low, tau_max=tau_max, alpha_max_cut=alpha_max_cut, alpha_min_cut=alpha_min_cut, use_input_table=use_input_table, solve_322=solve_322, numwalkers=numwalkers, thinning=thinning, numsamples_perwalker=numsamples_perwalker, burnin=burnin, max_mass_matrix=max_mass_matrix, input_data=input_data, solve_n4=solve_n4, stop_on_a=stop_on_a, eq_threshold=eq_threshold, abstol=abstol)
 
 time1=Dates.now()
 print("\n\n Run time: ", time1-time0, "\n")
