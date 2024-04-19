@@ -879,7 +879,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
         # sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
     else
         
-        abstol = 1e-30
+        # abstol = 1e-30
         # abstol = 1e-15
         
         cbset = CallbackSet(cback_equil, cbackdt, cbackspin)
@@ -890,8 +890,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
         # sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
         if input_data != "Doddy"
             prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-3, abstol=abstol, maxiters=5e5)
-            # sol = solve(prob, Rosenbrock23(), dt=dt_guess, saveat=saveat, callback=cbset)
-            sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
+            sol = solve(prob, Rosenbrock23(), dt=dt_guess, saveat=saveat, callback=cbset)
+            # sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
         else
             # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=abstol, maxiters=5e7)
             prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-7, abstol=abstol, maxiters=5e5)
