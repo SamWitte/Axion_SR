@@ -104,8 +104,9 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
         itp_211 = LinearInterpolation(alist, log10.(pts211), extrapolation_bc=Line())
         SR211 = 10 .^itp_211(aBH)
         
-        # SR211 = 4.2e-2 .* alph.^8 .* (aBH - 2 * alph .* (1 .+ sqrt.(1 - aBH.^2))) .* mu
-        # SR211 = sr_rates(2, 1, 1, mu, aBH, M_BH, impose_low_cut=0.001, solve_322=true)
+        SR211_t1 = 4.2e-2 .* alph.^8 .* (aBH - 2 * alph .* (1 .+ sqrt.(1 - aBH.^2))) .* mu
+        SR211_t2 = sr_rates(2, 1, 1, mu, aBH, M_BH, impose_low_cut=0.001, solve_322=true)
+        # print(SR211_t1, "\t", SR211_t2, "\t", SR211, "\n\n")
     else
         alist, pts211 = compute_gridded(mu, M_BH, aBH, 2, 1, 1; Ntot=Ntot_slv, iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp)
         itp_211 = LinearInterpolation(alist, log10.(pts211), extrapolation_bc=Line())
@@ -863,12 +864,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
     
         cbset = CallbackSet(cbackdt, cbackspin, cback_term)
         
-#        if (GNew .* M_BH .* mu ) < 0.45
-#            abstol = 1e-30
-#        else
-#            # abstol = 1e-30
-#            abstol = 1e-20
-#        end
+
         prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-3, abstol=abstol) #
         # sol = solve(prob, AutoTsit5(Rodas4()), dt=dt_guess, saveat=saveat, callback=cbset)
         

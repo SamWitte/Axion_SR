@@ -63,24 +63,28 @@ end
 
 
 
-function find_im_part(mu, M, a, n, l, m; debug=false, Ntot=200, iter=50, xtol=1e-7)
+function find_im_part(mu, M, a, n, l, m; debug=false, Ntot=200, iter=50, xtol=1e-7, ftol=1e-20)
     
     OmegaH = a ./ (2 .* (GNew .* M) .* (1 .+ sqrt.(1 .- a.^2)))
     
     if (ergL(n, l, m, mu, M, a) < m .* OmegaH)
         alph = mu * GNew * M
-        if alph < 0.05
+        if (alph < 0.05)&&(m==1)
             alph_ev = 0.05
-            rescale = (alph ./ 0.05).^(4 .* l + 5)
+        elseif (alph < 0.15)&&(m==2)
+            alph_ev = 0.15
+        elseif (alph < 0.35)&&(m==3)
+            alph_ev = 0.35
         else
             alph_ev = alph
-            rescale = 1.0
         end
+        rescale = (alph ./ alph_ev).^(4 .* l + 5)
         
         b = sqrt.(1 - a.^2)
         
         SR211_g = sr_rates(n, l, m, alph_ev ./ (GNew * M), M, a)
         w0 = (ergL(n, l, m, alph_ev ./ (GNew * M), M, a) .+ im * SR211_g) .* GNew * M
+        # w0 = (alph_ev ./ (GNew * M) .* (1.0 .- alph.^2 ./ (2 .* n.^2)) .+ im * SR211_g) .* GNew * M
         
         function wrapper!(F, x)
             wR = x[1]  # real
@@ -125,7 +129,7 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot=200, iter=50, xtol=1e
         end
         
         
-        sol = nlsolve(wrapper!, [real(w0), imag(w0)], autodiff = :forward, xtol=xtol, ftol=1e-20, iterations=iter)
+        sol = nlsolve(wrapper!, [real(w0), imag(w0)], autodiff = :forward, xtol=xtol, ftol=ftol, iterations=iter)
 
         if debug
             print(sol, "\n\n")
@@ -149,17 +153,11 @@ function compute_gridded(mu, M, a, n, l, m; Ntot=200, iter=50, xtol=1e-7, npts=3
     alist = LinRange(0.0, a, npts);
     output = zeros(npts)
     alph = GNew * M * mu
-    if alph < 0.1
-        mu_run = 0.1 / (GNew * M)
-        rescale = (alph ./ 0.1).^(4 * l + 5)
-    else
-        mu_run = mu
-        rescale = 1.0
-    end
+
     for i in 1:length(alist)
         output[i] = find_im_part(mu, M, alist[i], n, l, m, Ntot=Ntot, iter=iter, xtol=xtol) ./ (GNew * M)
     end
     condit = output .<= 0.0
-    output[condit] .= 1e-100 .* rescale
+    output[condit] .= 1e-100
     return alist, output
 end
