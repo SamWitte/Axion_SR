@@ -514,6 +514,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
             return true
         elseif (integrator.dt .<= 1e-10)
             return true
+        elseif (integrator.dt ./ integrator.t .<= 1e-8)
+            return true
         else
             return false
         end
@@ -587,9 +589,12 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
             tcheck = minimum([t1 t2 t5 t6 t7])
         end
 
-        
+        # print(integrator.dt, "\t", integrator.t, "\n")
         if (integrator.dt ./ tcheck .>= 1e-1)
             set_proposed_dt!(integrator, integrator.dt .* 0.9)
+        elseif (integrator.dt ./ integrator.t .<= 1e-7)&&(wait % 1000 == 0)
+            # print("Change abs tol... \n")
+            integrator.opts.abstol =  integrator.opts.abstol ./ 10
         elseif (integrator.dt .<= 1e-10)
             print("time step too small!! \n")
             terminate!(integrator)
@@ -869,7 +874,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
         # sol = solve(prob, AutoTsit5(Rodas4()), dt=dt_guess, saveat=saveat, callback=cbset)
         
 
-        sol = solve(prob, Rosenbrock23(), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e5)
+        sol = solve(prob, Rosenbrock23(), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e6)
         # sol = solve(prob, KenCarp5(), dt=dt_guess, saveat=saveat, callback=cbset)
         # sol = solve(prob, Rodas4(), dt=dt_guess, saveat=saveat, callback=cbset)
         # sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
@@ -890,7 +895,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
             # sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
         else
             # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=abstol, maxiters=5e7)
-            prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-7, abstol=abstol, maxiters=5e5)
+            prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-7, abstol=abstol, maxiters=5e6)
             # sol = solve(prob, Rodas4(), dt=dt_guess, saveat=saveat, callback=cbset)
             sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
         end
