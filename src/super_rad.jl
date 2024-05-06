@@ -310,7 +310,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
             du[1] += 4.0e-9 .* alph.^8 .* (M_pl ./ fa).^4 .* u[2] .* u[1] .* u[4] # 422 x 322 -> 211 x inf
             du[4] += -4.0e-9 .* alph.^8 .* (M_pl ./ fa).^4 .* u[2] .* u[1] .* u[4]
             du[2] += -4.0e-9 .* alph.^8 .* (M_pl ./ fa).^4 .* u[2] .* u[1] .* u[4]
-            print(t, "\t", u[1], "\t", u[2], "\t",  u[4], "\t", SR422 .* u[4] ./ mu, "\t", -4.0e-9 .* alph.^8 .* (M_pl ./ fa).^4 .* u[2] .* u[1] .* u[4], "\t", 1.5e-7 .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* u[1].^2 .* u[4], "\n")
+            # print(t, "\t", u[1], "\t", u[2], "\t",  u[4], "\t", SR422 .* u[4] ./ mu, "\t", -4.0e-9 .* alph.^8 .* (M_pl ./ fa).^4 .* u[2] .* u[1] .* u[4], "\t", 1.5e-7 .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* u[1].^2 .* u[4], "\n")
    
             ### 433
             du[5] = SR433 .* u[5] ./ mu
