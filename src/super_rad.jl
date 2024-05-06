@@ -286,6 +286,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
             du[3] += -3.8e-9 .* alph.^8 .* (M_pl ./ fa).^4 .* u[1] .* u[2] .* u[3] # 322x411^{211 x Inf}
             du[2] += -3.8e-9 .* alph.^8 .* (M_pl ./ fa).^4 .* u[1] .* u[2] .* u[3]
             du[1] += 3.8e-9 .* alph.^8 .* (M_pl ./ fa).^4 .* u[1] .* u[2] .* u[3]
+            # print(du[3], "\t", SR411 .* u[3] ./ mu, "\t", -3.8e-9 .* alph.^8 .* (M_pl ./ fa).^4 .* u[1] .* u[2] .* u[3], "\n")
             
             ### 422
             
@@ -305,6 +306,11 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
             du[4] += -1.1e-9 .* alph.^7 .* (M_pl ./ fa).^4 .* rP .* u[1] .* u[4] .* u[5]  # 211 x 422 -> 433 x 200 / BH
             du[1] += -1.1e-9 .* alph.^7 .* (M_pl ./ fa).^4 .* rP .* u[1] .* u[4] .* u[5]  # 211 x 422 -> 433 x 200 / BH
             
+            
+            du[1] += 4.0e-9 .* alph.^8 .* (M_pl ./ fa).^4 .* u[2] .* u[1] .* u[4] # 422 x 322 -> 211 x inf
+            du[4] += -4.0e-9 .* alph.^8 .* (M_pl ./ fa).^4 .* u[2] .* u[1] .* u[4]
+            du[2] += -4.0e-9 .* alph.^8 .* (M_pl ./ fa).^4 .* u[2] .* u[1] .* u[4]
+            print(t, "\t", u[1], "\t", u[2], "\t",  u[4], "\t", SR422 .* u[4] ./ mu, "\t", -4.0e-9 .* alph.^8 .* (M_pl ./ fa).^4 .* u[2] .* u[1] .* u[4], "\t", 1.5e-7 .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* u[1].^2 .* u[4], "\n")
    
             ### 433
             du[5] = SR433 .* u[5] ./ mu
@@ -355,7 +361,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
             end
             
         else
-            du[spinI] = - SR211 .* u[1] ./ mu .- 2 .* SR322 .* u[2] ./ mu  .- SR411 .* u[3] ./ mu .- SR422 .* u[4] ./ mu .- SR433 .* u[5] ./ mu
+            du[spinI] = - SR211 .* u[1] ./ mu .- 2 .* SR322 .* u[2] ./ mu  .- SR411 .* u[3] ./ mu .- 2 * SR422 .* u[4] ./ mu .- 3 * SR433 .* u[5] ./ mu
             # print(SR211, "\t", SR322, "\t", SR411, "\t", SR422, "\t", SR433, "\n" )
             du[massI] = - SR211 .* u[1] ./ mu .-  SR322 .* u[2] ./ mu  .- SR411 .* u[3] ./ mu .- SR422 .* u[4] ./ mu .- SR433 .* u[5] ./ mu
             du[massI] += k322BH .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* u[1].^2 .* u[2]
@@ -592,7 +598,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
         # print(integrator.dt, "\t", integrator.t, "\n")
         if (integrator.dt ./ tcheck .>= 1e-1)
             set_proposed_dt!(integrator, integrator.dt .* 0.9)
-        elseif (integrator.dt ./ integrator.t .<= 1e-7)&&(wait % 1000 == 0)
+        elseif (integrator.dt ./ integrator.t .<= 1e-7)&&(wait % 10000 == 0)
             # print("Change abs tol... \n")
             integrator.opts.abstol =  integrator.opts.abstol ./ 10
         elseif (integrator.dt .<= 1e-10)
@@ -874,10 +880,10 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
         # sol = solve(prob, AutoTsit5(Rodas4()), dt=dt_guess, saveat=saveat, callback=cbset)
         
 
-        sol = solve(prob, Rosenbrock23(), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e6)
+        # sol = solve(prob, Rosenbrock23(), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e6)
         # sol = solve(prob, KenCarp5(), dt=dt_guess, saveat=saveat, callback=cbset)
         # sol = solve(prob, Rodas4(), dt=dt_guess, saveat=saveat, callback=cbset)
-        # sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
+        sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
     else
         
         # abstol = 1e-30
