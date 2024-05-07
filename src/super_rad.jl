@@ -880,10 +880,10 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
         # sol = solve(prob, AutoTsit5(Rodas4()), dt=dt_guess, saveat=saveat, callback=cbset)
         
 
-        # sol = solve(prob, Rosenbrock23(), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e6)
+        sol = solve(prob, Rosenbrock23(), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e6)
         # sol = solve(prob, KenCarp5(), dt=dt_guess, saveat=saveat, callback=cbset)
         # sol = solve(prob, Rodas4(), dt=dt_guess, saveat=saveat, callback=cbset)
-        sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
+        # sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
     else
         
         # abstol = 1e-30
