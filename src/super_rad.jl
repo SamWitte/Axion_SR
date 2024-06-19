@@ -32,9 +32,9 @@ function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_c
         end
     end
     
-    final_spin = solve_system(massB, f_a, aBH, M_BH, tau_max, debug=debug, solve_322=solve_322, impose_low_cut=impose_low_cut, input_data=input_data, solve_n4=solve_n4, stop_on_a=stop_on_a, eq_threshold=eq_threshold, abstol=abstol)
+    final_spin, final_BH = solve_system(massB, f_a, aBH, M_BH, tau_max, debug=debug, solve_322=solve_322, impose_low_cut=impose_low_cut, input_data=input_data, solve_n4=solve_n4, stop_on_a=stop_on_a, eq_threshold=eq_threshold, abstol=abstol)
     # print("Spin diff.. \t ", aBH, "\t", final_spin, "\t", alph, "\n")
-    return final_spin
+    return final_spin, final_BH
     
 end
 
@@ -55,7 +55,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
     end
     wait = 0
 
-
+    alph = GNew .* M_BH .* mu
+    
     u1_eq = false
     u1_fix = nothing
     u2_eq = false
@@ -68,10 +69,10 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
     
     alph = GNew .* M_BH .* mu
     if input_data != "Doddy"
-        e2_maxBN = 1024 * pi * (fa / M_pl).^2 ./ (9 * (GNew .* M_BH .* mu ).^3)
+        e2_maxBN = 1024 * pi * (fa / M_pl).^2 ./ (9 * alph.^3)
         # print("Max E211 \t", e2_maxBN, "\n")
     else
-        e2_maxBN = 1024 * pi * (fa / M_pl).^2 ./ (9 * (GNew .* M_BH .* mu ).^3)
+        e2_maxBN = 1024 * pi * (fa / M_pl).^2 ./ (9 * alph.^3)
         # e2_maxBN = (5 .* 1e78 .* (2.0 .^4 ./ alph.^3) .* (M_BH ./ 10.0).^2 .* (fa ./ M_pl).^2) .* e_init
         # e2_maxBN = 1e100
         # print("Max E211 \t", e2_maxBN, "\n")
@@ -94,40 +95,63 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
     
     
     
-    N_pts_interp = 50
-    xtol_slv = 1e-30
-    Ntot_slv = 2000
+    N_pts_interp = 5
+    xtol_slv = 1e-15
     iter_slv = 50
     
     if input_data == "Masha"
-        alist, pts211 = compute_gridded(mu, M_BH, aBH, 2, 1, 1; Ntot=Ntot_slv, iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp)
+        n = 2
+        l = 1
+        m = 1
+        amin_guess = 8 * m * n.^2 .* alph .* (2 .* n.^2 .+ alph.^2) ./ (16 .* n.^4 .* alph.^2 .+ m.^2 .* (2 .* n.^2 .+ alph.^2).^2)
+        alist, pts211 = compute_gridded(mu, M_BH, aBH, n, l, m; iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp, amin=(amin_guess .* 0.95))
         itp_211 = LinearInterpolation(alist, log10.(pts211), extrapolation_bc=Line())
         SR211 = 10 .^itp_211(aBH)
         
-        SR211_t1 = 4.2e-2 .* alph.^8 .* (aBH - 2 * alph .* (1 .+ sqrt.(1 - aBH.^2))) .* mu
-        SR211_t2 = sr_rates(2, 1, 1, mu, aBH, M_BH, impose_low_cut=0.001, solve_322=true)
+        # SR211_t1 = 4.2e-2 .* alph.^8 .* (aBH - 2 * alph .* (1 .+ sqrt.(1 - aBH.^2))) .* mu
+        # SR211_t2 = sr_rates(2, 1, 1, mu, aBH, M_BH, impose_low_cut=0.001, solve_322=true)
         # print(SR211_t1, "\t", SR211_t2, "\t", SR211, "\n\n")
     else
-        alist, pts211 = compute_gridded(mu, M_BH, aBH, 2, 1, 1; Ntot=Ntot_slv, iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp)
+        n = 2
+        l = 1
+        m = 1
+        amin_guess = 8 * m * n.^2 .* alph .* (2 .* n.^2 .+ alph.^2) ./ (16 .* n.^4 .* alph.^2 .+ m.^2 .* (2 .* n.^2 .+ alph.^2).^2)
+        alist, pts211 = compute_gridded(mu, M_BH, aBH, n, l, m; iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp, amin=(amin_guess .* 0.95))
+        
         itp_211 = LinearInterpolation(alist, log10.(pts211), extrapolation_bc=Line())
         SR211 = 10 .^itp_211(aBH)
     end
     
-    alist, pts322 = compute_gridded(mu, M_BH, aBH, 3, 2, 2; Ntot=Ntot_slv, iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp)
+    n = 3
+    l = 2
+    m = 2
+    amin_guess = 8 * m * n.^2 .* alph .* (2 .* n.^2 .+ alph.^2) ./ (16 .* n.^4 .* alph.^2 .+ m.^2 .* (2 .* n.^2 .+ alph.^2).^2)
+    alist, pts322 = compute_gridded(mu, M_BH, aBH, n, l, m; iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp, amin=(amin_guess .* 0.95))
     itp_322 = LinearInterpolation(alist, log10.(pts322), extrapolation_bc=Line())
     SR322 = 10 .^itp_322(aBH)
-    # SR322 = sr_rates(3, 2, 2, mu, aBH, M_BH, impose_low_cut=0.001, solve_322=true)
     
     if solve_n4
-        alist, pts411 = compute_gridded(mu, M_BH, aBH, 4, 1, 1; Ntot=Ntot_slv, iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp)
+        n = 4
+        l = 1
+        m = 1
+        amin_guess = 8 * m * n.^2 .* alph .* (2 .* n.^2 .+ alph.^2) ./ (16 .* n.^4 .* alph.^2 .+ m.^2 .* (2 .* n.^2 .+ alph.^2).^2)
+        alist, pts411 = compute_gridded(mu, M_BH, aBH, n, l, m; iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp, amin=(amin_guess .* 0.95))
         itp_411 = LinearInterpolation(alist, log10.(pts411), extrapolation_bc=Line())
         SR411 = 10 .^itp_411(aBH)
         
-        alist, pts422 = compute_gridded(mu, M_BH, aBH, 4, 2, 2; Ntot=Ntot_slv, iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp)
+        n = 4
+        l = 2
+        m = 2
+        amin_guess = 8 * m * n.^2 .* alph .* (2 .* n.^2 .+ alph.^2) ./ (16 .* n.^4 .* alph.^2 .+ m.^2 .* (2 .* n.^2 .+ alph.^2).^2)
+        alist, pts422 = compute_gridded(mu, M_BH, aBH, n, l, m; iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp, amin=(amin_guess .* 0.95))
         itp_422 = LinearInterpolation(alist, log10.(pts422), extrapolation_bc=Line())
         SR422 = 10 .^itp_422(aBH)
         
-        alist, pts433 = compute_gridded(mu, M_BH, aBH, 4, 3, 3; Ntot=Ntot_slv, iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp)
+        n = 4
+        l = 3
+        m = 3
+        amin_guess = 8 * m * n.^2 .* alph .* (2 .* n.^2 .+ alph.^2) ./ (16 .* n.^4 .* alph.^2 .+ m.^2 .* (2 .* n.^2 .+ alph.^2).^2)
+        alist, pts433 = compute_gridded(mu, M_BH, aBH, n, l, m; iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp, amin=(amin_guess .* 0.95))
         itp_433 = LinearInterpolation(alist, log10.(pts433), extrapolation_bc=Line())
         SR433 = 10 .^itp_433(aBH)
         # print("time check 433 \t ", (SR433 ./ hbar .* 3.15e7)^(-1), "\n")
@@ -152,7 +176,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
         alph = GNew .* u[massI] .* mu #
         rP = nothing
         if u[spinI] .> maxSpin
-            rP = 1.0 .+ sqrt.(1 -maxSpin .^2)
+            rP = 1.0 .+ sqrt.(1 - maxSpin .^2)
             u[spinI] = maxSpin
         elseif u[spinI] .< 0.0
             rP = 2.0
@@ -186,13 +210,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
         if (OmegaH .< ergL(2, 1, 1, mu, u[massI], u[spinI]))
             SR211 = 0.0
         else
-            if input_data == "Masha"
-                SR211 = 10 .^itp_211(u[spinI])
-                # SR211 = 4.2e-2 .* alph.^8 .* (aBH - 2 * alph .* (1 .+ sqrt.(1 - aBH.^2))) .* mu
-                # SR211 = sr_rates(2, 1, 1, mu, u[massI], u[spinI], impose_low_cut=0.001, solve_322=true)
-            else
-                SR211 = 10 .^itp_211(u[spinI])
-            end
+            SR211 = 10 .^itp_211(u[spinI])
         end
         
         if (2 .* OmegaH .< ergL(3, 2, 2, mu, u[massI], u[spinI]))
@@ -310,7 +328,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
             du[1] += 4.0e-9 .* alph.^8 .* (M_pl ./ fa).^4 .* u[2] .* u[1] .* u[4] # 422 x 322 -> 211 x inf
             du[4] += -4.0e-9 .* alph.^8 .* (M_pl ./ fa).^4 .* u[2] .* u[1] .* u[4]
             du[2] += -4.0e-9 .* alph.^8 .* (M_pl ./ fa).^4 .* u[2] .* u[1] .* u[4]
-            # print(t, "\t", u[1], "\t", u[2], "\t",  u[4], "\t", SR422 .* u[4] ./ mu, "\t", -4.0e-9 .* alph.^8 .* (M_pl ./ fa).^4 .* u[2] .* u[1] .* u[4], "\t", 1.5e-7 .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* u[1].^2 .* u[4], "\n")
+            # print(t, "\t", u[1], "\t", u[2], "\t",  u[4], "\t", u[2] ./ u[1], "\t", (u[2] ./ u[1]) .* 4.0e-9 .* alph.^8 .* (M_pl ./ fa).^4 ./ 1.5e-7 .* alph.^11 .* (M_pl ./ fa).^4 .* rP, "\n")
    
             ### 433
             du[5] = SR433 .* u[5] ./ mu
@@ -952,6 +970,6 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
     if isnan(spinBH[end])
         spinBH = spinBH[.!isnan.(spinBH)]
     end
-    return spinBH[end]
+    return spinBH[end], MassB[end]
  
 end

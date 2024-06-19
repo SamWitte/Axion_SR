@@ -56,9 +56,9 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
             MassBH = nothing
             d_mass = nothing
             if p_or_neg == 0
-                d_mass = Normal(MassBH_c[i], MassBH_errU[i])
+                d_mass = Normal(MassBH_c[i], MassBH_errU[i] .* 2)
             else
-                d_mass = Normal(MassBH_c[i], MassBH_errD[i])
+                d_mass = Normal(MassBH_c[i], MassBH_errD[i] .* 2)
             end
             
             # print("looking for mass \n")
@@ -103,7 +103,7 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
             end
                 
             alph = GNew .* MassBH .* 10 .^log_m #
-            final_spin = super_rad_check(MassBH, SpinBH, 10 .^log_m, 10 .^log_f, tau_max=maxtime, alpha_max_cut=alpha_max_cut, debug=false, solve_322=solve_322, impose_low_cut=impose_low_cut, input_data=input_data, solve_n4=solve_n4, stop_on_a=stop_on_a, eq_threshold=eq_threshold, abstol=abstol)
+            final_spin, final_mass = super_rad_check(MassBH, SpinBH, 10 .^log_m, 10 .^log_f, tau_max=maxtime, alpha_max_cut=alpha_max_cut, debug=false, solve_322=solve_322, impose_low_cut=impose_low_cut, input_data=input_data, solve_n4=solve_n4, stop_on_a=stop_on_a, eq_threshold=eq_threshold, abstol=abstol)
 
             ### Likelihood part
             
@@ -113,7 +113,7 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
             
             allwd_err = 0.01
             if (input_data == "Masha")
-                a_max = super_rad_check(MassBH, SpinBH, 10 .^log_m, 1e19, tau_max=maxtime, alpha_max_cut=alpha_max_cut, debug=false, solve_322=false, impose_low_cut=impose_low_cut, input_data="Doddy", solve_n4=false, eq_threshold=eq_threshold, abstol=abstol)
+                a_max, MBH_max = super_rad_check(MassBH, SpinBH, 10 .^log_m, 1e19, tau_max=maxtime, alpha_max_cut=alpha_max_cut, debug=false, solve_322=false, impose_low_cut=impose_low_cut, input_data="Doddy", solve_n4=false, eq_threshold=eq_threshold, abstol=abstol)
                 
                 frac_SD = (SpinBH_c[i] - a_max) * 0.2
                 if ((final_spin .- a_max) .> frac_SD)
@@ -125,6 +125,12 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
                 sum_loglike += -0.5 * (SpinBH_c[i] - final_spin).^2 / SpinBH_errU[i].^2
             else
                 sum_loglike += -0.5 * (SpinBH_c[i] - final_spin).^2 / SpinBH_errD[i].^2
+            end
+            
+            if final_mass > MassBH_c[i]
+                sum_loglike += -0.5 * (MassBH_c[i] - final_mass).^2 / MassBH_errU[i].^2
+            else
+                sum_loglike += -0.5 * (MassBH_c[i] - final_mass).^2 / MassBH_errD[i].^2
             end
             
         end
@@ -169,9 +175,9 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
             # alph = GNew .* MassBH .* 10 .^log_m #
             # day_to_inVeV = 24.0 * 60 * 60 / 6.58e-16
 
-            final_spin = super_rad_check(MassBH, spinBH_sample, 10 .^log_m, 10 .^log_f, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=false, solve_322=solve_322, impose_low_cut=alpha_min_cut, input_data=input_data, solve_n4=solve_n4, abstol=abstol)
-            loglike = tde_like(MassBH, final_spin, max_mass_matrix; plot=false)
-#            print(MassBH, "\t", 10 .^log_m, "\t", 10 .^log_f, "\t", spinBH_sample, "\t", final_spin, "\t", loglike, "\n")
+            final_spin, final_mass = super_rad_check(MassBH, spinBH_sample, 10 .^log_m, 10 .^log_f, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=false, solve_322=solve_322, impose_low_cut=alpha_min_cut, input_data=input_data, solve_n4=solve_n4, abstol=abstol)
+            loglike = tde_like(final_mass, final_spin, max_mass_matrix; plot=false)
+
             sum_loglike += loglike
             
         end

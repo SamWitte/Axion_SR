@@ -14,15 +14,16 @@ function run()
         
     
     f_guess = 1.0e14
-    f_max = 1e16
-    f_min = 1e10
+    f_max = 1e18
+    f_min = 1e12
 
 
-    m_a = 2e-13
+    m_a = 2.7e-13
     SpinBH = 0.998
     SpinLim = 0.996
     MassBH = 22.2
     tau_max = 5e6
+    athresh = 0.001
 
     alpha_max_cut = 10.0
     impose_low_cut = 1e-3
@@ -32,13 +33,14 @@ function run()
     # n_times = 10000
     input_data="Me"
     eq_threshold=1e-100
-    stop_on_a = 0.9
+    stop_on_a = 0.7
     abstol=1e-25
     solve_n4 = true
 
     alph = GNew .* MassBH .* m_a
     maxa = 4 .* alph ./ (1 .+ 4 .* alph.^2)
     debug=false
+    print("Mass \t ", m_a, "\n")
 
     foundLim = false
     while !foundLim
@@ -48,13 +50,13 @@ function run()
         print(f_guess, "\t", spin, "\n")
         if spin .< SpinLim
             f_max = f_guess
-            f_guess = 0.5 * (f_guess + f_min)
+            f_guess = 10 .^ (0.5 * (log10.(f_guess) + log10.(f_min)))
         else
             f_min = f_guess
-            f_guess = 0.5 * (f_guess + f_max)
+            f_guess = 10 .^ (0.5 * (log10.(f_guess) + log10.(f_max)))
         end
         
-        if abs.(SpinLim - spin) .< 0.001
+        if abs.(SpinLim - spin) .< athresh
             foundLim = true
         end
         
