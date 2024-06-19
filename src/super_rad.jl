@@ -6,6 +6,7 @@ using DelimitedFiles
 using Interpolations
 include("Constants.jl")
 include("solve_sr_rates.jl")
+include("load_rates.jl")
 
 
 function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_cut=10.0, debug=false, solve_322=true, solve_n4=false, impose_low_cut=0.01, input_data="Masha", stop_on_a=0, eq_threshold=1e-100, abstol=1e-30)
@@ -46,7 +47,7 @@ function emax_211(MBH, mu, aBH)
     return (emax_N ./ emax_D)
 end
     
-function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve_322=true, impose_low_cut=0.01, return_all_info=false, input_data="Masha", solve_n4=false, eq_threshold=1e-4, stop_on_a=0, abstol=1e-30)
+function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve_322=true, impose_low_cut=0.01, return_all_info=false, input_data="Masha", solve_n4=false, eq_threshold=1e-4, stop_on_a=0, abstol=1e-30, non_rel=true)
     e_init = 1.0 ./ (GNew .* M_BH.^2 .* M_to_eV) # unitless
     if !solve_n4
         y0 = [e_init, e_init, aBH, M_BH]
@@ -157,6 +158,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
         # print("time check 433 \t ", (SR433 ./ hbar .* 3.15e7)^(-1), "\n")
     end
     
+    
+    rates = load_rate_coeffs(mu, M_BH, aBH, fa; non_rel=true, input_data=input_data, solve_n4=solve_n4)
     
 
     function RHS_ax!(du, u, Mvars, t)
@@ -269,6 +272,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
         if isnothing(u1_fix)
             du[1] = SR211 .* u[1] ./ mu
             du[1] += - 2 .* k322BH .* alph.^11 .* (M_pl ./ fa).^4 .* rP .* u[1].^2 .* u[2]
+            
             du[1] += k2I_333 .* alph.^8 .* (M_pl ./ fa).^4 .* u[2].^2 .* u[1]
             du[1] += -2 .* kGW_22 .* alph.^14 .* u[1].^2
             du[1] += -3 .* kI_222 .* alph.^21 .* (M_pl ./ fa).^4 .* u[1].^3

@@ -9,12 +9,11 @@ fout = "_"
 sve = false
 
 
-f_a = 1e14
-m_a = 2.0e-13 # 2e-12, 8e-13
-# MassBH = 12.4
-SpinBH = 0.84
-MassBH = 15.7
-tau_max = 3e6
+f_a = 1e18
+m_a = 1.0e-12 # 2e-12, 8e-13
+SpinBH = 0.95
+MassBH = 15.0
+tau_max = 4e6
 
 alpha_max_cut = 10.0
 impose_low_cut = 1e-3
@@ -22,7 +21,7 @@ return_all_info = true
 solve_322 = true
 n_times = 1000000
 # n_times = 10000
-input_data="Masha"
+input_data="Me"
 eq_threshold=1e-100
 stop_on_a = 0.0
 abstol=1e-50

@@ -536,7 +536,7 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
     end
 end
 
-function radial_inf(erg, mu, M, a, l, m; rpts=1000, rmax_val=1e4, debug=false, iter=500, xtol=1e-30, ftol=1e-30, sve_for_test=false, fnm="test_store/test_radial", debug=false)
+function radial_inf(erg, mu, M, a, l, m; rpts=1000, rmax_val=1e4, debug=false, iter=500, xtol=1e-30, ftol=1e-30, sve_for_test=false, fnm="test_store/test_radial")
     # r, erg, unitless
     
     
