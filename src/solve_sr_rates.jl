@@ -17,13 +17,17 @@ using SpinWeightedSpheroidalHarmonics
 include("Constants.jl")
 
 
-function ergL(n, l, m, massB, MBH, a)
+function ergL(n, l, m, massB, MBH, a; full=true)
     # Key to next level
     alph = GNew * MBH * massB
-    if l > 0
-        return massB .* (1.0 .- alph.^2 ./ (2 .* n.^2) - alph.^4 ./ (8 * n.^4) + alph.^4 ./ n^4 .* (2 * l - 3 * n + 1) ./ (l + 0.5) + 2 * a * m * alph.^5 ./ n^3 ./ (l * (l + 0.5) * (l+1)))
+    if full
+        if l > 0
+            return massB .* (1.0 .- alph.^2 ./ (2 .* n.^2) - alph.^4 ./ (8 * n.^4) + alph.^4 ./ n^4 .* (2 * l - 3 * n + 1) ./ (l + 0.5) + 2 * a * m * alph.^5 ./ n^3 ./ (l * (l + 0.5) * (l+1)))
+        else
+            return massB .* (1.0 .- alph.^2 ./ (2 .* n.^2) - alph.^4 ./ (8 * n.^4) + alph.^4 ./ n^4 .* (2 * l - 3 * n + 1) ./ (l + 0.5))
+        end
     else
-        return massB .* (1.0 .- alph.^2 ./ (2 .* n.^2) - alph.^4 ./ (8 * n.^4) + alph.^4 ./ n^4 .* (2 * l - 3 * n + 1) ./ (l + 0.5))
+        return massB .* (1.0 .- alph.^2 ./ (2 .* n.^2) - alph.^4 ./ (8 * n.^4))
     end
 end
 
@@ -73,7 +77,7 @@ function sr_rates(n, l, m, massB, MBH, aBH; impose_low_cut=0.001, solve_322=true
 end
 
 function radial_bound_NR(n, l, m, mu, M, r)
-    # r assumed to be unitless
+    # r in units r -> r / (GM)
     alph = GNew * M * mu
     a0 = 1 / (mu * alph) / (GNew * M)
     
@@ -148,7 +152,7 @@ function freq_shifts(mu, M, a, n1, l1, m1, n2, l2, m2;  rpts=500, rmaxT=100, Nan
 
 end
 
-function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; nmax=8, kpts=10, rpts=2000, rmaxT=100, inf_nr=false, Nang=100000, Npts_Bnd=1000, debug=false, include_cont=true)
+function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=10, rpts=2000, rmaxT=100, inf_nr=true, Nang=100000, Npts_Bnd=1000, debug=false, include_cont=true, Ntot_safe=5000, sve_for_test=false, bnd_thresh=1e-3)
     
     rp = 1 + sqrt.(1 - a.^2)
     alph = mu * GNew * M
@@ -167,23 +171,25 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; nmax=8, kpts=1
     rmax = rmaxT ./ qmax
     rlist = 10 .^(range(log10.(rp), log10.(rmax), rpts))
     
-    rl, r1, erg_1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true)
+    rl, r1, erg_1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true, Ntot_safe=Ntot_safe)
     itp = LinearInterpolation(log10.(rl), log10.(r1), extrapolation_bc=Line())
     rf_1 = 10 .^itp(log10.(rlist))
     # rf_1 = radial_bound_NR(n1, l1, m1, mu, M, rlist)
+    
+
     
     if (n2 == n1)&&(l2==l1)&&(m2==m1)
         rf_2 = rf_1
         erg_2 = erg_1
     else
-        rl, r2, erg_2 = solve_radial(mu, M, a, n2, l2, m2; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true)
+        rl, r2, erg_2 = solve_radial(mu, M, a, n2, l2, m2; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true, Ntot_safe=Ntot_safe)
         itp = LinearInterpolation(log10.(rl), log10.(r2), extrapolation_bc=Line())
         rf_2 = 10 .^itp(log10.(rlist))
         # rf_2 = radial_bound_NR(n2, l2, m2, mu, M, rlist)
     end
 
     
-    rl, r3, erg_3 = solve_radial(mu, M, a, n3, l3, m3; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true)
+    rl, r3, erg_3 = solve_radial(mu, M, a, n3, l3, m3; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true, Ntot_safe=Ntot_safe)
     itp = LinearInterpolation(log10.(rl), log10.(r3), extrapolation_bc=Line())
     rf_3 = 10 .^itp(log10.(rlist))
     # rf_3 = radial_bound_NR(n3, l3, m3, mu, M, rlist)
@@ -191,6 +197,7 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; nmax=8, kpts=1
 
     erg_ind = erg_1 .+ erg_2 - erg_3
     k_ind_2 = mu.^2 .- (erg_ind ./ (GNew .* M)).^2
+    
     # erg_ind = erg_1G .+ erg_2G - erg_3G
     # k_ind_2 = mu.^2 .- erg_ind.^2
     
@@ -204,8 +211,8 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; nmax=8, kpts=1
         
 
     # compute bound contribution
-    kmin = qmin / 10.0 #
-    kmax = qmax * 10.0 #
+    kmin = 0.02 .* alph^2
+    kmax = 2.0 .* alph^2
     kk_list = 10 .^LinRange(log10.(kmin), log10.(kmax),  kpts)
     # print(kmin, "\t", kmax, "\n")
     ck_list = zeros(Complex, kpts)
@@ -213,9 +220,17 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; nmax=8, kpts=1
     UnF = GNew .* M
     bound_c = 0.0
     contin_c = 0.0
-    for n in 1:nmax
+    done_nmax = false
+    n = 1
+    
+    function func_ang(x, Zf1, Zf2, Zf3, Zf4)
+        return real(Zf1.(x[1], x[2]) .* Zf2.(x[1], x[2]) .* conj(Zf3.(x[1], x[2])) .* conj(Zf4.(x[1], x[2])))
+    end
         
-        rl, r4, erg_4 = solve_radial(mu, M, a, n, 0, 0; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true, Ntot_safe=5000)
+        
+    while !done_nmax
+        
+        rl, r4, erg_4 = solve_radial(mu, M, a, n, 0, 0; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true, Ntot_safe=Ntot_safe)
         itp = LinearInterpolation(log10.(rl), log10.(r4), extrapolation_bc=Line())
         rf_4 = 10 .^itp(log10.(rlist))
         # rf_4 = radial_bound_NR(n, 0, 0, mu, M, rlist)
@@ -223,22 +238,29 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; nmax=8, kpts=1
         # erg_4G = ergL(n, 0, 0, mu, M, a)
         Z4 = spheroidals(0, 0, a, erg_4 ./ (GNew .* M))
         
-        function func_angB(x)
-            return real(Z1.(x[1], x[2]) .* Z2.(x[1], x[2]) .* conj(Z3.(x[1], x[2])) .* conj(Z4.(x[1], x[2]))) #
-        end
-
         thetaV = acos.(1.0 .- 2.0 .* rand(Nang))
         phiV = rand(Nang) .* 2*pi
         CG = 0.0
         for i in 1:Nang
-            CG += func_angB([thetaV[i], phiV[i]])
+            CG += func_ang([thetaV[i], phiV[i]], Z1, Z2, Z3, Z4)
         end
         CG *= 4*pi / Nang
        
-        
+       
+        if sve_for_test&&(n==2)
+            writedlm("test_store/check_real_1.dat", hcat(rlist, float(real(rf_1))))
+            writedlm("test_store/check_imag_1.dat", hcat(rlist, float(imag(rf_1))))
+            writedlm("test_store/check_real_2.dat", hcat(rlist, float(real(rf_2))))
+            writedlm("test_store/check_imag_2.dat", hcat(rlist, float(imag(rf_2))))
+            writedlm("test_store/check_real_3.dat", hcat(rlist, float(real(rf_3))))
+            writedlm("test_store/check_imag_3.dat", hcat(rlist, float(imag(rf_3))))
+            writedlm("test_store/check_real_4.dat", hcat(rlist, float(real(rf_4))))
+            writedlm("test_store/check_imag_4.dat", hcat(rlist, float(imag(rf_4))))
+        end
         
         r_integrd = (rf_1 ./ UnF^(3/2)) .* (rf_2 / UnF^(3/2)) .* conj(rf_3 / UnF^(3/2)) .* conj(rf_4 / UnF^(3/2)) .* (rlist * UnF).^2
         radial_int = trapz(r_integrd, rlist * UnF)
+        
         
         kdiff_sq = (erg_4.^2 - erg_ind^2) ./ (GNew .* M).^2
         
@@ -248,11 +270,19 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; nmax=8, kpts=1
         if (n1==n2)&&(l1==l2)&&(m1==m2)
             ff /= 2
         end
+        res_n = (rf_4[1] ./ UnF^(3/2)) .* ff
         if debug
-            print(n, "\t", (rf_4[1] ./ UnF^(3/2)) .* ff, "\n")
+            print(n, "\t", Float64(abs.(res_n)), "\n")
         end
-        bound_c += (rf_4[1] ./ UnF^(3/2)) .* ff
+        
+        bound_c += res_n
+        if abs.(res_n / bound_c) < bnd_thresh
+            done_nmax = true
+        end
+        n += 1
     end
+    
+
 
     if include_cont
         # compute continuous contribution
@@ -261,9 +291,7 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; nmax=8, kpts=1
             erg_New = sqrt.(k.^2 .+ mu.^2)
             Z4 = spheroidals(0, 0, a, erg_New)
             
-            function func_angC(x)
-                return real(Z1.(x[1], x[2]) .* Z2.(x[1], x[2]) .* conj(Z3.(x[1], x[2])) .* conj(Z4.(x[1], x[2]))) #
-            end
+
 
             thetaV = acos.(1.0 .- 2.0 .* rand(Nang))
             phiV = rand(Nang) .* 2*pi
@@ -271,10 +299,9 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; nmax=8, kpts=1
             CG = 0.0
             
             for i in 1:Nang
-                CG += func_angC([thetaV[i], phiV[i]])
+                CG += func_ang([thetaV[i], phiV[i]], Z1, Z2, Z3, Z4)
             end
             CG *= 4*pi / Nang
-       
         
             if inf_nr
                 out_goingR = radial_inf_NR(k .* GNew .* M, 0, mu, M, rlist)
@@ -284,9 +311,11 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; nmax=8, kpts=1
                 out_goingR = 10 .^itp(log10.(rlist))
             end
             
-            
             r_integrd = (rf_1 / UnF^(3/2)) .* (rf_2 / UnF^(3/2)) .* conj(rf_3 / UnF^(3/2)) .* conj(out_goingR ./ UnF) .* (rlist * UnF).^2
             radial_int = trapz(r_integrd, rlist * UnF)
+            
+            
+            print("radial int \t ", k, "\t", radial_int, "\n\n")
             
             
             ff = CG .* radial_int ./ (2 .* mu).^(3 / 2) ./ (k_ind_2 .+ k.^2) ./ (2 * pi)
@@ -295,20 +324,21 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; nmax=8, kpts=1
             if (n1==n2)&&(l1==l2)&&(m1==m2)
                 ff /= 2
             end
+            
             if !isnan.(out_goingR[1] .* ff ./ UnF)
                 ck_list[i] = out_goingR[1] .* ff ./ UnF
             else
                 print("getting nan... \t", i, "\t", out_goingR[1:3], "\t", ff, "\n")
             end
             if debug
-                print("cont \t", i, "\t", kk_list[i], "\t", ck_list[i], "\n")
+                print("cont \t", i, "\t", kk_list[i], "\t", Float64(abs.(ck_list[i])), "\t", ff, "\n")
             end
         end
         contin_c += trapz(ck_list, kk_list / UnF)
     end
     
     psi_1 = bound_c .+ contin_c
-    print("bound contribution:  ", Float64(abs.(bound_c) ./ abs.(psi_1)), "\n")
+    print("bound contribution:  ", Float64(abs.(bound_c)), "\t contin: ", Float64(abs.(contin_c)), "\n")
         
     
     lam = (mu ./ (M_pl .* 1e9))^2
@@ -318,7 +348,7 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; nmax=8, kpts=1
     return rate_out ./ mu^2 .* (GNew * M^2 * M_to_eV)^2 # unitless [gamma / mu]
 end
 
-function s_rate_inf(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3, lF_min; rpts=2000, rmaxT=70,  sve_for_test=false, inf_nr=false, Npts_Bnd=600, Nang=100000, debug=false)
+function s_rate_inf(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3, lF_min; rpts=2000, rmaxT=70,  sve_for_test=false, inf_nr=false, Npts_Bnd=600, Nang=100000, debug=false, Ntot_safe=2000)
     # lF_min is l relative to minimal value needed for non-zero m
     # returns scattering re-normalized \gamma (basically just radial integral ratio)
     
@@ -372,7 +402,7 @@ function s_rate_inf(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3, lF_min; rpts=2
     CG *= 4*pi / Nang
    
     
-    rl, r1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, rmaxT=rmaxT)
+    rl, r1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, rmaxT=rmaxT, Ntot_safe=Ntot_safe)
     itp = LinearInterpolation(log10.(rl), log10.(r1), extrapolation_bc=Line())
     rf_1 = 10 .^itp(log10.(rlist))
     
@@ -384,13 +414,13 @@ function s_rate_inf(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3, lF_min; rpts=2
     if (n2 == n1)&&(l2==l1)&&(m2==m1)
         rf_2 = rf_1
     else
-        rl, r2 = solve_radial(mu, M, a, n2, l2, m2; rpts=Npts_Bnd, rmaxT=rmaxT)
+        rl, r2 = solve_radial(mu, M, a, n2, l2, m2; rpts=Npts_Bnd, rmaxT=rmaxT, Ntot_safe=Ntot_safe)
         itp = LinearInterpolation(log10.(rl), log10.(r2), extrapolation_bc=Line())
         rf_2 = 10 .^itp(log10.(rlist))
     end
 
     
-    rl, r3 = solve_radial(mu, M, a, n3, l3, m3; rpts=Npts_Bnd, rmaxT=rmaxT)
+    rl, r3 = solve_radial(mu, M, a, n3, l3, m3; rpts=Npts_Bnd, rmaxT=rmaxT, Ntot_safe=Ntot_safe)
     itp = LinearInterpolation(log10.(rl), log10.(r3), extrapolation_bc=Line())
     rf_3 = 10 .^itp(log10.(rlist))
     
@@ -573,17 +603,21 @@ function radial_inf(erg, mu, M, a, l, m; rpts=1000, rmax_val=1e4, debug=false, i
     end
 
     # BNDRY TERMS
-    D2[1, 1] += -1.0 .* dr_delt[1] ./ h
-    D2[1, 2] += 1.0 .* dr_delt[1] ./ h
-    D2[rpts, rpts] += 1.0 .* dr_delt[rpts] ./ h
-    D2[rpts, rpts - 1] += -1.0 .* dr_delt[rpts] ./ h
+    D2[1, 1] += -3.0 .* dr_delt[1] ./ (2 * h)
+    D2[1, 2] += 4.0 .* dr_delt[1] ./ (2 * h)
+    D2[1, 3] += -1.0 .* dr_delt[1] ./ (2 * h)
+    D2[rpts, rpts] += 3.0 .* dr_delt[rpts] ./ (2 * h)
+    D2[rpts, rpts - 1] += -4.0 .* dr_delt[rpts] ./ (2 * h)
+    D2[rpts, rpts - 2] += 1.0 .* dr_delt[rpts] ./ (2 * h)
     
-    D2[1, 1] += 1.0 .* delt[1] ./ h.^2
-    D2[1, 2] += -2.0 .* delt[1] ./ h.^2
-    D2[1, 3] += 1.0 .* delt[1] ./ h.^2
-    D2[rpts, rpts] += 1.0 .* delt[rpts] ./ h.^2
-    D2[rpts, rpts - 1] += -2.0 .* delt[rpts] ./ h.^2
-    D2[rpts, rpts - 2] += 1.0 .* delt[rpts] ./ h.^2
+    D2[1, 1] += 2.0 .* delt[1] ./ h.^3
+    D2[1, 2] += -5.0 .* delt[1] ./ h.^3
+    D2[1, 3] += 4.0 .* delt[1] ./ h.^3
+    D2[1, 4] += -1.0 .* delt[1] ./ h.^3
+    D2[rpts, rpts] += 2.0 .* delt[rpts] ./ h.^3
+    D2[rpts, rpts - 1] += -5.0 .* delt[rpts] ./ h.^3
+    D2[rpts, rpts - 2] += 4.0 .* delt[rpts] ./ h.^3
+    D2[rpts, rpts - 3] += -1.0 .* delt[rpts] ./ h.^3
     
 
     
