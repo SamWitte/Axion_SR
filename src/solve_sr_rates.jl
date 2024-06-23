@@ -307,15 +307,17 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=10, rpts=
                 out_goingR = radial_inf_NR(k .* GNew .* M, 0, mu, M, rlist)
             else
                 rl, r4 = radial_inf(erg_New .* GNew .* M, mu, M, a, 0, 0; rmax_val=rmax, rpts=rpts)
-                itp = LinearInterpolation(log10.(rl[3:end]), log10.(r4[3:end]), extrapolation_bc=Line())
-                out_goingR = 10 .^itp(log10.(rlist))
+                # itp = LinearInterpolation(log10.(rl[3:end]), log10.(r4[3:end]), extrapolation_bc=Line())
+                itp = LinearInterpolation(log10.(rl[3:end]), r4[3:end], extrapolation_bc=Line())
+                # out_goingR = 10 .^itp(log10.(rlist))
+                out_goingR = itp(log10.(rlist))
             end
             
             r_integrd = (rf_1 / UnF^(3/2)) .* (rf_2 / UnF^(3/2)) .* conj(rf_3 / UnF^(3/2)) .* conj(out_goingR ./ UnF) .* (rlist * UnF).^2
             radial_int = trapz(r_integrd, rlist * UnF)
             
             
-            print("radial int \t ", k, "\t", radial_int, "\n\n")
+            # print("radial int \t ", k, "\t", radial_int, "\n\n")
             
             
             ff = CG .* radial_int ./ (2 .* mu).^(3 / 2) ./ (k_ind_2 .+ k.^2) ./ (2 * pi)
@@ -348,7 +350,7 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=10, rpts=
     return rate_out ./ mu^2 .* (GNew * M^2 * M_to_eV)^2 # unitless [gamma / mu]
 end
 
-function s_rate_inf(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3, lF_min; rpts=2000, rmaxT=70,  sve_for_test=false, inf_nr=false, Npts_Bnd=600, Nang=100000, debug=false, Ntot_safe=2000)
+function s_rate_inf(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3, lF_min; rpts=4000, rmaxT=90,  sve_for_test=false, inf_nr=false, Npts_Bnd=1000, Nang=300000, debug=false, Ntot_safe=2000, xtol=1e-2, ftol=1e-2)
     # lF_min is l relative to minimal value needed for non-zero m
     # returns scattering re-normalized \gamma (basically just radial integral ratio)
     
@@ -428,9 +430,11 @@ function s_rate_inf(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3, lF_min; rpts=2
     if inf_nr
         out_goingR = radial_inf_NR(k, lF, mu, M, rlist)
     else
-        rl, r4 = radial_inf(erg_New .* GNew .* M, mu, M, a, lF, mF; rmax_val=rmax, rpts=rpts, debug=debug)
-        itp = LinearInterpolation(log10.(rl[3:end]), log10.(r4[3:end]), extrapolation_bc=Line())
-        out_goingR = 10 .^itp(log10.(rlist))
+        rl, r4 = radial_inf(erg_New .* GNew .* M, mu, M, a, lF, mF; rmax_val=rmax, rpts=rpts, debug=debug, xtol=xtol, ftol=ftol)
+        # itp = LinearInterpolation(log10.(rl[3:end]), log10.(r4[3:end]), extrapolation_bc=Line())
+        # out_goingR = 10 .^itp(log10.(rlist))
+        itp = LinearInterpolation(log10.(rl[3:end]), r4[3:end], extrapolation_bc=Line())
+        out_goingR = itp(log10.(rlist))
     end
     
     if sve_for_test
@@ -566,7 +570,7 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
     end
 end
 
-function radial_inf(erg, mu, M, a, l, m; rpts=1000, rmax_val=1e4, debug=false, iter=500, xtol=1e-30, ftol=1e-30, sve_for_test=false, fnm="test_store/test_radial")
+function radial_inf(erg, mu, M, a, l, m; rpts=1000, rmax_val=1e4, debug=false, iter=50, xtol=1e-120, ftol=1e-120, sve_for_test=false, fnm="test_store/test_radial")
     # r, erg, unitless
     
     
@@ -586,8 +590,8 @@ function radial_inf(erg, mu, M, a, l, m; rpts=1000, rmax_val=1e4, debug=false, i
     
     delt = r.^2 .- 2 .* r .+ a.^2
     dr_delt = 2 .* r .- 2
-    rhs = (erg.^2 .* (r.^2 .+ a.^2).^2 .- 4 .* a .* m .* erg .* r .+ m.^2 .* a.^2) ./ delt .- (erg.^2 .* a.^2 .+ alph.^2 .* r.^2 .+ LLM)
-    
+    # rhs = Float64.((erg.^2 .* (r.^2 .+ a.^2).^2 .- 4 .* a .* m .* erg .* r .+ m.^2 .* a.^2) ./ delt .- (erg.^2 .* a.^2 .+ alph.^2 .* r.^2 .+ LLM))
+    rhs = real((erg.^2 .* (r.^2 .+ a.^2).^2 .- 4 .* a .* m .* erg .* r .+ m.^2 .* a.^2) ./ delt .- (erg.^2 .* a.^2 .+ alph.^2 .* r.^2 .+ LLM))
     
     # Create the second derivative matrix (Laplacian matrix), and first derivative
     D2 = zeros(rpts, rpts)
@@ -622,32 +626,46 @@ function radial_inf(erg, mu, M, a, l, m; rpts=1000, rmax_val=1e4, debug=false, i
 
     
     function wrapper!(F, x)
-        real_r = x[1:Int(length(x)/2)]
-        imag_r = x[Int(length(x)/2 + 1):end]
-        r_tot = real_r .+ im .* imag_r
-        temp = (D2 * r_tot) .+ rhs .* r_tot
-        F[1:Int(length(x)/2)] .= real(temp)
-        F[Int(length(x)/2 + 1):end] .= imag(temp)
+        # temp = (D2 * x) .+ rhs .* x
+        temp = x.^(-1) .* (D2 * x) .+ rhs
+        F .= real(temp)
+        
+        
+        # real_r = x[1:Int(length(x)/2)]
+        # imag_r = x[Int(length(x)/2 + 1):end]
+        # r_tot = real_r .+ im .* imag_r
+        # temp = (D2 * r_tot) .+ rhs .* r_tot
+        # F[1:Int(length(x)/2)] .= real(temp) .* 1e60
+        # F[Int(length(x)/2 + 1):end] .= imag(temp) .* 1e60
     end
     
     k = sqrt.(erg.^2 .- alph.^2)
     
     rGuess = radial_inf_NR(k, l, mu, M, r)
     
-    
-    r_in = vcat(real(rGuess), imag(rGuess))
-    
-    sol = nlsolve(wrapper!, r_in, show_trace=debug, autodiff = :forward, xtol=1e-20, ftol=1e-30, iterations=50)
-    realP = sol.zero[1:Int(length(r_in) / 2)]
-    imP = sol.zero[Int(length(r_in) / 2)+1:end]
-    
     # normalize solution!
     trapz(y,x) = @views sum(((y[1:end-1].+y[2:end])/2).*(x[2:end].-x[1:end-1]))
-    full_out = realP .+ im .* imP
-    nm = trapz(full_out .* conj(full_out) .* r.^2, r)
-    nm2 = trapz(radial_inf_NR(k, l, mu, M, r) .* conj(radial_inf_NR(k, l, mu, M, r)) .* r.^2, r)
     
-    full_out .*= sqrt.(nm2 ./ nm)
+    # r_in = vcat(Float64.(real(rGuess)), Float64.(imag(rGuess)))
+    # r_in = vcat(real(rGuess), imag(rGuess))
+    r_in = real(rGuess)
+    
+    sol = nlsolve(wrapper!, r_in, show_trace=debug, autodiff = :forward, xtol=xtol, ftol=ftol, iterations=iter)
+    
+    full_out = sol.zero
+    # realP = sol.zero[1:Int(length(r_in) / 2)]
+    # imP = sol.zero[Int(length(r_in) / 2)+1:end]
+    # full_out = realP .+ im .* imP
+    # print(maximum(r_in), "\n")
+    # print(maximum(full_out), "\t", maximum(real(radial_inf_NR(k, l, mu, M, r))), "\n")
+    
+    # nm = trapz(full_out .* conj(full_out) .* r.^2, r)
+    # nm2 = trapz(r_in.^2 .* r.^2, r)
+    # full_out .*= sqrt.(2 * pi ./ nm)
+    
+    # print("test \t", nm, "\t", nm2, "\t", k, "\n\n")
+    # full_out .*= sqrt.(nm2 ./ nm)
+    
     
     
     if sve_for_test
