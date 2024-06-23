@@ -58,7 +58,7 @@ function sr_rates(n, l, m, massB, MBH, aBH; impose_low_cut=0.001, solve_322=true
     end
     rP *= (GNew .* MBH)
     OmegaH = aBH ./ (2 .* (GNew .* MBH) .* (1 .+ sqrt.(1 .- aBH.^2)))
-    Anl = 2 .^(4 .* l .+ 1) .* factorial(Int(l .+ n)) ./ (n.^(2 .* l .+ 4) .* factorial(n .- l .- 1))
+    Anl = 2 .^(4 .* l .+ 1) .* factorial(big(Int(l .+ n))) ./ (n.^(2 .* l .+ 4) .* factorial(big(n .- l .- 1)))
     Anl *= (factorial(Int(l)) ./ (factorial(Int(2 .* l)) .* factorial(Int(2 .* l .+ 1)))).^2
     Chilm = 1.0
     # erg = ergL(n, l, m, massB, MBH, aBH)
@@ -81,7 +81,7 @@ function radial_bound_NR(n, l, m, mu, M, r)
     alph = GNew * M * mu
     a0 = 1 / (mu * alph) / (GNew * M)
     
-    rF = sqrt.((2 / (n * a0)).^3 * factorial(n - l - 1) / (2 * n * factorial(n + l))) .* exp.( - r ./ (n .* a0)) .* (2 .* r ./ (n .* a0)).^l .* generalized_laguerre(n - l - 1, 2 * l + 1, 2 .* r ./ (n .* a0))
+    rF = sqrt.((2 / (n * a0)).^3 * factorial(big(n - l - 1)) / (2 * n * factorial(big(n + l)))) .* exp.( - r ./ (n .* a0)) .* (2 .* r ./ (n .* a0)).^l .* generalized_laguerre(n - l - 1, 2 * l + 1, 2 .* r ./ (n .* a0))
     
     return rF
 end
@@ -350,7 +350,7 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=10, rpts=
     return rate_out ./ mu^2 .* (GNew * M^2 * M_to_eV)^2 # unitless [gamma / mu]
 end
 
-function s_rate_inf(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3, lF_min; rpts=4000, rmaxT=90,  sve_for_test=false, inf_nr=false, Npts_Bnd=1000, Nang=300000, debug=false, Ntot_safe=2000, xtol=1e-2, ftol=1e-2)
+function s_rate_inf(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3, lF_min; rpts=4000, rmaxT=90,  sve_for_test=false, inf_nr=false, Npts_Bnd=1000, Nang=300000, debug=false, Ntot_safe=2000, xtol=1e-2, ftol=1e-2, iter=20)
     # lF_min is l relative to minimal value needed for non-zero m
     # returns scattering re-normalized \gamma (basically just radial integral ratio)
     
@@ -430,7 +430,7 @@ function s_rate_inf(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3, lF_min; rpts=4
     if inf_nr
         out_goingR = radial_inf_NR(k, lF, mu, M, rlist)
     else
-        rl, r4 = radial_inf(erg_New .* GNew .* M, mu, M, a, lF, mF; rmax_val=rmax, rpts=rpts, debug=debug, xtol=xtol, ftol=ftol)
+        rl, r4 = radial_inf(erg_New .* GNew .* M, mu, M, a, lF, mF; rmax_val=rmax, rpts=rpts, debug=debug, xtol=xtol, ftol=ftol, iter=iter)
         # itp = LinearInterpolation(log10.(rl[3:end]), log10.(r4[3:end]), extrapolation_bc=Line())
         # out_goingR = 10 .^itp(log10.(rlist))
         itp = LinearInterpolation(log10.(rl[3:end]), r4[3:end], extrapolation_bc=Line())
@@ -659,12 +659,9 @@ function radial_inf(erg, mu, M, a, l, m; rpts=1000, rmax_val=1e4, debug=false, i
     # print(maximum(r_in), "\n")
     # print(maximum(full_out), "\t", maximum(real(radial_inf_NR(k, l, mu, M, r))), "\n")
     
-    # nm = trapz(full_out .* conj(full_out) .* r.^2, r)
-    # nm2 = trapz(r_in.^2 .* r.^2, r)
-    # full_out .*= sqrt.(2 * pi ./ nm)
-    
-    # print("test \t", nm, "\t", nm2, "\t", k, "\n\n")
-    # full_out .*= sqrt.(nm2 ./ nm)
+    nm = trapz(full_out .* conj(full_out) .* r.^2, r)
+    nm2 = trapz(r_in.^2 .* r.^2, r)
+    print("test \t", nm, "\t", nm2, "\t", k, "\n\n")
     
     
     
