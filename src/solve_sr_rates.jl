@@ -340,7 +340,7 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=10, rpts=
     end
     
     psi_1 = bound_c .+ contin_c
-    print("bound contribution:  ", Float64(abs.(bound_c)), "\t contin: ", Float64(abs.(contin_c)), "\n")
+    # print("bound contribution:  ", Float64(abs.(bound_c)), "\t contin: ", Float64(abs.(contin_c)), "\n")
         
     
     lam = (mu ./ (M_pl .* 1e9))^2
@@ -381,7 +381,7 @@ function s_rate_inf(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3, lF_min; rpts=4
     rmax = rmaxT ./ q
     
     rlist = 10 .^(range(log10.(rp), log10.(rmax), rpts))
-    print("New erg \t", erg_New .* GNew .* M, "\n")
+    # print("New erg \t", erg_New .* GNew .* M, "\n")
 
 
     Z1 = spheroidals(l1, m1, a, erg_1)

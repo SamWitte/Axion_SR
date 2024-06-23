@@ -78,11 +78,13 @@ function main(;kpts=14, rpts=2000, rmaxT=100, Nang=200000, Npts_Bnd=2000)
     
     if S4 == "BH"
         for i in 1:alpha_pts
+            print("alpha \t", alpha_list[i], "\n")
             mu = alpha_list[i] ./ (M * GNew)
-            output_sve[i] = s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=kpts, rpts=rpts, rmaxT=rmaxT, inf_nr=true, Nang=Nang, Npts_Bnd=Npts_Bnd, debug=false, include_cont=true)
+            output_sve[i] = s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=kpts, rpts=rpts, rmaxT=rmaxT, inf_nr=false, Nang=Nang, Npts_Bnd=Npts_Bnd, debug=false, include_cont=true)
         end
     elseif S4 == "Inf"
         for i in 1:alpha_pts
+            print("alpha \t", alpha_list[i], "\n")
             mu = alpha_list[i] ./ (M * GNew)
             output_sve[i] = s_rate_inf(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3, lF_min; rpts=rpts, rmaxT=rmaxT,  sve_for_test=false, inf_nr=false, Npts_Bnd=Npts_Bnd, Nang=Nang)
         end
