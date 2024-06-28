@@ -20,21 +20,23 @@ function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_c
         if debug
             print("Need higher-level system... \n")
         end
-        return aBH
+        return aBH, M_BH
     elseif alph .< impose_low_cut
-        return aBH
+        return aBH, M_BH
     end
     
     
     if input_data == "Masha"
         OmegaH = aBH ./ (2 .* (GNew .* M_BH) .* (1 .+ sqrt.(1 .- aBH.^2)))
         if (ergL(2, 1, 1, massB, M_BH, aBH) .>= OmegaH)&&(f_a .< 2.6e17)
-            return aBH
+            return aBH, M_BH
         end
     end
     
     final_spin, final_BH = solve_system(massB, f_a, aBH, M_BH, tau_max, debug=debug, solve_322=solve_322, impose_low_cut=impose_low_cut, input_data=input_data, solve_n4=solve_n4, stop_on_a=stop_on_a, eq_threshold=eq_threshold, abstol=abstol, non_rel=non_rel)
-    # print("Spin diff.. \t ", aBH, "\t", final_spin, "\t", alph, "\n")
+    
+    print("Spin diff.. \t ", aBH, "\t", final_spin, "\t", alph, "\n")
+    print("Mass diff.. \t ", M_BH, "\t", final_BH, "\t", alph, "\n")
     return final_spin, final_BH
     
 end
