@@ -225,7 +225,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
                 u[i] = log.(e_init)
             end
               
-            if round.(u[i], digits=2) .>= round.(log.(bn_list[i]), digits=2)
+#            if round.(u[i], digits=2) .>= round.(log.(bn_list[i]), digits=2)
+            if abs.(u[i] .- log.(bn_list[i])) < 1e-2
                 u[i] = log.(bn_list[i])
                 u_real[i] = bn_list[i]
             end
@@ -318,9 +319,11 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
         for i in 1:idx_lvl
             if !isnothing(u_fix[i])||(sign_flip[i] == true)
                 du[i] *= 0.0
-            elseif (round.(u[i], digits=2) .>= round.(log.(bn_list[i]), digits=2))&&(du[i] > 0)
+            # elseif (round.(u[i], digits=2) .>= round.(log.(bn_list[i]), digits=2))&&(du[i] > 0)
+            elseif (abs.(u[i] .- log.(bn_list[i])) < 1e-2)&&(du[i] > 0)
                 du[i] *= 0.0
-            elseif (round.(u[i], digits=2) .<= round.(log.(e_init), digits=2))&&(du[i] < 0)
+            # elseif (round.(u[i], digits=2) .<= round.(log.(e_init), digits=2))&&(du[i] < 0)
+            elseif (abs.(u[i] .- log.(e_init)) < 1e-2)&&(du[i] < 0)
                 du[i] *= 0.0
             else
                 du[i] *= mu ./ hbar .* 3.15e7
@@ -353,7 +356,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
         u_fake = u_real * 1.1
         
         for i in 1:idx_lvl
-            if round.(u[i], digits=2) .>= round.(log.(bn_list[i]), digits=2)
+            # if round.(u[i], digits=2) .>= round.(log.(bn_list[i]), digits=2)
+            if (abs.(u[i] .- log.(bn_list[i])) < 1e-2)
                 u[i] = exp.(bn_list[i])
                 u_real[i] = bn_list[i]
                 du[i] *= 0
@@ -473,7 +477,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
         u_fake = u_real * 2
         
         for i in 1:idx_lvl
-            if round.(u[i], digits=2) .>= round.(log.(bn_list[i]), digits=2)
+            if (abs.(u[i] .- log.(bn_list[i])) < 1e-2)
+            # if round.(u[i], digits=2) .>= round.(log.(bn_list[i]), digits=2)
                 u[i] = log.(bn_list[i])
                 u_real[i] = bn_list[i]
                 du[i] *= 0
@@ -523,7 +528,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
         tlist = []
         # print(integrator.sol.u, "\n")
         for i in 1:idx_lvl
-            condBN = round.(u[i], digits=2) < round.(log.(bn_list[i]), digits=2)
+            # condBN = round.(u[i], digits=2) < round.(log.(bn_list[i]), digits=2)
+            condBN =  (abs.(u[i] .- log.(bn_list[i])) < 1e-2)
             if (u[i] > log.(e_init))&&(isnothing(u_fix[i]))&&condBN&&(sign_flip[i]==false)
                 append!(tlist, abs.(1.0 ./ du[i]))
                 # print(i, "\n")
@@ -553,7 +559,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
         tlist = []
         indx_list = []
         for i in 1:idx_lvl
-            condBN = round.(integrator.u[i], digits=2) < round.(log.(bn_list[i]), digits=2)
+            # condBN = round.(integrator.u[i], digits=2) < round.(log.(bn_list[i]), digits=2)
+            condBN =  (abs.(u[i] .- log.(bn_list[i])) < 1e-2)
             if (integrator.u[i] > log.(e_init))&&(isnothing(u_fix[i]))&&condBN&&(sign_flip[i]==false)
                 append!(tlist, (1.0 ./ du[i]))
                 append!(indx_list, i)
