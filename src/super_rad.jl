@@ -560,7 +560,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
         indx_list = []
         for i in 1:idx_lvl
             # condBN = round.(integrator.u[i], digits=2) < round.(log.(bn_list[i]), digits=2)
-            condBN =  (abs.(u[i] .- log.(bn_list[i])) < 1e-2)
+            condBN =  (abs.(integrator.u[i] .- log.(bn_list[i])) < 1e-2)
             if (integrator.u[i] > log.(e_init))&&(isnothing(u_fix[i]))&&condBN&&(sign_flip[i]==false)
                 append!(tlist, (1.0 ./ du[i]))
                 append!(indx_list, i)
