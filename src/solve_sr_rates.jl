@@ -366,7 +366,9 @@ function s_rate_inf(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3, lF_min; rpts=4
     erg_3 = ergL(n3, l3, m3, mu, M, a)
     erg_New = erg_1 .+ erg_2 - erg_3
     # k = sqrt.(erg_New.^2 .- mu.^2)
-    # print("erg new \t", erg_New .* GNew * M, "\n")
+    if debug
+        print("erg new \t", erg_New .* GNew * M, "\n")
+    end
     k = sqrt.((erg_New .* GNew * M).^2 .- alph.^2)
     mF = (m1 .+ m2 - m3)
     lF = abs.(mF) + lF_min
@@ -651,22 +653,53 @@ function radial_inf(erg, mu, M, a, l, m; rpts=1000, rmax_val=1e4, debug=false, i
     r_in = real(rGuess)
     
     sol = nlsolve(wrapper!, r_in, show_trace=debug, autodiff = :forward, xtol=xtol, ftol=ftol, iterations=iter)
-    
     full_out = sol.zero
+    
     # realP = sol.zero[1:Int(length(r_in) / 2)]
     # imP = sol.zero[Int(length(r_in) / 2)+1:end]
     # full_out = realP .+ im .* imP
     # print(maximum(r_in), "\n")
     # print(maximum(full_out), "\t", maximum(real(radial_inf_NR(k, l, mu, M, r))), "\n")
     
-    nm = trapz(full_out .* conj(full_out) .* r.^2, r)
-    nm2 = trapz(r_in.^2 .* r.^2, r)
-    print("test \t", nm, "\t", nm2, "\t", k, "\n\n")
+    # nm = trapz(full_out .* conj(full_out) .* r.^2, r)
+    # nm2 = trapz(r_in .* conj(r_in) .* r.^2, r)
+    # full_out .*= sqrt.(2 * pi ./ nm)
+    # print("test \t", nm, "\t", nm2, "\t", k, "\n\n")
     
+    ## need to normalize
+    done_search=false
+    found1=false
+    found2=false
+    cnt1 = 0
+    cnt2 = 0
     
+    indx = rpts
+    while !done_search
+        if sign(real(full_out[indx])) != sign(real(full_out[indx-1]))
+            cnt1 += 1
+        end
+        if sign(real(r_in[indx])) != sign(real(r_in[indx-1]))
+            cnt2 += 1
+        end
+        
+        if cnt1 > 4
+            found1 = true
+        end
+        if cnt2 > 4
+            found2 = true
+        end
+            
+        indx -= 1
+        if found1&&found2
+            done_search = true
+        end
+    end
+    nm1 = maximum(abs.(full_out[indx:end]))
+    nm2 = maximum(abs.(r_in[indx:end]))
+    
+    full_out .*= nm2 ./ nm1
     
     if sve_for_test
-        
         writedlm(fnm*"_real.dat", hcat(r, real(full_out)))
         writedlm(fnm*"_imag.dat", hcat(r, imag(full_out)))
     end
@@ -695,7 +728,7 @@ function spheroidals(l, m, a, erg)
     return Zlm
 end
 
-function find_im_part(mu, M, a, n, l, m; debug=false, Ntot=200, iter=50, xtol=1e-7, ftol=1e-20, return_both=false, for_s_rates=false, QNM=false, QNM_E=1.0)
+function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=200, iter=50, xtol=1e-7, ftol=1e-20, return_both=false, for_s_rates=false, QNM=false, QNM_E=1.0)
     
     OmegaH = a ./ (2 .* (GNew .* M) .* (1 .+ sqrt.(1 .- a.^2)))
     
@@ -722,6 +755,10 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot=200, iter=50, xtol=1e
         if a > 0.95
             Ntot *= 2.5
             Ntot = Int(Ntot)
+        end
+        
+        if Ntot_force > Ntot
+            Ntot = Ntot_force
         end
 
         rescale = (alph ./ alph_ev).^(4 .* l + 5)
@@ -814,12 +851,16 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot=200, iter=50, xtol=1e
 end
 
 function compute_gridded(mu, M, a, n, l, m; Ntot=200, iter=50, xtol=1e-7, npts=30, amin=0.0)
-    alist = LinRange(amin, a, npts);
+    a_max = a * 1.1 # safety, just in case upward fluctuation
+    if a_max > 0.998
+        a_max = 0.998
+    end
+    alist = LinRange(amin, a_max, npts);
     output = zeros(npts)
     alph = GNew * M * mu
 
     for i in 1:length(alist)
-        output[i] = find_im_part(mu, M, alist[i], n, l, m, Ntot=Ntot, iter=iter, xtol=xtol) ./ (GNew * M)
+        output[i] = find_im_part(mu, M, alist[i], n, l, m, Ntot_force=Ntot, iter=iter, xtol=xtol) ./ (GNew * M)
     end
     condit = output .<= 0.0
     output[condit] .= 1e-100

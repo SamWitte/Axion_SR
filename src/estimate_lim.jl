@@ -36,7 +36,8 @@ function run()
     stop_on_a = 0.7
     abstol=1e-25
     solve_n4 = true
-
+    non_rel = true
+    
     alph = GNew .* MassBH .* m_a
     maxa = 4 .* alph ./ (1 .+ 4 .* alph.^2)
     debug=false
@@ -45,7 +46,7 @@ function run()
     foundLim = false
     while !foundLim
 
-        spin = solve_system(m_a, f_guess, SpinBH, MassBH, tau_max; impose_low_cut=impose_low_cut, return_all_info=return_all_info, solve_322=solve_322, n_times=n_times, input_data=input_data, eq_threshold=eq_threshold, stop_on_a=stop_on_a, debug=debug, abstol=abstol, solve_n4=solve_n4)
+        spin = solve_system(m_a, f_guess, SpinBH, MassBH, tau_max; impose_low_cut=impose_low_cut, return_all_info=return_all_info, solve_322=solve_322, n_times=n_times, input_data=input_data, eq_threshold=eq_threshold, stop_on_a=stop_on_a, debug=debug, abstol=abstol, solve_n4=solve_n4, non_rel)
         
         print(f_guess, "\t", spin, "\n")
         if spin .< SpinLim

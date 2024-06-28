@@ -44,7 +44,7 @@ function load_rate_coeffs(mu, M, a, f_a; non_rel=true, input_data="Me", solve_n4
             # n = 4
             if solve_n4
                 Drate["211_411^322^BH"] = 2.5e-8 * alph^11 * faFac * rP
-                Drate["411_411^322^BH"] = 2.5e-11 * alph^11 * faFac * rP ### Disagree
+                Drate["411_411^322^BH"] = 1.7e-11 * alph^11 * faFac * rP ### Disagree
                 Drate["322_411^211^Inf"] = 3.7e-9 * alph^8 * faFac
                 Drate["211_211^422^BH"] = 1.5e-7 * alph^11 * faFac * rP
                 Drate["411_422^211^Inf"] = 2.2e-9 * alph^8 * faFac
@@ -69,58 +69,58 @@ function load_rate_coeffs(mu, M, a, f_a; non_rel=true, input_data="Me", solve_n4
         rP_ratio = rP / (1 + sqrt.(1.0 - 0.9^2))
         
         # load files and get rates
-        data = open(readdlm, "rate_sve/211_211_322_BH.dat")
+        data = open(readdlm, "rate_sve/211_211_322_BH_NR.dat")
         itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
         Drate["211_211^322^BH"] = 10 .^itp(log10.(alph)) .* rP_ratio .* faFac
         
-        data = open(readdlm, "rate_sve/322_322_211_Inf.dat")
+        data = open(readdlm, "rate_sve/322_322_211_Inf_NR.dat")
         itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
         Drate["322_322^211^Inf"] = 10 .^itp(log10.(alph)) .* faFac
         
         if solve_n4
-            data = open(readdlm, "rate_sve/211_411_322_BH.dat")
+            data = open(readdlm, "rate_sve/211_411_322_BH_NR.dat")
             itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
             Drate["211_411^322^BH"] = 10 .^itp(log10.(alph)) .* rP_ratio .* faFac
             
             
-            data = open(readdlm, "rate_sve/411_411_322_BH.dat")
+            data = open(readdlm, "rate_sve/411_411_322_BH_NR.dat")
             itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
             Drate["411_411^322^BH"] = 10 .^itp(log10.(alph)) .* rP_ratio .* faFac
         
             
-            data = open(readdlm, "rate_sve/322_411_211_Inf.dat")
+            data = open(readdlm, "rate_sve/322_411_211_Inf_NR.dat")
             itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
             Drate["322_411^211^Inf"] = 10 .^itp(log10.(alph)) .* faFac
             
-            data = open(readdlm, "rate_sve/211_211_422_BH.dat")
+            data = open(readdlm, "rate_sve/211_211_422_BH_NR.dat")
             itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
             Drate["211_211^422^BH"] = 10 .^itp(log10.(alph)) .* rP_ratio .* faFac
             
-            data = open(readdlm, "rate_sve/411_422_211_Inf.dat")
+            data = open(readdlm, "rate_sve/411_422_211_Inf_NR.dat")
             itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
             Drate["411_422^211^Inf"] = 10 .^itp(log10.(alph)) .* faFac
             
-            data = open(readdlm, "rate_sve/411_411_422.dat")
+            data = open(readdlm, "rate_sve/411_411_422_BH_NR.dat")
             itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
             Drate["411_411^422^BH"] = 10 .^itp(log10.(alph)) .* rP_ratio .* faFac
             
-            data = open(readdlm, "rate_sve/211_422_433_BH.dat")
+            data = open(readdlm, "rate_sve/211_422_433_BH_NR.dat")
             itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
             Drate["211_422^433^BH"] = 10 .^itp(log10.(alph)) .* rP_ratio .* faFac
             
-            data = open(readdlm, "rate_sve/422_322_211_Inf.dat")
+            data = open(readdlm, "rate_sve/422_322_211_Inf_NR.dat")
             itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
             Drate["422_322^211^Inf"] = 10 .^itp(log10.(alph)) .* faFac
             
-            data = open(readdlm, "rate_sve/433_433_211_Inf.dat")
+            data = open(readdlm, "rate_sve/433_433_211_Inf_NR.dat")
             itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
             Drate["433_433^211^Inf"] = 10 .^itp(log10.(alph)) .* faFac
             
-            data = open(readdlm, "rate_sve/322_433_211_Inf.dat")
+            data = open(readdlm, "rate_sve/322_433_211_Inf_NR.dat")
             itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
             Drate["322_433^211^Inf"] = 10 .^itp(log10.(alph)) .* faFac
             
-            data = open(readdlm, "rate_sve/211_322_433_BH.dat")
+            data = open(readdlm, "rate_sve/211_322_433_BH_NR.dat")
             itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
             Drate["211_322^433^BH"] = 10 .^itp(log10.(alph)) .* rP_ratio .* faFac
 
@@ -163,14 +163,14 @@ function key_to_indx(keyN; solve_n4=false)
             sgn[i] = 1.0
         end
 
-        if nme == "211"
-            outPix[i] = 1
-        elseif nme == "322"
-            outPix[i] = 2
-        end
+        
             
         if solve_n4
-            if nme == "411"
+            if nme == "211"
+                outPix[i] = 1
+            elseif nme == "322"
+                outPix[i] = 2
+            elseif nme == "411"
                 outPix[i] = 3
             elseif nme == "422"
                 outPix[i] = 4
@@ -180,12 +180,20 @@ function key_to_indx(keyN; solve_n4=false)
                 outPix[i] = -1
             elseif (nme == "GW")||(nme == "Inf")
                 outPix[i] = 0
+            else
+                print("WHAT!? \t ", nme, "\n")
             end
         else
-            if nme == "BH"
+            if nme == "211"
+                outPix[i] = 1
+            elseif nme == "322"
+                outPix[i] = 2
+            elseif nme == "BH"
                 outPix[i] = -1
             elseif (nme == "GW")||(nme == "Inf")
                 outPix[i] = 0
+            else
+                print("WHAT!? \t ", nme, "\n")
             end
         end
     end

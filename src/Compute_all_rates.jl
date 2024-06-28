@@ -46,6 +46,7 @@ parsed_args = parse_commandline()
 alpha_max = parsed_args["alpha_max"];
 alpha_min = parsed_args["alpha_min"];
 alpha_pts = parsed_args["alpha_pts"];
+inf_nr=false
 
 S1 = parsed_args["S1"]
 S2 = parsed_args["S2"]
@@ -80,13 +81,13 @@ function main(;kpts=14, rpts=2000, rmaxT=100, Nang=200000, Npts_Bnd=2000)
         for i in 1:alpha_pts
             print("alpha \t", alpha_list[i], "\n")
             mu = alpha_list[i] ./ (M * GNew)
-            output_sve[i] = s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=kpts, rpts=rpts, rmaxT=rmaxT, inf_nr=false, Nang=Nang, Npts_Bnd=Npts_Bnd, debug=false, include_cont=true)
+            output_sve[i] = s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=kpts, rpts=rpts, rmaxT=rmaxT, inf_nr=inf_nr, Nang=Nang, Npts_Bnd=Npts_Bnd, debug=false, include_cont=true, bnd_thresh=1e-5)
         end
     elseif S4 == "Inf"
         for i in 1:alpha_pts
             print("alpha \t", alpha_list[i], "\n")
             mu = alpha_list[i] ./ (M * GNew)
-            output_sve[i] = s_rate_inf(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3, lF_min; rpts=rpts, rmaxT=rmaxT,  sve_for_test=false, inf_nr=false, Npts_Bnd=Npts_Bnd, Nang=Nang)
+            output_sve[i] = s_rate_inf(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3, lF_min; rpts=rpts, rmaxT=rmaxT,  sve_for_test=false, inf_nr=inf_nr, Npts_Bnd=Npts_Bnd, Nang=Nang)
         end
     else
         print("what is S4??? ", S4, "\n")
