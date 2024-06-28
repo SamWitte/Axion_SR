@@ -61,7 +61,12 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
     y0 = log.(y0)
     
     default_reltol = 1e-3
-    reltol = [default_reltol, default_reltol, default_reltol, default_reltol, default_reltol, default_reltol, default_reltol]
+    if solve_n4
+        reltol = [default_reltol, default_reltol, default_reltol, default_reltol, default_reltol, default_reltol, default_reltol]
+    else
+        reltol = [default_reltol, default_reltol, default_reltol, default_reltol]
+    end
+    
     wait = 0
     
     alph = GNew .* M_BH .* mu
@@ -658,38 +663,17 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
     cback_equil = DiscreteCallback(check_eq, affect_eq!, save_positions=(false, true))
     cbackspin = DiscreteCallback(check_spin, affect_spin!, save_positions=(false, true))
     
-    if solve_n4
+    # cbset = CallbackSet(cbackspin, cbackdt, cback_equil)
+    cbset = CallbackSet(cbackspin, cbackdt)
     
-        # cbset = CallbackSet(cbackspin, cbackdt, cback_equil)
-        cbset = CallbackSet(cbackspin, cbackdt)
-        #prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=reltol, abstol=1e-20)
+    if solve_n4
         prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=reltol, abstol=1e-6)
-        # sol = solve(prob, Rosenbrock23(autodiff=true), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e6, , dtmin=(dt_guess / 1e5), force_dtmin=true)
+        # sol = solve(prob, Rosenbrock23(autodiff=true), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e6, dtmin=(dt_guess / 1e5), force_dtmin=true)
         sol = solve(prob, Rosenbrock23(autodiff=false), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e6, dtmin=(dt_guess / 1e5), force_dtmin=true)
-        
         #sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
     else
-        
-        # abstol = 1e-30
-        # abstol = 1e-15
-        
-        # cbset = CallbackSet(cback_equil, cbackdt, cbackspin)
-        cbset = CallbackSet(cbackdt, cbackspin)
-        # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=1e-15)
-        # sol = solve(prob, Rodas4(), dt=dt_guess, saveat=saveat, callback=cbset)
-        
-        
-        # sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
-        if input_data != "Doddy"
-            prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-3, abstol=abstol, maxiters=5e5)
-            sol = solve(prob, Rosenbrock23(), dt=dt_guess, saveat=saveat, callback=cbset)
-            # sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
-        else
-            # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=abstol, maxiters=5e7)
-            prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-7, abstol=abstol, maxiters=5e6)
-            # sol = solve(prob, Rodas4(), dt=dt_guess, saveat=saveat, callback=cbset)
-            sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
-        end
+        prob = ODEProblem(RHS_ax!, y0, tspan, Mvars,  reltol=reltol, abstol=1e-6)
+        sol = solve(prob, Rosenbrock23(), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e6)
     end
     
     
