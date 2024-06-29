@@ -496,6 +496,9 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
     
     wR, wI = find_im_part(mu, M, a, n, l, m; debug=debug, iter=iter, xtol=xtol, ftol=ftol, return_both=true, for_s_rates=true)
     erg = wR .+ im .* wI
+    if debug
+        print("erg \t", erg, "\n")
+    end
     q = - sqrt.(alph.^2 .- erg.^2)
     rmax = rmaxT * 1.0 ./ abs.(real(q))
     
@@ -559,10 +562,10 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
     
     nm = trapz(Rout .* conj(Rout) .* rlist.^2, rlist)
     
-    
+    # print(Float64.(real(Rout ./ sqrt.(nm))), "\n")
     if sve
         normOut = Rout .* conj(Rout) ./ nm
-        writedlm(fnm*"_n_$(n)_l_$(l)_m_$(m)_.dat", hcat(float(real(rlist)), float(real(normOut))))
+        writedlm(fnm*"_$(alph)_n_$(n)_l_$(l)_m_$(m)_.dat", hcat(float(real(rlist)), float(real(Rout ./ sqrt.(nm)))))
     else
         if return_erg
             return rlist, Rout ./ sqrt.(nm), erg # erg normalized by GM
@@ -855,15 +858,21 @@ function compute_gridded(mu, M, a, n, l, m; Ntot=200, iter=50, xtol=1e-7, npts=3
     if a_max > 0.998
         a_max = 0.998
     end
-    alist = LinRange(amin, a_max, npts);
+    
     output = zeros(npts)
-    alph = GNew * M * mu
+    if amin < a_max
+        alist = LinRange(amin, a_max, npts);
+    
+        alph = GNew * M * mu
 
-    for i in 1:length(alist)
-        output[i] = find_im_part(mu, M, alist[i], n, l, m, Ntot_force=Ntot, iter=iter, xtol=xtol) ./ (GNew * M)
+        for i in 1:length(alist)
+            output[i] = find_im_part(mu, M, alist[i], n, l, m, Ntot_force=Ntot, iter=iter, xtol=xtol) ./ (GNew * M)
+        end
+        condit = output .<= 0.0
+        output[condit] .= 1e-100
+    else
+        alist = LinRange(a_max, amin, npts);
     end
-    condit = output .<= 0.0
-    output[condit] .= 1e-100
     return alist, output
 end
 
