@@ -714,7 +714,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
         end
     end
     
-    if (sol.t[end] != t_max)
+    if (sol.t[end] != t_max)&&(spinBH[end] > stop_on_a)
         print("Fail? Final time only \t", sol.t[end], "\n")
     end
     if isnan(spinBH[end])
