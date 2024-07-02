@@ -50,6 +50,10 @@ function parse_commandline()
         "--solve_n4"
             arg_type = Bool
             default = false
+                        
+        "--solve_n5"
+            arg_type = Bool
+            default = false
             
         "--non_rel"
             arg_type = Bool
@@ -93,6 +97,7 @@ thinning = parsed_args["thinning"];
 numsamples_perwalker = parsed_args["numsamples_perwalker"];
 burnin = parsed_args["burnin"];
 solve_n4 = parsed_args["solve_n4"]
+solve_n5 = parsed_args["solve_n5"]
 non_rel = parsed_args["non_rel"]
 stop_on_a = parsed_args["stop_on_a"]
 eq_threshold = parsed_args["eq_threshold"]
@@ -106,6 +111,7 @@ print("Modeling \t ", input_data, "\n")
 print("One BH? \t", one_BH, "\n")
 print("Low mass BHs? \t", LowMass, "\n")
 print("Solve 4N? \t", solve_n4, "\n")
+print("Solve 5N? \t", solve_n5, "\n")
 print("Non Rel? \t", non_rel, "\n")
 print("Nwalkers, Nsamples, Nburn \t", [numwalkers numsamples_perwalker burnin], "\n\n\n")
 
@@ -159,6 +165,9 @@ if LowMass
     Fname *= "_Nsamps_$(numsamples_perwalker)_"
     if solve_n4
         Fname *= "_add_n4_"
+        if solve_n5
+            Fname *= "_add_n5_"
+        end
     end
     if non_rel
         Fname *= "_NonRel_"
@@ -214,7 +223,7 @@ end
 solve_322 = true
 
 time0=Dates.now()
-@inbounds @fastmath mcmc_func_minimize(data, Fname, lg_m_low=lg_m_low, lg_m_high=lg_m_high, lg_f_high=lg_f_high, lg_f_low=lg_f_low, tau_max=tau_max, alpha_max_cut=alpha_max_cut, alpha_min_cut=alpha_min_cut, use_input_table=use_input_table, solve_322=solve_322, numwalkers=numwalkers, thinning=thinning, numsamples_perwalker=numsamples_perwalker, burnin=burnin, max_mass_matrix=max_mass_matrix, input_data=input_data, solve_n4=solve_n4, stop_on_a=stop_on_a, eq_threshold=eq_threshold, abstol=abstol, non_rel=non_rel)
+@inbounds @fastmath mcmc_func_minimize(data, Fname, lg_m_low=lg_m_low, lg_m_high=lg_m_high, lg_f_high=lg_f_high, lg_f_low=lg_f_low, tau_max=tau_max, alpha_max_cut=alpha_max_cut, alpha_min_cut=alpha_min_cut, use_input_table=use_input_table, solve_322=solve_322, numwalkers=numwalkers, thinning=thinning, numsamples_perwalker=numsamples_perwalker, burnin=burnin, max_mass_matrix=max_mass_matrix, input_data=input_data, solve_n4=solve_n4, solve_n5=solve_n5, stop_on_a=stop_on_a, eq_threshold=eq_threshold, abstol=abstol, non_rel=non_rel)
 
 time1=Dates.now()
 print("\n\n Run time: ", time1-time0, "\n")

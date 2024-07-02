@@ -1,5 +1,5 @@
 
-function load_rate_coeffs(mu, M, a, f_a; non_rel=true, input_data="Me", solve_n4=true)
+function load_rate_coeffs(mu, M, a, f_a; non_rel=true, input_data="Me", solve_n4=true, solve_n5=false)
     alph = mu * GNew * M
     rP = 1 + sqrt.(1 - a^2)
     faFac = (M_pl ./ f_a)^4
@@ -22,6 +22,7 @@ function load_rate_coeffs(mu, M, a, f_a; non_rel=true, input_data="Me", solve_n4
                 Drate["211_411^322^BH"] = 0.0
                 Drate["411_411^322^BH"] = 0.0
                 Drate["322_411^211^Inf"] = 0.0
+                Drate["322_411^433^BH"] = 0.0
                 Drate["211_211^422^BH"] = 0.0
                 Drate["411_422^211^Inf"] = 0.0
                 Drate["411_411^422^BH"] = 0.0
@@ -30,6 +31,24 @@ function load_rate_coeffs(mu, M, a, f_a; non_rel=true, input_data="Me", solve_n4
                 Drate["433_433^211^Inf"] = 0.0
                 Drate["322_433^211^Inf"] = 0.0
                 Drate["211_322^433^BH"] = 0.0
+                
+                if solve_n5
+                    Drate["322_322^544^BH"] = 0.0
+                    Drate["322_411^533^BH"] = 0.0
+                    Drate["322_422^544^BH"] = 0.0
+                    Drate["411_411^522^BH"] = 0.0
+                    Drate["322_522^544^BH"] = 0.0
+                    Drate["422_422^544^BH"] = 0.0
+                    Drate["422_522^544^BH"] = 0.0
+                    Drate["522_522^544^BH"] = 0.0
+                    
+                    Drate["422_544^322^Inf"] = 0.0
+                    Drate["433_544^322^Inf"] = 0.0
+                    Drate["422_533^322^Inf"] = 0.0
+                    Drate["433_533^322^Inf"] = 0.0
+                    Drate["433_522^322^Inf"] = 0.0
+                    Drate["422_522^322^Inf"] = 0.0
+                end
             end
             
             
@@ -54,6 +73,25 @@ function load_rate_coeffs(mu, M, a, f_a; non_rel=true, input_data="Me", solve_n4
                 Drate["433_433^211^Inf"] = 9.2e-11 * alph^8 * faFac
                 Drate["322_433^211^Inf"] = 2.6e-9 * alph^8 * faFac
                 Drate["211_322^433^BH"] = 9.1e-8 * alph^11 * faFac * rP
+                Drate["322_411^433^BH"] = 3.8e-11 * alph^7 * faFac * rP
+                
+                if solve_n5
+                    Drate["322_322^544^BH"] = 1.9e-9 * alph^11 * faFac * rP
+                    Drate["322_411^533^BH"] = 2.0e-8 * alph^11 * faFac * rP
+                    Drate["322_422^544^BH"] = 1.3e-11 * alph^11 * faFac * rP
+                    Drate["411_411^522^BH"] = 9.0e-11 * alph^11 * faFac * rP
+                    Drate["322_522^544^BH"] = 3.4e-12 * alph^7 * faFac * rP
+                    Drate["422_422^544^BH"] = 2.3e-9 * alph^11 * faFac * rP
+                    Drate["422_522^544^BH"] = 3.7e-14 * alph^7 * faFac * rP
+                    Drate["522_522^544^BH"] = 2.7e-13 * alph^7 * faFac * rP
+                    
+                    Drate["422_544^322^Inf"] = 5.0e-16 * alph^8 * faFac
+                    Drate["433_544^322^Inf"] = 1.4e-15 * alph^8 * faFac
+                    Drate["422_533^322^Inf"] = 4.9e-15 * alph^8 * faFac
+                    Drate["433_533^322^Inf"] = 5.2e-9 * alph^8 * faFac
+                    Drate["433_522^322^Inf"] = 1.4e-15 * alph^8 * faFac
+                    Drate["422_522^322^Inf"] = 2.4e-15 * alph^8 * faFac
+                end
             end
             
         end
@@ -123,6 +161,70 @@ function load_rate_coeffs(mu, M, a, f_a; non_rel=true, input_data="Me", solve_n4
             data = open(readdlm, "rate_sve/211_322_433_BH_NR.dat")
             itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
             Drate["211_322^433^BH"] = 10 .^itp(log10.(alph)) .* rP_ratio .* faFac
+            
+            data = open(readdlm, "rate_sve/322_411_433_BH_NR.dat")
+            itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
+            Drate["322_411^433^BH"] = 10 .^itp(log10.(alph)) .* rP_ratio .* faFac
+
+            
+            if solve_n5
+                data = open(readdlm, "rate_sve/322_322_544_BH_NR.dat")
+                itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
+                Drate["322_322^544^BH"] = 10 .^itp(log10.(alph)) .* rP_ratio .* faFac
+                
+                data = open(readdlm, "rate_sve/411_322_533_BH_NR.dat")
+                itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
+                Drate["322_411^533^BH"] = 10 .^itp(log10.(alph)) .* rP_ratio .* faFac
+                
+                data = open(readdlm, "rate_sve/422_322_544_BH_NR.dat")
+                itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
+                Drate["322_422^544^BH"] = 10 .^itp(log10.(alph)) .* rP_ratio .* faFac
+            
+                data = open(readdlm, "rate_sve/411_411_522_BH_NR.dat")
+                itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
+                Drate["411_411^522^BH"] = 10 .^itp(log10.(alph)) .* rP_ratio .* faFac
+                
+                data = open(readdlm, "rate_sve/522_322_544_BH_NR.dat")
+                itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
+                Drate["322_522^544^BH"] = 10 .^itp(log10.(alph)) .* rP_ratio .* faFac
+                
+                data = open(readdlm, "rate_sve/422_422_544_BH_NR.dat")
+                itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
+                Drate["422_422^544^BH"] = 10 .^itp(log10.(alph)) .* rP_ratio .* faFac
+                
+                data = open(readdlm, "rate_sve/522_422_544_BH_NR.dat")
+                itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
+                Drate["422_422^544^BH"] = 10 .^itp(log10.(alph)) .* rP_ratio .* faFac
+                
+                data = open(readdlm, "rate_sve/522_522_544_BH_NR.dat")
+                itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
+                Drate["522_522^544^BH"] = 10 .^itp(log10.(alph)) .* rP_ratio .* faFac
+                    
+                data = open(readdlm, "rate_sve/422_544_322_Inf_NR.dat")
+                itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
+                Drate["422_544^322^Inf"] = 10 .^itp(log10.(alph)) .* rP_ratio .* faFac
+
+                data = open(readdlm, "rate_sve/433_544_322_Inf_NR.dat")
+                itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
+                Drate["433_544^322^Inf"] = 10 .^itp(log10.(alph)) .* rP_ratio .* faFac
+                
+                data = open(readdlm, "rate_sve/422_533_322_Inf_NR.dat")
+                itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
+                Drate["422_533^322^Inf"] = 10 .^itp(log10.(alph)) .* rP_ratio .* faFac
+                
+                data = open(readdlm, "rate_sve/433_533_322_Inf_NR.dat")
+                itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
+                Drate["433_533^322^Inf"] = 10 .^itp(log10.(alph)) .* rP_ratio .* faFac
+                
+                data = open(readdlm, "rate_sve/433_522_322_Inf_NR.dat")
+                itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
+                Drate["433_522^322^Inf"] = 10 .^itp(log10.(alph)) .* rP_ratio .* faFac
+                
+                data = open(readdlm, "rate_sve/422_522_322_Inf_NR.dat")
+                itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
+                Drate["422_522^322^Inf"] = 10 .^itp(log10.(alph)) .* rP_ratio .* faFac
+                
+            end
 
         end
         
@@ -131,7 +233,7 @@ function load_rate_coeffs(mu, M, a, f_a; non_rel=true, input_data="Me", solve_n4
     return Drate
 end
 
-function key_to_indx(keyN; solve_n4=false)
+function key_to_indx(keyN; solve_n4=false, solve_n5=false)
     if keyN[9:10] == "GW"
         totN = 3
     else
@@ -181,7 +283,19 @@ function key_to_indx(keyN; solve_n4=false)
             elseif (nme == "GW")||(nme == "Inf")
                 outPix[i] = 0
             else
-                print("WHAT!? \t ", nme, "\n")
+                if solve_n5
+                    if nme == "522"
+                        outPix[i] = 6
+                    elseif nme == "533"
+                        outPix[i] = 7
+                    elseif nme == "544"
+                        outPix[i] = 8
+                    else
+                        print("WHAT!? \t ", nme, "\n")
+                    end
+                else
+                    print("WHAT!? \t ", nme, "\n")
+                end
             end
         else
             if nme == "211"
