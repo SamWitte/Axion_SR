@@ -228,7 +228,9 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=true, solve
         end
     end
     
-    print("SR rates @ prod \t", SR_rates, "\n")
+    if debug
+        print("SR rates @ prod \t", SR_rates, "\n")
+    end
     
     rates = load_rate_coeffs(mu, M_BH, aBH, fa; non_rel=non_rel, input_data=input_data, solve_n4=solve_n4, solve_n5=solve_n5)
     turn_off = []

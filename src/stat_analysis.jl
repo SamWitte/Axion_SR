@@ -56,9 +56,9 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
             MassBH = nothing
             d_mass = nothing
             if p_or_neg == 0
-                d_mass = Normal(MassBH_c[i], MassBH_errU[i] .* 2)
+                d_mass = Normal(MassBH_c[i], MassBH_errU[i])
             else
-                d_mass = Normal(MassBH_c[i], MassBH_errD[i] .* 2)
+                d_mass = Normal(MassBH_c[i], MassBH_errD[i])
             end
             
             # print("looking for mass \n")
@@ -104,7 +104,7 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
                 
             alph = GNew .* MassBH .* 10 .^log_m #
             print("Mass and fa \t", 10 .^log_m, "\t", 10 .^log_f, "\n")
-            final_spin, final_mass = super_rad_check(MassBH, SpinBH, 10 .^log_m, 10 .^log_f, tau_max=maxtime, alpha_max_cut=alpha_max_cut, debug=false, solve_322=solve_322, impose_low_cut=impose_low_cut, input_data=input_data, solve_n4=solve_n4, solve_n5=solve_n5, stop_on_a=stop_on_a, eq_threshold=eq_threshold, abstol=abstol, non_rel=non_rel)
+            final_spin, final_mass = super_rad_check(MassBH, SpinBH, 10 .^log_m, 10 .^log_f, tau_max=maxtime, alpha_max_cut=alpha_max_cut, debug=true, solve_322=solve_322, impose_low_cut=impose_low_cut, input_data=input_data, solve_n4=solve_n4, solve_n5=solve_n5, stop_on_a=stop_on_a, eq_threshold=eq_threshold, abstol=abstol, non_rel=non_rel)
             print("Init/Final spin \t", SpinBH, "\t", final_spin, "\n")
             ### Likelihood part
             
@@ -128,11 +128,11 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
                 sum_loglike += -0.5 * (SpinBH_c[i] - final_spin).^2 / SpinBH_errD[i].^2
             end
             
-            if final_mass > MassBH_c[i]
-                sum_loglike += -0.5 * (MassBH_c[i] - final_mass).^2 / MassBH_errU[i].^2
-            else
-                sum_loglike += -0.5 * (MassBH_c[i] - final_mass).^2 / MassBH_errD[i].^2
-            end
+#            if final_mass > MassBH_c[i]
+#                sum_loglike += -0.5 * (MassBH_c[i] - final_mass).^2 / MassBH_errU[i].^2
+#            else
+#                sum_loglike += -0.5 * (MassBH_c[i] - final_mass).^2 / MassBH_errD[i].^2
+#            end
             
         end
     else
