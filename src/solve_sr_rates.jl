@@ -855,8 +855,8 @@ end
 
 function compute_gridded(mu, M, a, n, l, m; Ntot=200, iter=50, xtol=1e-7, npts=30, amin=0.0)
     a_max = a * 1.1 # safety, just in case upward fluctuation
-    if a_max > 0.998
-        a_max = 0.998
+    if a_max > maxSpin
+        a_max = maxSpin
     end
     
     output = zeros(npts)
