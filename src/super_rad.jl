@@ -55,9 +55,11 @@ end
 
 function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solve_322=true, impose_low_cut=0.01, return_all_info=false, input_data="Masha", solve_n4=false, solve_n5=false, eq_threshold=1e-4, stop_on_a=0, abstol=1e-30, non_rel=true)
 
+    default_reltol = 1e-3
     if !solve_n4
         idx_lvl = 2 # number of states
     else
+        default_reltol = 1e-3
         if !solve_n5
             idx_lvl = 5
         else
@@ -69,7 +71,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     
     
     e_init = 1.0 ./ (GNew .* M_BH.^2 .* M_to_eV) # unitless
-    default_reltol = 5e-3
+    
+    
     y0 = []
     reltol = []
     for i in 1:idx_lvl

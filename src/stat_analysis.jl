@@ -31,7 +31,7 @@ function log_probability(theta, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high; 
     return lp + log_likelihood(theta, data, tau_max=tau_max, alpha_max_cut=alpha_max_cut, use_input_table=use_input_table, solve_322=solve_322, impose_low_cut=impose_low_cut, max_mass_matrix=max_mass_matrix, input_data=input_data, solve_n4=solve_n4, solve_n5=solve_n5, stop_on_a=stop_on_a, eq_threshold=eq_threshold, abstol=abstol, non_rel=non_rel)
 end
 
-function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_table=true, solve_322=true, impose_low_cut=1e-100, max_mass_matrix=nothing, input_data="Masha", solve_n4=false, solve_n5=false, stop_on_a=0.0, eq_threshold=1e-100, abstol=1e-30, non_rel=true)
+function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_table=true, solve_322=true, impose_low_cut=1e-100, max_mass_matrix=nothing, input_data="Masha", solve_n4=false, solve_n5=false, stop_on_a=0.0, eq_threshold=1e-100, abstol=1e-30, non_rel=true, debug=false)
     
     log_m, log_f = theta
     sum_loglike = 0.0
@@ -108,6 +108,9 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
                 
             alph = GNew .* MassBH .* 10 .^log_m #
             print("Mass and fa \t", 10 .^log_m, "\t", 10 .^log_f, "\n")
+            if debug
+                print(MassBH, "\t", SpinBH, "\n")
+            end
             final_spin, final_mass = super_rad_check(MassBH, SpinBH, 10 .^log_m, 10 .^log_f, tau_max=maxtime, alpha_max_cut=alpha_max_cut, debug=false, solve_322=solve_322, impose_low_cut=impose_low_cut, input_data=input_data, solve_n4=solve_n4, solve_n5=solve_n5, stop_on_a=stop_on_a, eq_threshold=eq_threshold, abstol=abstol, non_rel=non_rel)
             print("Init/Final spin \t", SpinBH, "\t", final_spin, "\n\n")
             ### Likelihood part

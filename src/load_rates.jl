@@ -78,12 +78,12 @@ function load_rate_coeffs(mu, M, a, f_a; non_rel=true, input_data="Me", solve_n4
                 if solve_n5
                     Drate["322_322^544^BH"] = 1.9e-9 * alph^11 * faFac * rP
                     Drate["322_411^533^BH"] = 2.0e-8 * alph^11 * faFac * rP
-                    Drate["322_422^544^BH"] = 1.3e-11 * alph^11 * faFac * rP
-                    Drate["411_411^522^BH"] = 9.0e-11 * alph^11 * faFac * rP
+                    Drate["322_422^544^BH"] = 1.3e-11 * alph^11 * faFac * rP #
+                    Drate["411_411^522^BH"] = 9.0e-11 * alph^11 * faFac * rP #
                     Drate["322_522^544^BH"] = 3.4e-12 * alph^7 * faFac * rP
-                    Drate["422_422^544^BH"] = 2.3e-9 * alph^11 * faFac * rP
+                    Drate["422_422^544^BH"] = 2.3e-9 * alph^11 * faFac * rP #
                     Drate["422_522^544^BH"] = 3.7e-14 * alph^7 * faFac * rP
-                    Drate["522_522^544^BH"] = 2.7e-13 * alph^7 * faFac * rP
+                    Drate["522_522^544^BH"] = 2.7e-13 * alph^7 * faFac * rP #
                     
                     Drate["422_544^322^Inf"] = 5.0e-16 * alph^8 * faFac
                     Drate["433_544^322^Inf"] = 1.4e-15 * alph^8 * faFac

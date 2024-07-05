@@ -41,7 +41,7 @@ function parse_commandline()
             
         "--one_BH"
             arg_type = String
-            default = "" # CygX1, M33X7, nothing
+            default = "" # Cyg_X1, M33X7, nothing
             
         "--LowMass"
             arg_type = Bool
