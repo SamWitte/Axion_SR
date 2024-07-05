@@ -59,7 +59,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     if !solve_n4
         idx_lvl = 2 # number of states
     else
-        default_reltol = 1e-3
+        default_reltol = 5e-3
         if !solve_n5
             idx_lvl = 5
         else
@@ -417,14 +417,18 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
                     short = round.(state[end-1000:end], digits=1)
                     cnt_extrm = 0
                     cnt_extrm += sum(abs.(diff(sign.(short[2:end] .- short[1:end-1])))) / 2
+
                     if cnt_extrm > 10
                         return true
                     end
-                    
                 end
+                
+                
             end
-            return false
+            
         end
+        
+        return false
     end
     
     function affect_oscillating!(integrator)
@@ -448,6 +452,36 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     sign_flip = []
     for i in 1:idx_lvl
         append!(sign_flip, false)
+    end
+    
+    
+    function check_stationary(u, t, integrator)
+         if length(integrator.sol.t) < 3000
+            return false
+        end
+        cnt_station = 0
+        
+        for i in 1:idx_lvl
+            state = [integrator.sol.u[j][i] for j in 1:length(integrator.sol.u)]
+            short = round.(state[end-1000:end], digits=2)
+            
+            cngs = sum(diff(short))
+            if cngs == 0
+                cnt_station += 1
+            end
+        end
+        if cnt_station == idx_lvl
+            return true
+        else
+            return false
+        end
+        
+    end
+    
+    function affect_stationary!(integrator)
+        for i in 1:idx_lvl
+            turn_off[i] = true
+        end
     end
     
     #### CALLBACK 2
@@ -659,10 +693,11 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         print("Time guess \t", dt_guess, "\n")
     end
 
+    cback_station = DiscreteCallback(check_stationary, affect_stationary!, save_positions=(false, true))
     cback_osc = DiscreteCallback(check_oscillating, affect_oscillating!, save_positions=(false, true))
     cbackdt = DiscreteCallback(check_timescale, affect_timescale!, save_positions=(false, true))
     cbackspin = DiscreteCallback(check_spin, affect_spin!, save_positions=(false, true))
-    cbset = CallbackSet(cbackspin, cbackdt, cback_osc)
+    cbset = CallbackSet(cbackspin, cbackdt, cback_osc, cback_station)
     
     if solve_n4
         prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=reltol, abstol=1e-10)

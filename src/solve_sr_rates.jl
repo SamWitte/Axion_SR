@@ -152,7 +152,7 @@ function freq_shifts(mu, M, a, n1, l1, m1, n2, l2, m2;  rpts=500, rmaxT=100, Nan
 
 end
 
-function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=10, rpts=2000, rmaxT=100, inf_nr=true, Nang=100000, Npts_Bnd=1000, debug=false, include_cont=true, Ntot_safe=5000, sve_for_test=false, bnd_thresh=1e-3)
+function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=10, rpts=2000, rmaxT=100, inf_nr=true, Nang=100000, Npts_Bnd=1000, debug=false, include_cont=true, Ntot_safe=5000, sve_for_test=false, bnd_thresh=1e-3, use_analytic=false)
     
     rp = 1 + sqrt.(1 - a.^2)
     alph = mu * GNew * M
@@ -171,10 +171,14 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=10, rpts=
     rmax = rmaxT ./ qmax
     rlist = 10 .^(range(log10.(rp), log10.(rmax), rpts))
     
-    rl, r1, erg_1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true, Ntot_safe=Ntot_safe)
-    itp = LinearInterpolation(log10.(rl), log10.(r1), extrapolation_bc=Line())
-    rf_1 = 10 .^itp(log10.(rlist))
-    # rf_1 = radial_bound_NR(n1, l1, m1, mu, M, rlist)
+    if !use_analytic
+        rl, r1, erg_1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true, Ntot_safe=Ntot_safe)
+        itp = LinearInterpolation(log10.(rl), log10.(r1), extrapolation_bc=Line())
+        rf_1 = 10 .^itp(log10.(rlist))
+    else
+        rf_1 = radial_bound_NR(n1, l1, m1, mu, M, rlist)
+        erg_1 = erg_1G .* GNew * M
+    end
     
 
     
@@ -182,17 +186,24 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=10, rpts=
         rf_2 = rf_1
         erg_2 = erg_1
     else
-        rl, r2, erg_2 = solve_radial(mu, M, a, n2, l2, m2; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true, Ntot_safe=Ntot_safe)
-        itp = LinearInterpolation(log10.(rl), log10.(r2), extrapolation_bc=Line())
-        rf_2 = 10 .^itp(log10.(rlist))
-        # rf_2 = radial_bound_NR(n2, l2, m2, mu, M, rlist)
+        if !use_analytic
+            rl, r2, erg_2 = solve_radial(mu, M, a, n2, l2, m2; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true, Ntot_safe=Ntot_safe)
+            itp = LinearInterpolation(log10.(rl), log10.(r2), extrapolation_bc=Line())
+            rf_2 = 10 .^itp(log10.(rlist))
+        else
+            rf_2 = radial_bound_NR(n2, l2, m2, mu, M, rlist)
+            erg_2 = erg_2G .* GNew * M
+        end
     end
 
-    
-    rl, r3, erg_3 = solve_radial(mu, M, a, n3, l3, m3; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true, Ntot_safe=Ntot_safe)
-    itp = LinearInterpolation(log10.(rl), log10.(r3), extrapolation_bc=Line())
-    rf_3 = 10 .^itp(log10.(rlist))
-    # rf_3 = radial_bound_NR(n3, l3, m3, mu, M, rlist)
+    if !use_analytic
+        rl, r3, erg_3 = solve_radial(mu, M, a, n3, l3, m3; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true, Ntot_safe=Ntot_safe)
+        itp = LinearInterpolation(log10.(rl), log10.(r3), extrapolation_bc=Line())
+        rf_3 = 10 .^itp(log10.(rlist))
+    else
+        rf_3 = radial_bound_NR(n3, l3, m3, mu, M, rlist)
+        erg_3 = erg_3G .* GNew * M
+    end
     
 
     erg_ind = erg_1 .+ erg_2 - erg_3
