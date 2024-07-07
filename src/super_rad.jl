@@ -470,9 +470,17 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
                 cnt_station += 1
             end
         end
-        if cnt_station == idx_lvl
+        
+        state = [integrator.sol.u[j][spinI] for j in 1:length(integrator.sol.u)]
+        short = round.(state[end-1000:end], digits=2)
+        cngs = sum(diff(short))
+            
+        if (cnt_station == idx_lvl)&&(cngs == 0)
             return true
         else
+            for i in 1:idx_lvl
+                turn_off[i] = false
+            end
             return false
         end
         
@@ -698,6 +706,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     cbackdt = DiscreteCallback(check_timescale, affect_timescale!, save_positions=(false, true))
     cbackspin = DiscreteCallback(check_spin, affect_spin!, save_positions=(false, true))
     cbset = CallbackSet(cbackspin, cbackdt, cback_osc, cback_station)
+    # cbset = CallbackSet(cbackspin, cbackdt, cback_osc)
     
     if solve_n4
         prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=reltol, abstol=1e-10)

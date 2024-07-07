@@ -96,7 +96,7 @@ function load_rate_coeffs(mu, M, a, f_a; non_rel=true, input_data="Me", solve_n4
                     Drate["533_544^322^Inf"] = 1.8e-10 * alph^8 * faFac
                     Drate["544_544^322^Inf"] = 4.3e-11 * alph^8 * faFac
                     Drate["522_533^322^Inf"] = 4.4e-10 * alph^8 * faFac
-                    Drate["533_533^322^Inf"] = 1.3e-9 * alph^8 * faFac
+                    Drate["533_533^322^Inf"] = 3.1e-10 * alph^8 * faFac
                     Drate["522_522^322^Inf"] = 1.6e-10 * alph^8 * faFac
                 end
             end
@@ -209,27 +209,56 @@ function load_rate_coeffs(mu, M, a, f_a; non_rel=true, input_data="Me", solve_n4
                     
                 data = open(readdlm, "rate_sve/422_544_322_Inf_NR.dat")
                 itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
-                Drate["422_544^322^Inf"] = 10 .^itp(log10.(alph)) .* rP_ratio .* faFac
+                Drate["422_544^322^Inf"] = 10 .^itp(log10.(alph))  .* faFac
 
                 data = open(readdlm, "rate_sve/433_544_322_Inf_NR.dat")
                 itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
-                Drate["433_544^322^Inf"] = 10 .^itp(log10.(alph)) .* rP_ratio .* faFac
+                Drate["433_544^322^Inf"] = 10 .^itp(log10.(alph))  .* faFac
                 
                 data = open(readdlm, "rate_sve/422_533_322_Inf_NR.dat")
                 itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
-                Drate["422_533^322^Inf"] = 10 .^itp(log10.(alph)) .* rP_ratio .* faFac
+                Drate["422_533^322^Inf"] = 10 .^itp(log10.(alph))  .* faFac
                 
                 data = open(readdlm, "rate_sve/433_533_322_Inf_NR.dat")
                 itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
-                Drate["433_533^322^Inf"] = 10 .^itp(log10.(alph)) .* rP_ratio .* faFac
+                Drate["433_533^322^Inf"] = 10 .^itp(log10.(alph))  .* faFac
                 
                 data = open(readdlm, "rate_sve/433_522_322_Inf_NR.dat")
                 itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
-                Drate["433_522^322^Inf"] = 10 .^itp(log10.(alph)) .* rP_ratio .* faFac
+                Drate["433_522^322^Inf"] = 10 .^itp(log10.(alph))  .* faFac
                 
                 data = open(readdlm, "rate_sve/422_522_322_Inf_NR.dat")
                 itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
-                Drate["422_522^322^Inf"] = 10 .^itp(log10.(alph)) .* rP_ratio .* faFac
+                Drate["422_522^322^Inf"] = 10 .^itp(log10.(alph))  .* faFac
+                
+                
+                
+                data = open(readdlm, "rate_sve/522_544_322_Inf_NR.dat")
+                itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
+                Drate["522_544^322^Inf"] = 10 .^itp(log10.(alph))  .* faFac
+                
+                data = open(readdlm, "rate_sve/533_544_322_Inf_NR.dat")
+                itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
+                Drate["533_544^322^Inf"] = 10 .^itp(log10.(alph))  .* faFac
+
+
+                data = open(readdlm, "rate_sve/544_544_322_Inf_NR.dat")
+                itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
+                Drate["544_544^322^Inf"] = 10 .^itp(log10.(alph))  .* faFac
+                
+                
+                data = open(readdlm, "rate_sve/522_533_322_Inf_NR.dat")
+                itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
+                Drate["522_533^322^Inf"] = 10 .^itp(log10.(alph))  .* faFac
+                
+                data = open(readdlm, "rate_sve/533_533_322_Inf_NR.dat")
+                itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
+                Drate["533_533^322^Inf"] = 10 .^itp(log10.(alph))  .* faFac
+                
+                data = open(readdlm, "rate_sve/522_522_322_Inf_NR.dat")
+                itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
+                Drate["522_522^322^Inf"] = 10 .^itp(log10.(alph))  .* faFac
+                
                 
             end
 
