@@ -474,9 +474,13 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         state = [integrator.sol.u[j][spinI] for j in 1:length(integrator.sol.u)]
         short = round.(state[end-1000:end], digits=2)
         cngs = sum(diff(short))
+        
+        state = [integrator.sol.u[j][massI] for j in 1:length(integrator.sol.u)]
+        short = round.(state[end-1000:end], digits=2)
+        cngs2 = sum(diff(short))
             
         if (cnt_station == idx_lvl)
-            if (cngs == 0)
+            if (cngs == 0)&&(cngs2 == 0)
                 return true
             else
                 for i in 1:idx_lvl
