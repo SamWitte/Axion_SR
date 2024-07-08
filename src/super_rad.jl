@@ -417,8 +417,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
                     short = round.(state[end-1000:end], digits=1)
                     cnt_extrm = 0
                     cnt_extrm += sum(abs.(diff(sign.(short[2:end] .- short[1:end-1])))) / 2
-
-                    if cnt_extrm > 10
+                    maxV = maximum(short)
+                    if (cnt_extrm > 10)&&(maxV > log.(1e-40))
                         return true
                     end
                 end
@@ -437,9 +437,9 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             
             short = round.(state[end-1000:end], digits=1)
             cnt_extrm = 0
-            
+            maxV = maximum(short)
             cnt_extrm += sum(abs.(diff(sign.(short[2:end] .- short[1:end-1])))) / 2
-            if (cnt_extrm > 10)&&(integrator.u[i] < log.(1e-60))&&(turn_off[i] == false)
+            if (cnt_extrm > 10)&&(integrator.u[i] < log.(1e-60))&&(turn_off[i] == false)&&(maxV > log.(1e-40))
                 turn_off[i] = true
                 integrator.u[i] = log.(e_init)
 #            else
@@ -463,7 +463,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         
         for i in 1:idx_lvl
             state = [integrator.sol.u[j][i] for j in 1:length(integrator.sol.u)]
-            short = round.(state[end-1000:end], digits=2)
+            short = round.(state[end-1000:end], digits=1)
             
             cngs = sum(diff(short))
             if cngs == 0
@@ -475,12 +475,16 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         short = round.(state[end-1000:end], digits=2)
         cngs = sum(diff(short))
             
-        if (cnt_station == idx_lvl)&&(cngs == 0)
-            return true
-        else
-            for i in 1:idx_lvl
-                turn_off[i] = false
+        if (cnt_station == idx_lvl)
+            if (cngs == 0)
+                return true
+            else
+                for i in 1:idx_lvl
+                    turn_off[i] = false
+                end
+                return false
             end
+        else
             return false
         end
         
@@ -705,7 +709,10 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     cback_osc = DiscreteCallback(check_oscillating, affect_oscillating!, save_positions=(false, true))
     cbackdt = DiscreteCallback(check_timescale, affect_timescale!, save_positions=(false, true))
     cbackspin = DiscreteCallback(check_spin, affect_spin!, save_positions=(false, true))
+    
+    
     cbset = CallbackSet(cbackspin, cbackdt, cback_osc, cback_station)
+    # cbset = CallbackSet(cbackspin, cbackdt, cback_station)
     # cbset = CallbackSet(cbackspin, cbackdt, cback_osc)
     
     if solve_n4
@@ -765,6 +772,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     
     if (sol.t[end] != t_max)&&(spinBH[end] > stop_on_a)
         print("Fail? Final time only \t", sol.t[end], "\n")
+        return 0.0, MassB[end]
     end
     if isnan(spinBH[end])
         spinBH = spinBH[.!isnan.(spinBH)]
