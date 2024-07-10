@@ -57,6 +57,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
 
     default_reltol = 1e-3
     if !solve_n4
+        default_reltol = 1e-5
         idx_lvl = 2 # number of states
     else
         default_reltol = 5e-3
@@ -404,24 +405,31 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         return
     end
     
-    
+    state_check = 3000
+    osc_thresh = 2
     #### CALLBACK 1
     function check_oscillating(u, t, integrator)
-    
-        if length(integrator.sol.t) < 3000
+        
+        if length(integrator.sol.t) <= state_check
             return false
         else
             for i in 1:idx_lvl
-                if u[i] < log.(1e-60)
-                    state = [integrator.sol.u[j][i] for j in 1:length(integrator.sol.u)]
-                    short = round.(state[end-1000:end], digits=1)
-                    cnt_extrm = 0
-                    cnt_extrm += sum(abs.(diff(sign.(short[2:end] .- short[1:end-1])))) / 2
-                    maxV = maximum(short)
-                    if (cnt_extrm > 10)&&(maxV > log.(1e-40))
-                        return true
-                    end
+                
+                state = [integrator.sol.u[j][i] for j in 1:length(integrator.sol.u)]
+                short = round.(state[end-state_check:end], digits=1)
+                cnt_extrm = 0
+                cnt_extrm += sum(abs.(diff(sign.(short[2:end] .- short[1:end-1])))) / 2
+                
+                maxV = maximum(short)
+                minV = minimum(short)
+                medianV = median(short)
+                
+                cnd1 = (maxV - medianV) > osc_thresh
+                cnd2 = (medianV - minV) > osc_thresh
+                if (cnt_extrm > 10)&&cnd1&&cnd2
+                    return true
                 end
+                
                 
                 
             end
@@ -435,13 +443,20 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         for i in 1:idx_lvl
             state = [integrator.sol.u[j][i] for j in 1:length(integrator.sol.u)]
             
-            short = round.(state[end-1000:end], digits=1)
+            short = round.(state[end-state_check:end], digits=1)
             cnt_extrm = 0
             maxV = maximum(short)
             cnt_extrm += sum(abs.(diff(sign.(short[2:end] .- short[1:end-1])))) / 2
-            if (cnt_extrm > 10)&&(integrator.u[i] < log.(1e-60))&&(turn_off[i] == false)&&(maxV > log.(1e-40))
+            maxV = maximum(short)
+            minV = minimum(short)
+            medianV = median(short)
+            
+            cnd1 = (maxV - medianV) > osc_thresh
+            cnd2 = (medianV - minV) > osc_thresh
+            
+            if (cnt_extrm > 10)&&cnd2&&cnd2&&(turn_off[i] == false)
                 turn_off[i] = true
-                integrator.u[i] = log.(e_init)
+#                 integrator.u[i] = log.(e_init)
 #            else
 #                print(i, "\t", turn_off[i], "\n")
 #                turn_off[i] = false
@@ -463,10 +478,10 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         
         for i in 1:idx_lvl
             state = [integrator.sol.u[j][i] for j in 1:length(integrator.sol.u)]
-            short = round.(state[end-1000:end], digits=1)
+            short = round.(state[end-1000:end], digits=3)
             
             cngs = sum(diff(short))
-            if cngs == 0
+            if (cngs == 0)
                 cnt_station += 1
             end
         end
@@ -478,9 +493,21 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         state = [integrator.sol.u[j][massI] for j in 1:length(integrator.sol.u)]
         short = round.(state[end-1000:end], digits=2)
         cngs2 = sum(diff(short))
+        
+        check_SR = 0
+        ## check if superrad is turning on
+        for i in 1:idx_lvl
+            t_SR = (SR_rates[i] ./ hbar .* 3.15e7).^(-1)
+            if (t > t_SR)&&(integrator.sol.t[end-2] < t_SR)
+                for i in 1:idx_lvl
+                    turn_off[i] = false
+                end
+                check_SR = 1
+            end
+        end
             
         if (cnt_station == idx_lvl)
-            if (cngs == 0)&&(cngs2 == 0)
+            if (cngs == 0)&&(cngs2 == 0)&&(check_SR == 0)
                 return true
             else
                 for i in 1:idx_lvl
@@ -715,7 +742,16 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     cbackspin = DiscreteCallback(check_spin, affect_spin!, save_positions=(false, true))
     
     
-    cbset = CallbackSet(cbackspin, cbackdt, cback_osc, cback_station)
+    if solve_n4
+        if solve_n5
+            cbset = CallbackSet(cbackspin, cbackdt, cback_station)
+        else
+            cbset = CallbackSet(cbackspin, cbackdt, cback_station, cback_osc)
+            # cbset = CallbackSet(cbackspin, cbackdt)
+        end
+    else
+        cbset = CallbackSet(cbackspin, cbackdt, cback_station)
+    end
     # cbset = CallbackSet(cbackspin, cbackdt, cback_station)
     # cbset = CallbackSet(cbackspin, cbackdt, cback_osc)
     
@@ -725,7 +761,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         sol = solve(prob, Rosenbrock23(autodiff=false), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e6, dtmin=(dt_guess / 1e5), force_dtmin=true)
         #sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
     else
-        prob = ODEProblem(RHS_ax!, y0, tspan, Mvars,  reltol=reltol, abstol=1e-6)
+        prob = ODEProblem(RHS_ax!, y0, tspan, Mvars,  reltol=reltol, abstol=1e-10)
         sol = solve(prob, Rosenbrock23(autodiff=false), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e6)
     end
     
