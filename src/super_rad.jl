@@ -53,11 +53,11 @@ function isapproxsigfigs(a, b, precision)
     return round(a, sigdigits=precision) == round(b, sigdigits=precision)
 end
 
-function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solve_322=true, impose_low_cut=0.01, return_all_info=false, input_data="Masha", solve_n4=false, solve_n5=false, eq_threshold=1e-4, stop_on_a=0, abstol=1e-30, non_rel=true)
+function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solve_322=true, impose_low_cut=0.01, return_all_info=false, input_data="Masha", solve_n4=false, solve_n5=false, eq_threshold=1e-4, stop_on_a=0, abstol=1e-30, non_rel=true, max_m_2=false)
 
     default_reltol = 1e-3
     if !solve_n4
-        default_reltol = 1e-5
+        default_reltol = 1e-3
         idx_lvl = 2 # number of states
     else
         default_reltol = 5e-3
@@ -336,12 +336,16 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         for i in 1:idx_lvl
             if u_real[i] < e_init
                 du[i] = SR_rates[i] .* e_init ./ mu
-                du[spinI] += - m_list[i] * SR_rates[i] .* e_init ./ mu
-                du[massI] += - SR_rates[i] .* e_init ./ mu
+                if (!max_m_2)||(i <= 2)
+                    du[spinI] += - m_list[i] * SR_rates[i] .* e_init ./ mu
+                    du[massI] += - SR_rates[i] .* e_init ./ mu
+                end
             else
                 du[i] = SR_rates[i] .* u_real[i] ./ mu
-                du[spinI] += - m_list[i] * SR_rates[i] .*  u_real[i] ./ mu
-                du[massI] += - SR_rates[i] .*  u_real[i] ./ mu
+                if (!max_m_2)||(i <= 2)
+                    du[spinI] += - m_list[i] * SR_rates[i] .*  u_real[i] ./ mu
+                    du[massI] += - SR_rates[i] .*  u_real[i] ./ mu
+                end
             end
         end
         
@@ -400,6 +404,10 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             if turn_off[i]
                 du[i] *= 0.0
             end
+        end
+        
+        if max_m_2
+            du[massI] *= 0.0
         end
         
         return
@@ -478,7 +486,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         
         for i in 1:idx_lvl
             state = [integrator.sol.u[j][i] for j in 1:length(integrator.sol.u)]
-            short = round.(state[end-1000:end], digits=3)
+            short = round.(state[end-1000:end], digits=1)
             
             cngs = sum(diff(short))
             if (cngs == 0)
@@ -744,7 +752,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     
     if solve_n4
         if solve_n5
-            cbset = CallbackSet(cbackspin, cbackdt, cback_station)
+            # cbset = CallbackSet(cbackspin, cbackdt, cback_station)
+            cbset = CallbackSet(cbackspin, cbackdt, cback_station, cback_osc)
         else
             cbset = CallbackSet(cbackspin, cbackdt, cback_station, cback_osc)
             # cbset = CallbackSet(cbackspin, cbackdt)
