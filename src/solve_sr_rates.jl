@@ -148,7 +148,7 @@ function freq_shifts(mu, M, a, n1, l1, m1, n2, l2, m2;  rpts=500, rmaxT=100, Nan
     
     delt_om = -1.0 ./ (4 * mu^2) .* radial_int .* CG .* mult_fac
     
-    return Float64(real(alph.^2 .* delt_om .* epsil_2)) # \delta Omega [Needs to be multiplied by (M_pl / f_a)^2]
+    return Float64(real(alph.^2 .* delt_om .* epsil_2)) # \delta Omega [Needs to be multiplied by (M_pl / f_a)^2], do dF / (alpha^5 * mu) to get coefficient hitting epsilon_x
 
 end
 
@@ -586,7 +586,7 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
     end
 end
 
-function radial_inf(erg, mu, M, a, l, m; rpts=1000, rmax_val=1e4, debug=false, iter=50, xtol=1e-120, ftol=1e-120, sve_for_test=false, fnm="test_store/test_radial")
+function radial_inf(erg, mu, M, a, l, m; rpts=1000, rmax_val=1e4, debug=false, iter=50, xtol=1e-120, ftol=1e-120, sve_for_test=false, fnm="test_store/test_radial", is_infin=true)
     # r, erg, unitless
     
     
@@ -595,7 +595,7 @@ function radial_inf(erg, mu, M, a, l, m; rpts=1000, rmax_val=1e4, debug=false, i
     h = r[2] .- r[1]
     
     alph = mu .* GNew .* M
-    k = sqrt.(erg.^2 .- alph.^2)
+    k = sqrt.(Complex.(erg.^2 .- alph.^2))
     b = sqrt.(1 - a.^2)
     gam2 = - a * sqrt.(erg.^2 .- alph.^2)
     LLM = l * (l + 1)
@@ -607,7 +607,8 @@ function radial_inf(erg, mu, M, a, l, m; rpts=1000, rmax_val=1e4, debug=false, i
     delt = r.^2 .- 2 .* r .+ a.^2
     dr_delt = 2 .* r .- 2
     # rhs = Float64.((erg.^2 .* (r.^2 .+ a.^2).^2 .- 4 .* a .* m .* erg .* r .+ m.^2 .* a.^2) ./ delt .- (erg.^2 .* a.^2 .+ alph.^2 .* r.^2 .+ LLM))
-    rhs = real((erg.^2 .* (r.^2 .+ a.^2).^2 .- 4 .* a .* m .* erg .* r .+ m.^2 .* a.^2) ./ delt .- (erg.^2 .* a.^2 .+ alph.^2 .* r.^2 .+ LLM))
+    # rhs = real((erg.^2 .* (r.^2 .+ a.^2).^2 .- 4 .* a .* m .* erg .* r .+ m.^2 .* a.^2) ./ delt .- (erg.^2 .* a.^2 .+ alph.^2 .* r.^2 .+ LLM))
+    rhs = ((erg.^2 .* (r.^2 .+ a.^2).^2 .- 4 .* a .* m .* erg .* r .+ m.^2 .* a.^2) ./ delt .- (erg.^2 .* a.^2 .+ alph.^2 .* r.^2 .+ LLM))
     
     # Create the second derivative matrix (Laplacian matrix), and first derivative
     D2 = zeros(rpts, rpts)
@@ -644,7 +645,8 @@ function radial_inf(erg, mu, M, a, l, m; rpts=1000, rmax_val=1e4, debug=false, i
     function wrapper!(F, x)
         # temp = (D2 * x) .+ rhs .* x
         temp = x.^(-1) .* (D2 * x) .+ rhs
-        F .= real(temp)
+        # F .= real(temp) .+ imag(temp)
+        F .= abs.(temp)
         
         
         # real_r = x[1:Int(length(x)/2)]
@@ -661,84 +663,61 @@ function radial_inf(erg, mu, M, a, l, m; rpts=1000, rmax_val=1e4, debug=false, i
     
     # normalize solution!
     trapz(y,x) = @views sum(((y[1:end-1].+y[2:end])/2).*(x[2:end].-x[1:end-1]))
-    
-    # r_in = vcat(Float64.(real(rGuess)), Float64.(imag(rGuess)))
-    # r_in = vcat(real(rGuess), imag(rGuess))
+  
     r_in = real(rGuess)
     
     sol = nlsolve(wrapper!, r_in, show_trace=debug, autodiff = :forward, xtol=xtol, ftol=ftol, iterations=iter)
     full_out = sol.zero
     
-    # realP = sol.zero[1:Int(length(r_in) / 2)]
-    # imP = sol.zero[Int(length(r_in) / 2)+1:end]
-    # full_out = realP .+ im .* imP
-    # print(maximum(r_in), "\n")
-    # print(maximum(full_out), "\t", maximum(real(radial_inf_NR(k, l, mu, M, r))), "\n")
-    
-    # nm = trapz(full_out .* conj(full_out) .* r.^2, r)
-    # nm2 = trapz(r_in .* conj(r_in) .* r.^2, r)
-    # full_out .*= sqrt.(2 * pi ./ nm)
-    # print("test \t", nm, "\t", nm2, "\t", k, "\n\n")
-    
-    ## need to normalize
-    done_search=false
-    found1=false
-    found2=false
-    cnt1 = 0
-    cnt2 = 0
-    
-    indx = rpts
-    while !done_search
-        if sign(real(full_out[indx])) != sign(real(full_out[indx-1]))
-            cnt1 += 1
+   
+    if is_infin
+        ## need to normalize
+        done_search=false
+        found1=false
+        found2=false
+        cnt1 = 0
+        cnt2 = 0
+        
+        indx = rpts
+        while !done_search
+            if sign(real(full_out[indx])) != sign(real(full_out[indx-1]))
+                cnt1 += 1
+            end
+            if sign(real(r_in[indx])) != sign(real(r_in[indx-1]))
+                cnt2 += 1
+            end
+            
+            if cnt1 > 4
+                found1 = true
+            end
+            if cnt2 > 4
+                found2 = true
+            end
+                
+            indx -= 1
+            if found1&&found2
+                done_search = true
+            end
         end
-        if sign(real(r_in[indx])) != sign(real(r_in[indx-1]))
-            cnt2 += 1
+        nm1 = maximum(abs.(full_out[indx:end]))
+        nm2 = maximum(abs.(r_in[indx:end]))
+        
+        full_out .*= nm2 ./ nm1
+        
+        if sve_for_test
+            writedlm(fnm*"_real.dat", hcat(r, real(full_out)))
+            writedlm(fnm*"_imag.dat", hcat(r, imag(full_out)))
         end
         
-        if cnt1 > 4
-            found1 = true
-        end
-        if cnt2 > 4
-            found2 = true
-        end
-            
-        indx -= 1
-        if found1&&found2
-            done_search = true
-        end
+        return r, full_out
+    else
+        
     end
-    nm1 = maximum(abs.(full_out[indx:end]))
-    nm2 = maximum(abs.(r_in[indx:end]))
-    
-    full_out .*= nm2 ./ nm1
-    
-    if sve_for_test
-        writedlm(fnm*"_real.dat", hcat(r, real(full_out)))
-        writedlm(fnm*"_imag.dat", hcat(r, imag(full_out)))
-    end
-    
-    return r, full_out
 end
 
 function spheroidals(l, m, a, erg)
     # pass erg in normalized units
     Zlm = spin_weighted_spheroidal_harmonic(0, l, m, a .* erg)
-    
-    ### normalization check
-#    Nang = 10000
-#    thetaV = acos.(1.0 .- 2.0 .* rand(Nang))
-#    phiV = rand(Nang) .* 2*pi
-#    function func_ang(x)
-#        return real(Zlm.(x[1], x[2]) .* conj(Zlm.(x[1], x[2]))) #
-#    end
-#    CG = 0.0
-    
-#    for i in 1:Nang
-#        CG += func_ang([thetaV[i], phiV[i]])
-#    end
-#    CG *= 4*pi / Nang
-#    print(CG, "\n")
     return Zlm
 end
 
@@ -781,9 +760,10 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=200, iter=50, x
         
         if !QNM
             SR211_g = sr_rates(n, l, m, alph_ev ./ (GNew * M), M, a)
-            if SR211_g == 0
-                SR211_g = -1e-8 .* mu
-            end
+#            if SR211_g == 0
+#                SR211_g = 1e-1 .* mu
+#            end
+#            print(SR211_g, "\n\n")
             w0 = (ergL(n, l, m, alph_ev ./ (GNew * M), M, a) .+ im * SR211_g) .* GNew * M
         else
             w0 = QNM_E .+ 0.0 * im
@@ -892,3 +872,133 @@ function generalized_laguerre(n, α, x)
     # return binomial(n + α, n) .* HypergeometricFunctions.M.(-n, α+1 , x)
 end
 
+function test_projection_scatter(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=20000, Npts_Bnd=4000, rmaxT=100, debug=false, Ntot_safe=5000, sve_for_test=false)
+    
+    rp = 1 + sqrt.(1 - a.^2)
+    alph = mu * GNew * M
+    
+    # approx energy estimates
+    # erg_1G = ergL(n1, l1, m1, mu, M, a)
+    # erg_2G = ergL(n2, l2, m2, mu, M, a)
+    # erg_3G = ergL(n3, l3, m3, mu, M, a)
+    # erg_pxy = (erg_1G + erg_2G - erg_3G) * GNew * M
+    
+    wR1, wI1 = find_im_part(mu, M, a, n1, l1, m1; return_both=true, for_s_rates=true)
+    wR2, wI2 = find_im_part(mu, M, a, n2, l2, m2; return_both=true, for_s_rates=true)
+    wR3, wI3 = find_im_part(mu, M, a, n3, l3, m3; return_both=true, for_s_rates=true)
+    erg_pxy = (wR1 + wR2 - wR3)
+    
+    qq = abs.(real(- sqrt.(alph.^2 .- erg_pxy.^2)))
+    rmax = rmaxT ./ qq
+    
+    # rlist = 10 .^(range(log10.(rp), log10.(rmax), rpts))
+    rlist = range(rp, rmax, rpts)
+    
+    theta_rand = 2 * acos.(sqrt.(rand(rpts)))
+    # r_rand = rand(rpts).^(1/3) * (rmax^3 ./ 3 - 1.0 / 3)^(1/3)
+    sampls = rand(rpts)
+    r_rand = rp .+ sampls .* (rmax .- rp)
+    exF = (rmax .- rp)
+    
+    alph = mu .* GNew .* M
+    
+    for i in 1:1
+        rl, r1, erg = solve_radial(mu, M, a, i, 0, 0; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true, Ntot_safe=Ntot_safe)
+        
+        itp_r = LinearInterpolation(log10.(Float64.(rl)), real(r1), extrapolation_bc=Line())
+        itp_im = LinearInterpolation(log10.(Float64.(rl)), imag(r1), extrapolation_bc=Line())
+        function rad_comp(r)
+            return itp_r(log10.(r)) .+ im * itp_im(log10.(r))
+        end
+        
+
+        #### TESTING
+        trapz(y,x) = @views sum(((y[1:end-1].+y[2:end])/2).*(x[2:end].-x[1:end-1]))
+        # erg = ergL(i, 0, 0, mu, M, a) .* GNew .* M
+        erg = erg_pxy
+        
+        r = LinRange(rp .* 1.01, rmax, rpts)
+        h = r[2] .- r[1]
+        
+        alph = mu .* GNew .* M
+        k = sqrt.(Complex.(erg.^2 .- alph.^2))
+                
+        delt = r.^2 .- 2 .* r .+ a.^2
+        dr_delt = 2 .* r .- 2
+        m = 0
+        # rhs = real((erg.^2 .* (r.^2 .+ a.^2).^2 .- 4 .* a .* m .* erg .* r .+ m.^2 .* a.^2) ./ delt .- (erg.^2 .* a.^2 .+ alph.^2 .* r.^2))
+        rhs = ((erg.^2 .* (r.^2 .+ a.^2).^2 .- 4 .* a .* m .* erg .* r .+ m.^2 .* a.^2) ./ delt .- (erg.^2 .* a.^2 .+ alph.^2 .* r.^2))
+        
+        # Create the second derivative matrix (Laplacian matrix), and first derivative
+        D2 = zeros(rpts, rpts)
+
+        # Fill the diagonal
+        for i in 2:rpts-1
+            D2[i, i-1] += 1.0 .* delt[i] ./ h^2
+            D2[i, i] += -2.0 .* delt[i] ./ h^2
+            D2[i, i+1] += 1.0 .* delt[i] ./ h^2
+            
+            D2[i, i+1] += 1.0 .* dr_delt[i] ./ (2 * h)
+            D2[i, i-1] += -1.0 .* dr_delt[i] ./ (2 * h)
+        end
+
+        # BNDRY TERMS
+        D2[1, 1] += -3.0 .* dr_delt[1] ./ (2 * h)
+        D2[1, 2] += 4.0 .* dr_delt[1] ./ (2 * h)
+        D2[1, 3] += -1.0 .* dr_delt[1] ./ (2 * h)
+        D2[rpts, rpts] += 3.0 .* dr_delt[rpts] ./ (2 * h)
+        D2[rpts, rpts - 1] += -4.0 .* dr_delt[rpts] ./ (2 * h)
+        D2[rpts, rpts - 2] += 1.0 .* dr_delt[rpts] ./ (2 * h)
+        
+        D2[1, 1] += 2.0 .* delt[1] ./ h.^3
+        D2[1, 2] += -5.0 .* delt[1] ./ h.^3
+        D2[1, 3] += 4.0 .* delt[1] ./ h.^3
+        D2[1, 4] += -1.0 .* delt[1] ./ h.^3
+        D2[rpts, rpts] += 2.0 .* delt[rpts] ./ h.^3
+        D2[rpts, rpts - 1] += -5.0 .* delt[rpts] ./ h.^3
+        D2[rpts, rpts - 2] += 4.0 .* delt[rpts] ./ h.^3
+        D2[rpts, rpts - 3] += -1.0 .* delt[rpts] ./ h.^3
+        
+        r_TEST = rad_comp(r)
+        temp = (D2 * r_TEST) .+ rhs .* r_TEST
+      
+        out = Float64(real(-trapz(temp .* conj(r_TEST) , r)))
+ 
+        ################
+        
+        
+        # writedlm("test_store/check_real_1.dat", hcat(real(rlist), float(real(itp_dr(log10.(rlist))))))
+        # writedlm("test_store/check_im_1.dat", hcat(real(rlist), float(imag(itp_dr(log10.(rlist))))))
+        # writedlm("test_store/check_real_2.dat", hcat(real(rlist), float(real(itp_dr2(log10.(rlist))))))
+        # writedlm("test_store/check_im_2.dat", hcat(real(rlist), float(imag(itp_dr2(log10.(rlist))))))
+        
+
+        # print(integrd, "\n")
+        if sve_for_test
+            writedlm("test_store/check_real_1.dat", hcat(real(r_rand), float(real(d_t2phi .+ dr_term .+ theta_term .+ mu_term .* Z_outC .* conj(rad_comp(r_rand))))))
+        end
+
+        
+        erg_out = ergL(i, 0, 0, mu, M, a)
+        erg_diff_pxy = -(erg_pxy.^2 .- (erg_out .* GNew .* M).^2)
+        
+        
+        
+#        if debug
+#            if i == 1
+#                print(i, "\t", -11 * alph^4 ./ 18, "\t", erg_diff_pxy, "\t", out, "\n")
+#            elseif i == 2
+#                print(i, "\t", 5 * alph^4 ./ 36, "\t", erg_diff_pxy, "\t", out, "\n")
+#            end
+#        end
+
+
+        return erg_diff_pxy, out
+        
+    end
+    
+    
+    
+
+    
+end
