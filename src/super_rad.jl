@@ -57,7 +57,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
 
     default_reltol = 1e-3
     if !solve_n4
-        default_reltol = 1e-3
+        default_reltol = 1e-4
         idx_lvl = 2 # number of states
     else
         default_reltol = 5e-3
@@ -771,7 +771,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         #sol = solve(prob, Euler(), dt=dt_guess, saveat=saveat, callback=cbset)
     else
         prob = ODEProblem(RHS_ax!, y0, tspan, Mvars,  reltol=reltol, abstol=1e-10)
-        sol = solve(prob, Rosenbrock23(autodiff=false), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e6)
+        sol = solve(prob, Rosenbrock23(autodiff=false), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e6, dtmin=(dt_guess / 1e5),  force_dtmin=true)
     end
     
     

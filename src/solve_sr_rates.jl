@@ -996,9 +996,89 @@ function test_projection_scatter(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; r
         return erg_diff_pxy, out
         
     end
-    
-    
-    
+end
 
+function direct_solve_radialL1(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=5000, Npts_Bnd=4000, rmaxT=100, debug=false, Ntot_safe=5000, sve_for_test=false,  iter=500, xtol=1e-30, ftol=1e-30)
+    
+    rp = 1 + sqrt.(1 - a.^2)
+    alph = mu * GNew * M
+    
+    erg_1G = ergL(n1, l1, m1, mu, M, a)
+    erg_2G = ergL(n2, l2, m2, mu, M, a)
+    erg_3G = ergL(n3, l3, m3, mu, M, a)
+    erg_pxy = erg_1G + erg_2G - erg_3G
+   
+    q = abs.(real(- sqrt.(abs.(alph.^2 .- (erg_pxy .* GNew .* M).^2))))
+    rmax = rmaxT ./ q
+    rlist = range(rp, rmax, rpts)
+    h = rlist[2] - rlist[1]
+    
+    rl, r1, erg_1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true)
+    itp = LinearInterpolation(log10.(rl), log10.(r1), extrapolation_bc=Line())
+    rf_1 = 10 .^itp(log10.(rlist))
+    
+    rl, r2, erg_2 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true)
+    itp = LinearInterpolation(log10.(rl), log10.(r2), extrapolation_bc=Line())
+    rf_2 = 10 .^itp(log10.(rlist))
+    
+    rl, r3, erg_3 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true)
+    itp = LinearInterpolation(log10.(rl), log10.(r3), extrapolation_bc=Line())
+    rf_3 = 10 .^itp(log10.(rlist))
+    
+    erg = (erg_1 + erg_2 - erg_3)
+    
+    delt = rlist.^2 .- 2 .* rlist .+ a.^2
+    dr_delt = 2 .* rlist .- 2
+    m = 0
+    rhs = ((erg.^2 .* (rlist.^2 .+ a.^2).^2 .- 4 .* a .* m .* erg .* rlist .+ m.^2 .* a.^2) ./ delt .- (erg.^2 .* a.^2 .+ alph.^2 .* rlist.^2))
+    
+    # Create the second derivative matrix (Laplacian matrix), and first derivative
+    D2 = zeros(rpts, rpts)
+
+    # Fill the diagonal
+    for i in 2:rpts-1
+        D2[i, i-1] += 1.0 .* delt[i] ./ h^2
+        D2[i, i] += -2.0 .* delt[i] ./ h^2
+        D2[i, i+1] += 1.0 .* delt[i] ./ h^2
+        
+        D2[i, i+1] += 1.0 .* dr_delt[i] ./ (2 * h)
+        D2[i, i-1] += -1.0 .* dr_delt[i] ./ (2 * h)
+    end
+
+    # BNDRY TERMS
+    D2[1, 1] += -3.0 .* dr_delt[1] ./ (2 * h)
+    D2[1, 2] += 4.0 .* dr_delt[1] ./ (2 * h)
+    D2[1, 3] += -1.0 .* dr_delt[1] ./ (2 * h)
+    D2[rpts, rpts] += 3.0 .* dr_delt[rpts] ./ (2 * h)
+    D2[rpts, rpts - 1] += -4.0 .* dr_delt[rpts] ./ (2 * h)
+    D2[rpts, rpts - 2] += 1.0 .* dr_delt[rpts] ./ (2 * h)
+    
+    D2[1, 1] += 2.0 .* delt[1] ./ h.^3
+    D2[1, 2] += -5.0 .* delt[1] ./ h.^3
+    D2[1, 3] += 4.0 .* delt[1] ./ h.^3
+    D2[1, 4] += -1.0 .* delt[1] ./ h.^3
+    D2[rpts, rpts] += 2.0 .* delt[rpts] ./ h.^3
+    D2[rpts, rpts - 1] += -5.0 .* delt[rpts] ./ h.^3
+    D2[rpts, rpts - 2] += 4.0 .* delt[rpts] ./ h.^3
+    D2[rpts, rpts - 3] += -1.0 .* delt[rpts] ./ h.^3
+    
+  
+    function wrapper!(F, x)
+        temp = (D2 * x) .+ rhs .* x .- (rf_1 .* rf_2 .* rf_3) ./ 6.0
+        F .= abs.(temp)
+    end
+    
+    rGuess = rf_1
+    
+    r_in = real(rGuess)
+    sol = nlsolve(wrapper!, r_in, show_trace=debug, autodiff = :forward, xtol=xtol, ftol=ftol, iterations=iter)
+    full_out = sol.zero
+    
+    trapz(y,x) = @views sum(((y[1:end-1].+y[2:end])/2).*(x[2:end].-x[1:end-1]))
+    nm = trapz(full_out .* conj(full_out) .* rlist.^2, rlist)
+    
+    zero_pt = (full_out ./ sqrt.(nm))
+    print(zero_pt, "\n")
+    
     
 end

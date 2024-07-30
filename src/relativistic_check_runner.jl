@@ -49,8 +49,10 @@ end
 
 parsed_args = parse_commandline()
 
-alphL = range(0.03, 1.0, 20);
-rpts=50000
+alphL = range(0.03, 1.0, 7);
+rpts=30000
+Npts_Bnd=4000
+Ntot_safe=50000
 
 n1=parsed_args["n1"];
 l1=parsed_args["l1"];
