@@ -998,7 +998,7 @@ function test_projection_scatter(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; r
     end
 end
 
-function direct_solve_radialL1(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=5000, Npts_Bnd=4000, rmaxT=100, debug=false, Ntot_safe=5000, sve_for_test=false,  iter=500, xtol=1e-30, ftol=1e-30)
+function direct_solve_radialL1(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, rmaxT=100, debug=false, Ntot_safe=5000, sve_for_test=false,  iter=10, xtol=1e-10, ftol=1e-10)
     
     rp = 1 + sqrt.(1 - a.^2)
     alph = mu * GNew * M
@@ -1010,7 +1010,7 @@ function direct_solve_radialL1(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpt
    
     q = abs.(real(- sqrt.(abs.(alph.^2 .- (erg_pxy .* GNew .* M).^2))))
     rmax = rmaxT ./ q
-    rlist = range(rp, rmax, rpts)
+    rlist = range(rp .* 1.001, rmax, rpts)
     h = rlist[2] - rlist[1]
     
     rl, r1, erg_1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true)
@@ -1064,7 +1064,7 @@ function direct_solve_radialL1(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpt
     
   
     function wrapper!(F, x)
-        temp = (D2 * x) .+ rhs .* x .- (rf_1 .* rf_2 .* rf_3) ./ 6.0
+        temp = (D2 * x) .+ rhs .* x .+ (rf_1 .* rf_2 .* rf_3) ./ 6.0
         F .= abs.(temp)
     end
     
@@ -1078,7 +1078,13 @@ function direct_solve_radialL1(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpt
     nm = trapz(full_out .* conj(full_out) .* rlist.^2, rlist)
     
     zero_pt = (full_out ./ sqrt.(nm))
-    print(zero_pt, "\n")
     
+    writedlm("test_store/test_radial_induced.dat", hcat(real(rlist), float((full_out ./ sqrt.(nm)))))
+    
+    
+    itp = LinearInterpolation(log10.(rlist[2:end]), log10.(abs.(zero_pt[2:end])), extrapolation_bc=Line())
+    psi_1 = 10 .^itp(log10.(rp))
+    
+    return psi_1.^2
     
 end
