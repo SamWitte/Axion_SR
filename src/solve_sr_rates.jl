@@ -902,7 +902,23 @@ function test_projection_scatter(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; r
     
     alph = mu .* GNew .* M
     
-    for i in 1:1
+    
+    
+    erg_out = ergL(1, 0, 0, mu, M, a)
+    erg_diff = abs.(-(erg_pxy.^2 .- (erg_out .* GNew .* M).^2))
+    
+    idx_run = 1
+    for i in 2:30
+        erg_out = ergL(i, 0, 0, mu, M, a)
+        erg_diff_hold = abs.(-(erg_pxy.^2 .- (erg_out .* GNew .* M).^2))
+        if erg_diff_hold < erg_diff
+            erg_diff = erg_diff_hold
+            idx_run = i
+        end
+    end
+    
+    
+    for i in idx_run:idx_run
         rl, r1, erg = solve_radial(mu, M, a, i, 0, 0; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true, Ntot_safe=Ntot_safe)
         
         itp_r = LinearInterpolation(log10.(Float64.(rl)), real(r1), extrapolation_bc=Line())
