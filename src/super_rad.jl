@@ -654,18 +654,19 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             end
         end
         
+        
         if (integrator.dt ./ tmin .>= 1)
             set_proposed_dt!(integrator, tmin .* 0.1)
         elseif (integrator.dt ./ tmin .>= 0.1)
             set_proposed_dt!(integrator, tmin .* 0.4)
         elseif (integrator.dt ./ tmin .<= 1e-3)&&(wait % 100 == 0)
             set_proposed_dt!(integrator, integrator.dt .* 1.02)
-        elseif (integrator.dt ./ tmin .<= 1e-6)||(integrator.dt ./ integrator.t .<= 1e-4)
+        elseif (integrator.dt ./ tmin .<= 1e-4)||(integrator.dt ./ integrator.t .<= 1e-4)
+            
             for i in 1:idx_lvl
                 if reltol[i] < 0.1
                     reltol[i] *= 2.0
                     integrator.opts.reltol =  reltol
-                    
                 else
                     if integrator.opts.abstol < 1e-10
                         integrator.opts.abstol *= 2.0
@@ -677,10 +678,12 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             print("time step too small!! \n")
             terminate!(integrator)
         end
+       
     end
     
     # Callback 3
     function check_spin(u, t, integrator)
+        wait += 1
         u_real = exp.(u)
         if debug && (wait%1==0)
             if solve_n4
