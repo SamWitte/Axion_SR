@@ -256,12 +256,11 @@ function load_rate_coeffs(mu, M, a, f_a; non_rel=true, input_data="Me", solve_n4
                     data = open(readdlm, "rate_sve/522_522_322_Inf_NR.dat")
                     itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
                     Drate["522_522^322^Inf"] = 10 .^itp(log10.(alph))  .* faFac
-                    
-                    
+                         
                 end
             end
-            
         end
+    end
     
     return Drate
 end

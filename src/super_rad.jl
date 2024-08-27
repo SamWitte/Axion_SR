@@ -9,7 +9,7 @@ include("solve_sr_rates.jl")
 include("load_rates.jl")
 using Printf
 
-function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_cut=10.0, debug=false, solve_322=true, solve_n4=false, solve_n5=false, impose_low_cut=0.01, input_data="Masha", stop_on_a=0, eq_threshold=1e-100, abstol=1e-30, non_rel=true)
+function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_cut=100.0, debug=false, solve_322=true, solve_n4=false, solve_n5=false, impose_low_cut=0.01, input_data="Masha", stop_on_a=0, eq_threshold=1e-100, abstol=1e-30, non_rel=true)
    
     alph = GNew .* M_BH .* massB #
     if debug
@@ -687,11 +687,11 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
                 if !solve_n5
                     @printf("Time and Vals: \t %.7f  %.3e  %.3e  %.3e  %.3e  %.3e  %.3e  %.3e \n", t, u_real[1], u_real[2], u_real[3], u_real[4], u_real[5], u_real[6], u_real[7])
                     # print(integrator.dt ./ t, "\n")
-                    if (t > 4200)&&(integrator.opts.reltol[1] < 0.1)
-                        integrator.opts.reltol[1] *= 2.0
+#                    if (t > 4200)&&(integrator.opts.reltol[1] < 0.1)
+#                        integrator.opts.reltol[1] *= 2.0
 #                        print(integrator.opts.reltol, "\n")
 #                        print(integrator.opts.abstol, "\n")
-                    end
+#                    end
                 else
                     @printf("Time and Vals: \t %.7f  %.3e  %.3e  %.3e  %.3e  %.3e  %.3e  %.3e  %.3e  %.3e  %.3e \n", t, u_real[1], u_real[2], u_real[3], u_real[4], u_real[5], u_real[6], u_real[7], u_real[8], u_real[9], u_real[10])
                 end
@@ -739,7 +739,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     else
         tlist = [t1 t2]
     end
-    dt_guess = minimum(tlist)
+    dt_guess = minimum(tlist) ./ 5.0
     if debug
         print("Time guess \t", dt_guess, "\n")
     end

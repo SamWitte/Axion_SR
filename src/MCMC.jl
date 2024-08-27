@@ -9,7 +9,7 @@ function parse_commandline()
     
         "--alpha_max_cut"
             arg_type = Float64
-            default = 1.0
+            default = 1e3
 
         "--alpha_min_cut"
             arg_type = Float64
@@ -123,7 +123,12 @@ if LowMass
     lg_m_low = -13
     lg_m_high = log10(1.5e-11)
     lg_f_high = 19
-    lg_f_low = 10
+    lg_f_low = 9.5
+
+#    lg_m_low = log10(3e-13)
+#    lg_m_high = log10(2e-12)
+#    lg_f_high = log10(1e19)
+#    lg_f_low = log10(1e15)
     
     if isnothing.(tau_max_override)
         tau_max = 1e8
