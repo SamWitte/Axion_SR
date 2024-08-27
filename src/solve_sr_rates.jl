@@ -13,7 +13,7 @@ using SpinWeightedSpheroidalHarmonics
 # using MCIntegration
 # using Dates
 # using LinearAlgebra
-# using Optim
+using Optim
 include("Constants.jl")
 
 
@@ -959,21 +959,21 @@ function test_projection_scatter(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; r
         end
 
         # BNDRY TERMS
-        D2[1, 1] += -3.0 .* dr_delt[1] ./ (2 * h)
-        D2[1, 2] += 4.0 .* dr_delt[1] ./ (2 * h)
-        D2[1, 3] += -1.0 .* dr_delt[1] ./ (2 * h)
-        D2[rpts, rpts] += 3.0 .* dr_delt[rpts] ./ (2 * h)
-        D2[rpts, rpts - 1] += -4.0 .* dr_delt[rpts] ./ (2 * h)
-        D2[rpts, rpts - 2] += 1.0 .* dr_delt[rpts] ./ (2 * h)
+        D2[1, 1] += -1.0 .* dr_delt[1] ./ (2 * h)
+        D2[1, 2] += 1.0 .* dr_delt[1] ./ (2 * h)
+        # D2[1, 3] += -1.0 .* dr_delt[1] ./ (2 * h)
+        D2[rpts, rpts] += 1.0 .* dr_delt[rpts] ./ (2 * h)
+        D2[rpts, rpts - 1] += -1.0 .* dr_delt[rpts] ./ (2 * h)
+        # D2[rpts, rpts - 2] += 1.0 .* dr_delt[rpts] ./ (2 * h)
         
-        D2[1, 1] += 2.0 .* delt[1] ./ h.^3
-        D2[1, 2] += -5.0 .* delt[1] ./ h.^3
-        D2[1, 3] += 4.0 .* delt[1] ./ h.^3
-        D2[1, 4] += -1.0 .* delt[1] ./ h.^3
-        D2[rpts, rpts] += 2.0 .* delt[rpts] ./ h.^3
-        D2[rpts, rpts - 1] += -5.0 .* delt[rpts] ./ h.^3
-        D2[rpts, rpts - 2] += 4.0 .* delt[rpts] ./ h.^3
-        D2[rpts, rpts - 3] += -1.0 .* delt[rpts] ./ h.^3
+        D2[1, 1] += 1.0 .* delt[1] ./ h.^2
+        D2[1, 2] += -2.0 .* delt[1] ./ h.^2
+        D2[1, 3] += 1.0 .* delt[1] ./ h.^2
+        # D2[1, 4] += -1.0 .* delt[1] ./ h.^2
+        D2[rpts, rpts] += 1.0 .* delt[rpts] ./ h.^2
+        D2[rpts, rpts - 1] += -2.0 .* delt[rpts] ./ h.^2
+        D2[rpts, rpts - 2] += 1.0 .* delt[rpts] ./ h.^2
+        # D2[rpts, rpts - 3] += -1.0 .* delt[rpts] ./ h.^2
         
         r_TEST = rad_comp(r)
         temp = (D2 * r_TEST) .+ rhs .* r_TEST
@@ -1014,7 +1014,7 @@ function test_projection_scatter(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; r
     end
 end
 
-function direct_solve_radialL1(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, rmaxT=100, debug=false, Ntot_safe=5000, sve_for_test=false,  iter=10, xtol=1e-10, ftol=1e-10)
+function direct_solve_radialL1(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, rmaxT=100, debug=false, Ntot_safe=5000, sve_for_test=false,  iter=10, xtol=1e-10, ftol=1e-10, tag="_")
     
     rp = 1 + sqrt.(1 - a.^2)
     alph = mu * GNew * M
@@ -1030,16 +1030,17 @@ function direct_solve_radialL1(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpt
     h = rlist[2] - rlist[1]
     
     rl, r1, erg_1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true)
-    itp = LinearInterpolation(log10.(rl), log10.(r1), extrapolation_bc=Line())
-    rf_1 = 10 .^itp(log10.(rlist))
+    itp = LinearInterpolation(log10.(rl), r1, extrapolation_bc=Line())
+    rf_1 = itp(log10.(rlist))
+    
     
     rl, r2, erg_2 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true)
-    itp = LinearInterpolation(log10.(rl), log10.(r2), extrapolation_bc=Line())
-    rf_2 = 10 .^itp(log10.(rlist))
+    itp = LinearInterpolation(log10.(rl), r2, extrapolation_bc=Line())
+    rf_2 = itp(log10.(rlist))
     
     rl, r3, erg_3 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true)
-    itp = LinearInterpolation(log10.(rl), log10.(r3), extrapolation_bc=Line())
-    rf_3 = 10 .^itp(log10.(rlist))
+    itp = LinearInterpolation(log10.(rl), r3, extrapolation_bc=Line())
+    rf_3 = itp(log10.(rlist))
     
     erg = (erg_1 + erg_2 - erg_3)
     
@@ -1062,45 +1063,87 @@ function direct_solve_radialL1(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpt
     end
 
     # BNDRY TERMS
-    D2[1, 1] += -3.0 .* dr_delt[1] ./ (2 * h)
-    D2[1, 2] += 4.0 .* dr_delt[1] ./ (2 * h)
-    D2[1, 3] += -1.0 .* dr_delt[1] ./ (2 * h)
-    D2[rpts, rpts] += 3.0 .* dr_delt[rpts] ./ (2 * h)
-    D2[rpts, rpts - 1] += -4.0 .* dr_delt[rpts] ./ (2 * h)
-    D2[rpts, rpts - 2] += 1.0 .* dr_delt[rpts] ./ (2 * h)
+    D2[1, 1] += -1.0 .* dr_delt[1] ./ (2 * h)
+    D2[1, 2] += 1.0 .* dr_delt[1] ./ (2 * h)
+    # D2[1, 3] += -1.0 .* dr_delt[1] ./ (2 * h)
+    D2[rpts, rpts] += 1.0 .* dr_delt[rpts] ./ (2 * h)
+    D2[rpts, rpts - 1] += -1.0 .* dr_delt[rpts] ./ (2 * h)
+    # D2[rpts, rpts - 2] += 1.0 .* dr_delt[rpts] ./ (2 * h)
     
-    D2[1, 1] += 2.0 .* delt[1] ./ h.^3
-    D2[1, 2] += -5.0 .* delt[1] ./ h.^3
-    D2[1, 3] += 4.0 .* delt[1] ./ h.^3
-    D2[1, 4] += -1.0 .* delt[1] ./ h.^3
-    D2[rpts, rpts] += 2.0 .* delt[rpts] ./ h.^3
-    D2[rpts, rpts - 1] += -5.0 .* delt[rpts] ./ h.^3
-    D2[rpts, rpts - 2] += 4.0 .* delt[rpts] ./ h.^3
-    D2[rpts, rpts - 3] += -1.0 .* delt[rpts] ./ h.^3
+    D2[1, 1] += 1.0 .* delt[1] ./ h.^2
+    D2[1, 2] += -2.0 .* delt[1] ./ h.^2
+    D2[1, 3] += 1.0 .* delt[1] ./ h.^2
+    # D2[1, 4] += -1.0 .* delt[1] ./ h.^2
+    D2[rpts, rpts] += 1.0 .* delt[rpts] ./ h.^2
+    D2[rpts, rpts - 1] += -2.0 .* delt[rpts] ./ h.^2
+    D2[rpts, rpts - 2] += 1.0 .* delt[rpts] ./ h.^2
+    # D2[rpts, rpts - 3] += -1.0 .* delt[rpts] ./ h.^2
     
-  
-    function wrapper!(F, x)
-        temp = (D2 * x) .+ rhs .* x .+ (rf_1 .* rf_2 .* rf_3) ./ 6.0
-        F .= abs.(temp)
+    
+    max_states = 2
+    hold_r_list = zeros(Complex, rpts, max_states)
+    for i in 1:max_states
+        rl, rout, erg_out = solve_radial(mu, M, a, i, 0, 0; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true)
+        itp = LinearInterpolation(log10.(rl), rout, extrapolation_bc=Line())
+        r_on_targ = itp(log10.(rlist))
+        hold_r_list[:, i] .= r_on_targ
     end
     
-    rGuess = rf_1
     
-    r_in = real(rGuess)
-    sol = nlsolve(wrapper!, r_in, show_trace=debug, autodiff = :forward, xtol=xtol, ftol=ftol, iterations=iter)
-    full_out = sol.zero
+  
+    function wrapper(x)
+        WF  = zeros(Complex, rpts)
+        for i in 1:max_states
+            WF .+= hold_r_list[:, i] .* x[i]
+        end
+        temp = ((D2 * WF) .+ rhs .* WF) ./ rlist.^2 .+ (rf_1 .* rf_2 .* rf_3) ./ 6.0
+        # F .= abs.(temp)
+        return sum(abs.(temp))
+    end
     
-    trapz(y,x) = @views sum(((y[1:end-1].+y[2:end])/2).*(x[2:end].-x[1:end-1]))
-    nm = trapz(full_out .* conj(full_out) .* rlist.^2, rlist)
+    # rGuess = rf_1
+    # r_in = real(rGuess)
+    c_in = ones(max_states) .* 1e-5
     
-    zero_pt = (full_out ./ sqrt.(nm))
+    # test
+#    c_in = ones(max_states)
+#    c_in[1] = -0.0002 .* alph.^(9/2)
+#    c_in[2] = -0.00004 .* alph.^(9/2)
+#    c_in[3] = -0.00001 .* alph.^(9/2)
+#    c_in[4] = -0.000008 .* alph.^(9/2)
+#    c_in[5] = -0.000005 .* alph.^(9/2)
+#    c_in[6] = -0.000004 .* alph.^(9/2)
+#    c_in[7] = -0.000003 .* alph.^(9/2)
+#    c_in[8] = -0.000002 .* alph.^(9/2)
+#    c_in[9] = -0.000002 .* alph.^(9/2)
+#    c_in[10] = -0.000001 .* alph.^(9/2)
     
-    writedlm("test_store/test_radial_induced.dat", hcat(real(rlist), float((full_out ./ sqrt.(nm)))))
+    print("initial \t", c_in, "\n")
+    # sol = nlsolve(wrapper!, c_in, show_trace=debug, autodiff = :forward, xtol=xtol, ftol=ftol, iterations=iter)
+    # full_out = sol.zero
+    sol = optimize(wrapper, c_in, LBFGS(), Optim.Options(g_tol = 1e-11, iterations=iter, show_trace=true, show_every=1))
+    full_out = Optim.minimizer(sol)
+    print(full_out, "\n")
+    
+    Psi0 = 0.0
+    for i in 1:max_states
+        Psi0 += hold_r_list[1, i] .* full_out[i]
+    end
+    return Psi0 .* conj(Psi0)
+    
+#    trapz(y,x) = @views sum(((y[1:end-1].+y[2:end])/2).*(x[2:end].-x[1:end-1]))
+#    # nm = trapz(full_out .* conj(full_out) .* rlist.^2, rlist)
+#    # print(trapz(full_out .* conj(full_out) .* rlist.^2, rlist), "\n")
+#    nm = 1.0
+    
+#    zero_pt = (full_out ./ sqrt.(nm))
+    
+    writedlm("test_store/test_radial_induced"*tag*".dat", hcat(real(rlist), float((full_out))))
     
     
-    itp = LinearInterpolation(log10.(rlist[2:end]), log10.(abs.(zero_pt[2:end])), extrapolation_bc=Line())
-    psi_1 = 10 .^itp(log10.(rp))
+#    itp = LinearInterpolation(log10.(rlist[2:end]), log10.(abs.(zero_pt[2:end])), extrapolation_bc=Line())
+#    psi_1 = 10 .^itp(log10.(rp))
     
-    return psi_1.^2
+#    return psi_1.^2
     
 end
