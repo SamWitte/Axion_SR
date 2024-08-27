@@ -600,11 +600,11 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         for i in 1:idx_lvl
             condBN =  (abs.(u[i] .- log.(bn_list[i])) < 1e-2)
             
-            if (u[i] > log.(e_init)) && condBN && (sign_flip[i]==false)
+            if (u[i] > log.(e_init)) && condBN && (sign_flip[i]==false) && (du[i] != 0.0)
                 append!(tlist, abs.(1.0 ./ du[i]))
             end
         end
-            
+        
         append!(tlist, 0.1 * 1.0 ./ du[spinI])
         tmin = minimum(abs.(tlist))
        
@@ -659,7 +659,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         elseif (integrator.dt ./ tmin .>= 0.1)
             set_proposed_dt!(integrator, tmin .* 0.4)
         elseif (integrator.dt ./ tmin .<= 1e-3)&&(wait % 100 == 0)
-            set_proposed_dt!(integrator, integrator.dt .* 1.01)
+            set_proposed_dt!(integrator, integrator.dt .* 1.02)
         elseif (integrator.dt ./ tmin .<= 1e-6)||(integrator.dt ./ integrator.t .<= 1e-4)
             for i in 1:idx_lvl
                 if reltol[i] < 0.1
