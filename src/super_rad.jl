@@ -585,7 +585,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         for i in 1:idx_lvl
             if (sign(all_contribs[i]) == sign(test[i]))
                 sign_flip[i] = false
-                reltol[i] = default_reltol
+                # reltol[i] = default_reltol
             else
                 sign_flip[i] = true
                 # print(i, " SGN FLIP \t", sign_flip, "\n")
@@ -608,7 +608,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         append!(tlist, 0.1 * 1.0 ./ du[spinI])
         tmin = minimum(abs.(tlist))
        
-        # print("Tmin \t", integrator.dt, "\t", tlist, "\n")
+        # print("Tmin \t", integrator.dt, "\t", tlist, "\t", integrator.opts.reltol, "\n")
         if (integrator.dt ./ tmin .>= 0.1)
             return true
         elseif (integrator.dt ./ tmin .<= 0.001)
@@ -661,8 +661,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             set_proposed_dt!(integrator, tmin .* 0.4)
         elseif (integrator.dt ./ tmin .<= 1e-3)&&(wait % 100 == 0)
             set_proposed_dt!(integrator, integrator.dt .* 1.02)
-        elseif (integrator.dt ./ tmin .<= 1e-4)||(integrator.dt ./ integrator.t .<= 1e-4)
-            
+        elseif (integrator.dt ./ tmin .<= 1e-3)||(integrator.dt ./ integrator.t .<= 1e-4)
+            # print(integrator.dt ./ tmin, "\t", wait, "\t", reltol, "\t", integrator.opts.abstol,  "\n")
             for i in 1:idx_lvl
                 if reltol[i] < 0.1
                     reltol[i] *= 2.0
@@ -673,7 +673,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
                     end
                 end
             end
-        
+            
         elseif (integrator.dt .<= 1e-10)
             print("time step too small!! \n")
             terminate!(integrator)
