@@ -56,6 +56,7 @@ end
 function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solve_322=true, impose_low_cut=0.01, return_all_info=false, input_data="Masha", solve_n4=false, solve_n5=false, eq_threshold=1e-4, stop_on_a=0, abstol=1e-30, non_rel=true, max_m_2=false)
 
     default_reltol = 1e-3
+    reltol_Thres = 1e-1
     if !solve_n4
         default_reltol = 1e-4
         idx_lvl = 2 # number of states
@@ -640,10 +641,10 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         tmin = minimum(abs.(tlist))
         
         
-        if (integrator.dt ./ integrator.t < 1e-6)
+        if (integrator.dt ./ integrator.t < 1e-6)&&(wait % 100 == 0)&&(wait > 10000)
             for i in 1:idx_lvl
-                if reltol[i] < 0.5
-                    reltol[i] *= 2.0
+                if reltol[i] < reltol_Thres
+                    reltol[i] *= 1.05
                     integrator.opts.reltol =  reltol
                     
                 else
@@ -654,6 +655,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             end
         end
         
+       
 
         if (integrator.dt ./ tmin .>= 1)
             set_proposed_dt!(integrator, tmin .* 0.1)
@@ -661,10 +663,10 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             set_proposed_dt!(integrator, tmin .* 0.4)
         elseif (integrator.dt ./ tmin .<= 1e-3)&&(wait % 100 == 0)
             set_proposed_dt!(integrator, integrator.dt .* 1.03)
-        elseif ((integrator.dt ./ tmin .<= 1e-3)||(integrator.dt ./ integrator.t .<= 1e-4))
+        elseif ((integrator.dt ./ tmin .<= 1e-3)||(integrator.dt ./ integrator.t .<= 1e-4))&&(wait % 150 == 0)&&(wait > 10000)
             # print(integrator.dt ./ tmin, "\t", wait, "\t", reltol, "\t", integrator.opts.abstol,  "\n")
             for i in 1:idx_lvl
-                if reltol[i] < 0.5
+                if reltol[i] < reltol_Thres
                     reltol[i] *= 1.05
                     integrator.opts.reltol =  reltol
                 else
