@@ -8,8 +8,6 @@ function load_rate_coeffs(mu, M, a, f_a; non_rel=true, input_data="Me", solve_n4
     
     Drate["211_322^GW"] = 0.0 * alph^16
     
-    print(input_data, "\t", input_data == "Doddy", "\t", non_rel, "\t", "\n")
-    
     if input_data == "Doddy"
 
         Drate["211_211^322^BH"] = 0.0 # format gamma_{A x B}^{C x D}
@@ -264,10 +262,7 @@ function load_rate_coeffs(mu, M, a, f_a; non_rel=true, input_data="Me", solve_n4
             end
         end
     end
-    
-    print(Drate, "\n\n")
-    
-    
+
     return Drate
 end
 
