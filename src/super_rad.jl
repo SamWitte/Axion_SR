@@ -660,12 +660,12 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         elseif (integrator.dt ./ tmin .>= 0.1)
             set_proposed_dt!(integrator, tmin .* 0.4)
         elseif (integrator.dt ./ tmin .<= 1e-3)&&(wait % 100 == 0)
-            set_proposed_dt!(integrator, integrator.dt .* 1.05)
+            set_proposed_dt!(integrator, integrator.dt .* 1.03)
         elseif ((integrator.dt ./ tmin .<= 1e-3)||(integrator.dt ./ integrator.t .<= 1e-4))
             # print(integrator.dt ./ tmin, "\t", wait, "\t", reltol, "\t", integrator.opts.abstol,  "\n")
             for i in 1:idx_lvl
                 if reltol[i] < 0.5
-                    reltol[i] *= 1.01
+                    reltol[i] *= 1.05
                     integrator.opts.reltol =  reltol
                 else
                     if integrator.opts.abstol < 1e-10
