@@ -609,7 +609,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         append!(tlist, 0.1 * 1.0 ./ du[spinI])
         tmin = minimum(abs.(tlist))
        
-        print("Tmin \t", integrator.dt, "\t", tlist, "\t", integrator.opts.reltol, "\n")
+        # print("Tmin \t", integrator.dt, "\t", tlist, "\t", integrator.opts.reltol, "\n")
         if (integrator.dt ./ tmin .>= 0.1)
             return true
         elseif (integrator.dt ./ tmin .<= 0.001)
