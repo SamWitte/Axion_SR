@@ -85,8 +85,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     append!(y0, M_BH)
     y0 = log.(y0)
     
-    append!(reltol, default_reltol)
-    append!(reltol, default_reltol)
+    append!(reltol, 1e-3)
+    append!(reltol, 1e-3)
     
     wait = 0 # tracker
     alph = GNew .* M_BH .* mu
@@ -609,7 +609,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         append!(tlist, 0.1 * 1.0 ./ du[spinI])
         tmin = minimum(abs.(tlist))
        
-        # print("Tmin \t", integrator.dt, "\t", tlist, "\t", integrator.opts.reltol, "\n")
+        print("Tmin \t", integrator.dt, "\t", tlist, "\t", integrator.opts.reltol, "\n")
         if (integrator.dt ./ tmin .>= 0.1)
             return true
         elseif (integrator.dt ./ tmin .<= 0.001)
@@ -644,7 +644,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         if (integrator.dt ./ integrator.t < 1e-6)&&(wait % 100 == 0)&&(wait > 10000)
             for i in 1:idx_lvl
                 if reltol[i] < reltol_Thres
-                    reltol[i] *= 1.05
+                    reltol[i] *= 1.2
                     integrator.opts.reltol =  reltol
                     
                 else
@@ -663,11 +663,11 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             set_proposed_dt!(integrator, tmin .* 0.4)
         elseif (integrator.dt ./ tmin .<= 1e-3)&&(wait % 100 == 0)
             set_proposed_dt!(integrator, integrator.dt .* 1.03)
-        elseif ((integrator.dt ./ tmin .<= 1e-3)||(integrator.dt ./ integrator.t .<= 1e-4))&&(wait % 150 == 0)&&(wait > 10000)
+        elseif ((integrator.dt ./ tmin .<= 1e-3)||(integrator.dt ./ integrator.t .<= 1e-4))&&(wait % 50 == 0)&&(wait > 5000)
             # print(integrator.dt ./ tmin, "\t", wait, "\t", reltol, "\t", integrator.opts.abstol,  "\n")
             for i in 1:idx_lvl
                 if reltol[i] < reltol_Thres
-                    reltol[i] *= 1.05
+                    reltol[i] *= 1.2
                     integrator.opts.reltol =  reltol
                 else
                     if integrator.opts.abstol < 1e-10
