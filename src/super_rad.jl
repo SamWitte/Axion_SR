@@ -61,7 +61,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         default_reltol = 1e-4
         idx_lvl = 2 # number of states
     else
-        default_reltol = 5e-3
+        default_reltol = 1e-3
         if !solve_n5
             idx_lvl = 5
         else
@@ -329,7 +329,6 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             SR_rates[1] *= 0.0
         end
         
-    
     
         # SR terms
         du[spinI] = 0.0
@@ -606,19 +605,20 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             end
         end
         
-        append!(tlist, 0.1 * 1.0 ./ du[spinI])
+        append!(tlist, 0.01 * 1.0 ./ du[spinI])
         tmin = minimum(abs.(tlist))
        
-        # print("Tmin \t", integrator.dt, "\t", tlist, "\t", integrator.opts.reltol, "\n")
+        # print("Tmin \t", integrator.dt, "\t", tlist, "\t", integrator.opts.reltol, "\t", integrator.opts.abstol, "\n")
+        # print(du, "\n")
         if (integrator.dt ./ tmin .>= 0.1)
             return true
         elseif (integrator.dt ./ tmin .<= 0.001)
             return true
         elseif (integrator.dt .<= 1e-10)
             return true
-        elseif (integrator.dt ./ integrator.t .<= 1e-4)
-            integrator.opts.dtmin = integrator.t * 1e-4
-            return true
+        # elseif (integrator.dt ./ integrator.t .<= 1e-4)
+        #     integrator.opts.dtmin = integrator.t * 1e-4
+        #    return true
         else
             return false
         end
@@ -637,7 +637,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             end
         end
             
-        append!(tlist, 0.1 * 1.0 ./ du[spinI])
+        append!(tlist, 0.01 * 1.0 ./ du[spinI])
         tmin = minimum(abs.(tlist))
         
         
@@ -659,8 +659,6 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
 
         if (integrator.dt ./ tmin .>= 1)
             set_proposed_dt!(integrator, tmin .* 0.1)
-        elseif (integrator.dt ./ tmin .>= 0.1)
-            set_proposed_dt!(integrator, tmin .* 0.4)
         elseif (integrator.dt ./ tmin .<= 1e-3)&&(wait % 100 == 0)
             set_proposed_dt!(integrator, integrator.dt .* 1.03)
         elseif ((integrator.dt ./ tmin .<= 1e-3)||(integrator.dt ./ integrator.t .<= 1e-4))&&(wait % 50 == 0)&&(wait > 5000)
@@ -757,7 +755,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     
     if solve_n4
         if solve_n5
-            # cbset = CallbackSet(cbackspin, cbackdt, cback_station)
+            # cbset = CallbackSet(cbackspin, cbackdt)
             cbset = CallbackSet(cbackspin, cbackdt, cback_station, cback_osc)
         else
             cbset = CallbackSet(cbackspin, cbackdt, cback_station, cback_osc)
@@ -831,6 +829,17 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     if isnan(spinBH[end])
         spinBH = spinBH[.!isnan.(spinBH)]
     end
+    if isinf(spinBH[end])
+        spinBH = spinBH[.!isinf.(spinBH)]
+    end
+    
+    if isnan(MassB[end])
+        MassB = MassB[.!isnan.(MassB)]
+    end
+    if isinf(MassB[end])
+        MassB = MassB[.!isinf.(MassB)]
+    end
+    
     return spinBH[end], MassB[end]
  
 end
