@@ -609,6 +609,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         tmin = minimum(abs.(tlist))
        
         # print("Tmin \t", integrator.dt, "\t", tlist, "\t", integrator.opts.reltol, "\t", integrator.opts.abstol, "\n")
+        
         # print(du, "\n")
         if (integrator.dt ./ tmin .>= 0.1)
             return true
@@ -733,16 +734,13 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     
     
     rP = 1.0 .+ sqrt.(1 - aBH.^2)
-    t1 = (SR_rates[1] ./ hbar .* 3.15e7).^(-1)
-    t2 = (SR_rates[2] ./ hbar .* 3.15e7).^(-1)
-    if solve_n4
-        t3 = (SR_rates[4] ./ hbar .* 3.15e7).^(-1)
-        t4 = (SR_rates[5] ./ hbar .* 3.15e7).^(-1)
-        tlist = [t1 t2 t3 t4]
-    else
-        tlist = [t1 t2]
+    
+    tlist = []
+    for i in 1:idx_lvl
+        append!(tlist, (SR_rates[i] ./ hbar .* 3.15e7).^(-1))
     end
     dt_guess = minimum(tlist) ./ 5.0
+
     if debug
         print("Time guess \t", dt_guess, "\n")
     end
