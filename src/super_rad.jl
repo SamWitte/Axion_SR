@@ -32,7 +32,7 @@ function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_c
             return aBH, M_BH
         end
     end
-    
+    print("Solving system... \n")
     final_spin, final_BH = solve_system(massB, f_a, aBH, M_BH, tau_max, debug=debug, solve_322=solve_322, impose_low_cut=impose_low_cut, input_data=input_data, solve_n4=solve_n4, solve_n5=solve_n5, stop_on_a=stop_on_a, eq_threshold=eq_threshold, abstol=abstol, non_rel=non_rel)
     
     print("Spin diff.. \t ", aBH, "\t", final_spin, "\t", alph, "\n")
