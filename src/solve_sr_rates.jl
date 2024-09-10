@@ -83,7 +83,7 @@ function radial_bound_NR(n, l, m, mu, M, r)
     
     rF = sqrt.((2 / (n * a0)).^3 * factorial(big(n - l - 1)) / (2 * n * factorial(big(n + l)))) .* exp.( - r ./ (n .* a0)) .* (2 .* r ./ (n .* a0)).^l .* generalized_laguerre(n - l - 1, 2 * l + 1, 2 .* r ./ (n .* a0))
     
-    return rF
+    return rF # I've thrown through a factor of (GNew * M)^{3/2}
 end
 
 function radial_inf_NR(k, l, mu, M, r)
@@ -152,7 +152,7 @@ function freq_shifts(mu, M, a, n1, l1, m1, n2, l2, m2;  rpts=500, rmaxT=100, Nan
 
 end
 
-function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=10, rpts=2000, rmaxT=100, inf_nr=true, Nang=100000, Npts_Bnd=1000, debug=false, include_cont=true, Ntot_safe=5000, sve_for_test=false, bnd_thresh=1e-3, use_analytic=false)
+function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=10, rpts=2000, rmaxT=100, inf_nr=true, Nang=100000, Npts_Bnd=1000, debug=false, include_cont=true, Ntot_safe=5000, sve_for_test=false, bnd_thresh=1e-3, use_analytic=false, eps_r=1e-10)
     
     rp = 1 + sqrt.(1 - a.^2)
     alph = mu * GNew * M
@@ -169,7 +169,7 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=10, rpts=
     qmax = maximum([q1, q2, q3])
     qmin = minimum([q1, q2, q3])
     rmax = rmaxT ./ qmax
-    rlist = 10 .^(range(log10.(rp), log10.(rmax), rpts))
+    rlist = 10 .^(range(log10.(rp .* (1.0 .+ eps_r)), log10.(rmax), rpts))
     
     if !use_analytic
         rl, r1, erg_1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true, Ntot_safe=Ntot_safe)
@@ -482,7 +482,7 @@ function s_rate_inf(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3, lF_min; rpts=4
     
 end
 
-function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=500, xtol=1e-30, ftol=1e-30, sve=false, fnm="test_store/WF_", return_erg=false, Ntot_safe=5000)
+function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=500, xtol=1e-30, ftol=1e-30, sve=false, fnm="test_store/WF_", return_erg=false, Ntot_safe=5000, eps_r=1e-10)
     ### dolan 2007
     # everything normalized
     alph = GNew .* M .* mu
@@ -510,7 +510,9 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
     if debug
         print("erg \t", erg, "\n")
     end
+    
     q = - sqrt.(alph.^2 .- erg.^2)
+    
     rmax = rmaxT * 1.0 ./ abs.(real(q))
     
     
@@ -550,7 +552,7 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
     end
     
     
-    rlist = 10 .^(range(log10.(rp) .* 1.001, log10.(rmax), rpts))
+    rlist = 10 .^(range(log10.(rp  .* (1.0 .+ eps_r)), log10.(rmax), rpts))
     
     preF = (rlist .- rp).^(- im .* sigm) .* (rlist .- rm).^(im .* sigm .+ chi .- 1.0) .* exp.(q .* rlist)
     
@@ -758,12 +760,11 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=200, iter=50, x
         
         b = sqrt.(1 - a.^2)
         
+        
         if !QNM
             SR211_g = sr_rates(n, l, m, alph_ev ./ (GNew * M), M, a)
-#            if SR211_g == 0
-#                SR211_g = 1e-1 .* mu
-#            end
-#            print(SR211_g, "\n\n")
+            # print("test \t ", SR211_g, "\n")
+
             w0 = (ergL(n, l, m, alph_ev ./ (GNew * M), M, a) .+ im * SR211_g) .* GNew * M
         else
             w0 = QNM_E .+ 0.0 * im
@@ -1014,7 +1015,7 @@ function test_projection_scatter(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; r
     end
 end
 
-function direct_solve_radialL1(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, rmaxT=100, debug=false, Ntot_safe=5000, sve_for_test=false,  iter=10, xtol=1e-10, ftol=1e-10, tag="_")
+function direct_solve_radialL1(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, rmaxT=100, debug=false, Ntot_safe=5000, sve_for_test=false,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=100000, eps_r=1e-10)
     
     rp = 1 + sqrt.(1 - a.^2)
     alph = mu * GNew * M
@@ -1026,7 +1027,7 @@ function direct_solve_radialL1(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpt
    
     q = abs.(real(- sqrt.(abs.(alph.^2 .- (erg_pxy .* GNew .* M).^2))))
     rmax = rmaxT ./ q
-    rlist = range(rp .* 1.001, rmax, rpts)
+    rlist = range(rp .* (1.0 .+ eps_r), rmax, rpts)
     h = rlist[2] - rlist[1]
     
     rl, r1, erg_1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true)
@@ -1044,9 +1045,29 @@ function direct_solve_radialL1(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpt
     
     erg = (erg_1 + erg_2 - erg_3)
     
+    
+    Z1 = spheroidals(l1, m1, a, erg_1)
+    Z2 = spheroidals(l2, m2, a, erg_2)
+    Z3 = spheroidals(l3, m3, a, erg_3)
+    Z4 = spheroidals(0, 0, a, erg)
+   
+    thetaV = acos.(1.0 .- 2.0 .* rand(Nang))
+    phiV = rand(Nang) .* 2*pi
+
+    function func_ang(x)
+        return real(Z1.(x[1], x[2]) .* Z2.(x[1], x[2]) .* conj(Z3.(x[1], x[2])) .* conj(Z4.(x[1], x[2]))) #
+    end
+    CG = 0.0
+    for i in 1:Nang
+        CG += func_ang([thetaV[i], phiV[i]])
+    end
+    CG *= 4*pi / Nang
+    
+    
     delt = rlist.^2 .- 2 .* rlist .+ a.^2
     dr_delt = 2 .* rlist .- 2
     m = 0
+    # assumes l = m = 0
     rhs = ((erg.^2 .* (rlist.^2 .+ a.^2).^2 .- 4 .* a .* m .* erg .* rlist .+ m.^2 .* a.^2) ./ delt .- (erg.^2 .* a.^2 .+ alph.^2 .* rlist.^2))
     
     # Create the second derivative matrix (Laplacian matrix), and first derivative
@@ -1089,6 +1110,7 @@ function direct_solve_radialL1(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpt
         hold_r_list[:, i] .= r_on_targ
     end
     
+    unitMatch = 1.0 ./ (GNew .* M .* alph.^(3/2))
     
   
     function wrapper(x)
@@ -1096,7 +1118,7 @@ function direct_solve_radialL1(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpt
         for i in 1:max_states
             WF .+= hold_r_list[:, i] .* x[i]
         end
-        temp = ((D2 * WF) .+ rhs .* WF) ./ rlist.^2 .+ (rf_1 .* rf_2 .* rf_3) ./ 6.0
+        temp = ((D2 * WF) .+ rhs .* WF) ./ rlist.^2 .+ CG .* (rf_1 .* rf_2 .* rf_3) .* unitMatch ./ 6.0
         # F .= abs.(temp)
         return sum(abs.(temp))
     end
@@ -1145,5 +1167,201 @@ function direct_solve_radialL1(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpt
 #    psi_1 = 10 .^itp(log10.(rp))
     
 #    return psi_1.^2
+    
+end
+
+function integrate_radialEq(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, rmaxT=100, debug=false, Ntot_safe=5000, sve_for_test=false,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=100000, n_times=300000, add_source=true, eps_fac = 1e-10)
+    
+    rp = BigFloat(1.0 .+ sqrt.(1.0 .- a.^2))
+    rm = BigFloat(1.0 .- sqrt.(1.0 .- a.^2))
+    alph = mu * GNew * M
+    
+    if (n1==n2)&&(l1==l2)&&(m1==m2)
+        preFac = 3
+    else
+        preFac = 6
+    end
+    
+    erg_1G = ergL(n1, l1, m1, mu, M, a)
+    erg_2G = ergL(n2, l2, m2, mu, M, a)
+    erg_3G = ergL(n3, l3, m3, mu, M, a)
+    erg_pxy = erg_1G + erg_2G - erg_3G
+   
+    q = abs.(real(- sqrt.(abs.(alph.^2 .- (erg_pxy .* GNew .* M).^2))))
+    rmax = Float64.(rmaxT ./ q)
+    rlist = range(rp .* (1.0 .+ eps_fac), rmax, rpts)
+    h = rlist[2] - rlist[1]
+    
+    # rl, r1, erg_1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true, Ntot_safe=Ntot_safe)
+    # itp = LinearInterpolation(log10.(rl), r1, extrapolation_bc=Line())
+    # rf_1 = itp(log10.(rlist))
+    rf_1 = radial_bound_NR(n1, l1, m1, mu, M, rlist)
+    val1 = sr_rates(n1, l1, m1,  mu, M, a, impose_low_cut=1e-10) * (GNew .* M)
+    erg_1 = erg_1G * GNew * M .+ val1 .* im
+    
+    
+    # rl, r2, erg_2 = solve_radial(mu, M, a, n2, l2, m2; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true, Ntot_safe=Ntot_safe)
+    # itp = LinearInterpolation(log10.(rl), r2, extrapolation_bc=Line())
+    # rf_2 = itp(log10.(rlist))
+    rf_2 = radial_bound_NR(n2, l2, m2, mu, M, rlist)
+    val2 = sr_rates(n2, l2, m2,  mu, M, a, impose_low_cut=1e-10) * (GNew .* M)
+    erg_2 = erg_2G * GNew * M .+ val2 .* im
+    
+    
+    # rl, r3, erg_3 = solve_radial(mu, M, a, n3, l2, m3; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true, Ntot_safe=Ntot_safe)
+    # itp = LinearInterpolation(log10.(rl), r3, extrapolation_bc=Line())
+    # rf_3 = itp(log10.(rlist))
+    rf_3 = radial_bound_NR(n3, l3, m3, mu, M, rlist)
+    val3 = sr_rates(n3, l3, m3,  mu, M, a, impose_low_cut=1e-10) * (GNew .* M)
+    erg_3 = erg_3G * GNew * M .+ val3 .* im
+    
+    
+    erg = (erg_1 + erg_2 - erg_3)
+    Z1 = spheroidals(l1, m1, a, erg_1)
+    Z2 = spheroidals(l2, m2, a, erg_2)
+    Z3 = spheroidals(l3, m3, a, erg_3)
+    Z4 = spheroidals(0, 0, a, erg)
+   
+    
+    thetaV = acos.(1.0 .- 2.0 .* rand(Nang))
+    phiV = rand(Nang) .* 2*pi
+
+    function func_ang(x)
+        return real(Z1.(x[1], x[2]) .* Z2.(x[1], x[2]) .* conj(Z3.(x[1], x[2])) .* conj(Z4.(x[1], x[2])))
+    end
+    function func_ang_2(x)
+        return real(Z1.(x[1], x[2]) .* Z2.(x[1], x[2]) .* conj(Z3.(x[1], x[2])) .* conj(Z4.(x[1], x[2]))) .* a.^2 .* cos.(x[1]).^2
+    end
+    CG = 0.0
+    CG_2 = 0.0
+    for i in 1:Nang
+        CG += func_ang([thetaV[i], phiV[i]])
+        CG_2 += func_ang_2([thetaV[i], phiV[i]])
+    end
+    CG *= 4*pi / Nang
+    CG_2 *= 4*pi / Nang
+    
+    print("CG / CG2 \t", CG, "\t", CG_2,  "\t rp  ", rp, "\t alpha \t", alph, "\n")
+    
+    m = 0
+    # assumes l = m = 0
+
+    
+    unitMatch = 1.0 ./ (2 .* alph).^(3/2)
+    gammaT = (preFac .* (rf_1 .* rf_2 .* conj(rf_3)) ./ 6.0 .* unitMatch)
+    
+    itpG = LinearInterpolation(log10.(rlist), Float64.(real.(gammaT)), extrapolation_bc=Line())
+    itpGI = LinearInterpolation(log10.(rlist), Float64.(imag.(gammaT)), extrapolation_bc=Line())
+    
+   
+    Mvars = []
+    
+    if sve_for_test
+        wR, wI = find_im_part(mu, M, a, 1, 0, 0; debug=false, iter=500, xtol=1e-10, ftol=1e-10, return_both=true, for_s_rates=true)
+        erg = wR .+ im .* wI
+    end
+    
+    function radial_diff!(du, u, Mvars, rstar)
+        # u = [real(R), real(y), imag(R), imag(y)]
+        du[1] = u[2]
+        du[3] = u[4]
+      
+        r = itp_rrstar(rstar)
+        delt = (r.^2 .- 2 .* r .+ a.^2)
+        
+        Rr = u[1] .+ im * u[3]
+        y = u[2] .+ im * u[4]
+        
+        # NR
+        # secDer = -2 * y ./ r .- 2 * alph.^2 ./ r .* Rr .+ (alph.^2 .- erg.^2) .* Rr
+        # secDer = ((alph.^2 .- erg.^2) .- 2 .* alph.^2 ./ r) .* Rr
+        
+        # Rel, assumed m = l = 0!
+        # R = u[r] / sqrt.(r^2 + a^2)
+        # secDer = - (2 .* r .- 2.0) ./ delt .* y .- (erg.^2 .* (r.^2 .+ a.^2).^2 ./ delt.^2 .- alph.^2 .* r.^2 ./ delt) .* Rr
+        # if add_source
+        #    secDer += (itpG(log10.(r)) + im * itpGI(log10.(r))) .* r.^2 ./ delt
+        # end
+        
+        # dr* = (r^2 + a^2) / delt * dr
+        
+        # secDer = (delt .* (-2 .* a.^2 .* r .+ 2 .* r.^3 .+ a.^2 .* delt .+ r.^2 .* (a.^2 .+ r.^2).^2 .* alph.^2) .- (a.^2 .+ r.^2).^2 .* ((a.^2 .+ r.^2).^2 .- a.^2 .* delt) .* erg.^2)
+        # secDer *= Rr ./ (a.^2 .+ r.^2).^4
+        
+        
+        ff = (r.^2 .+ a.^2)
+        secDer = delt .* alph.^2 ./ ff .+ delt .* (a.^2 .* (erg.^2 .- alph.^2)) ./ ff.^2 .+ delt .* (3 .* r.^2 - 4 .* r .+ a.^2) ./ ff.^3 .- 3 .* delt.^2 .* r.^2 ./ ff.^4 .- erg.^2
+        secDer *= Rr
+        
+        if add_source
+           secDer += delt ./ ff.^(3/2) .* (itpG(log10.(r)) + im * itpGI(log10.(r))) .* (CG .* r.^2 .+ CG_2) ./ sqrt.(ff)
+        end
+        
+        du[2] = real(secDer)
+        du[4] = imag(secDer)
+        
+    end
+  
+    
+    y0 = [1e-80 1e-80 1e-80 1e-80]
+    tspan_r = (rmax / 10, BigFloat(rp * (1.0 .+ eps_fac)))
+    r_list_map = 10 .^LinRange(log10.(tspan_r[2]), log10.(tspan_r[1]), rpts)
+    rout_star = zeros(rpts)
+    sqrtVal = sqrt.(Complex(a.^2 .- 1.0))
+    
+    #
+    
+    for i in 1:length(r_list_map)
+        rout_star[i] = r_list_map[i] .+ 2.0 .* rp ./ (rp .- rm) .* log.(r_list_map[i] ./ rp .- 1.0) .- 2.0 .* rm .* log.(r_list_map[i] ./ rm .- 1.0) ./ (rp .- rm)
+    end
+    
+    itp_rrstar = LinearInterpolation(rout_star, r_list_map, extrapolation_bc=Line())
+    tspan = (rout_star[end], rout_star[1])
+    
+    saveat = (tspan[2] .- tspan[1]) ./ n_times
+    prob = ODEProblem(radial_diff!, y0, tspan, Mvars, reltol=1e-5, abstol=1e-80)
+    # sol = solve(prob, AutoTsit5(Rosenbrock23()), saveat=saveat, maxiters=5e6, force_dtmin=true)
+    # sol = solve(prob, Rodas4P(), saveat=saveat, maxiters=5e6)
+    # sol = solve(prob, Vern6(), saveat=saveat, maxiters=5e6, dtmax=0.1)
+    sol = solve(prob, AutoTsit5(Rosenbrock23()), saveat=saveat, maxiters=5e6, dtmax=0.1)
+  
+    radVals = sol.t
+    realpart = [sol.u[i][1] ./ sqrt.(itp_rrstar(radVals[i]).^2 .+ a.^2) ./ (GNew .* M) for i in 1:length(sol.u)]
+    imagpart = [sol.u[i][3] ./ sqrt.(itp_rrstar(radVals[i]).^2 .+ a.^2) ./ (GNew .* M) for i in 1:length(sol.u)]
+    
+
+    if sve_for_test
+        trapz(y,x) = @views sum(((y[1:end-1].+y[2:end])/2).*(x[2:end].-x[1:end-1]))
+        realP = reverse(float(abs.(realpart))).^2 .+ reverse(float(abs.(imagpart))).^2
+        rout = reverse(itp_rrstar(radVals))
+        nm = trapz(realP .* rout.^2, rout)
+        writedlm("test_store/test_compute.dat", hcat(rout, sqrt.(realP) ./ sqrt.(nm)))
+        
+        rl, r2, erg_2 = solve_radial(mu, M, a, 1, 0, 0; rpts=20000, rmaxT=rmaxT, return_erg=true, Ntot_safe=Ntot_safe, eps_r=eps_fac)
+        nmC = trapz(r2 .* conj(r2) .* rl.^2, rl)
+        writedlm("test_store/test_compute_2.dat", hcat(rl, float(abs.(r2))))
+        
+        outtest = radial_bound_NR(1, 0, 0, mu, M, rl)
+        nmC_nr = trapz(outtest .* conj(outtest) .* rl.^2, rl)
+        writedlm("test_store/test_compute_2_NR.dat", hcat(rl, float(abs.(real(outtest)))))
+        
+        # print(nmC, "\t", nmC_nr, "\n")
+    end
+    
+    
+    writedlm("test_store/test_RAD.dat", hcat(itp_rrstar(radVals), float(abs.(realpart.^2 .+ imagpart.^2))))
+    
+    maxV = maximum(realpart.^2 .+ imagpart.^2)
+    # out = maxV ./ mu.^2 .* 4 .* alph.^2
+    out = real(maxV .* erg.^2 ./ mu.^2 .* (1 .+ sqrt.(1 .- a.^2)))
+    print("Out \t", out, "\n")
+    # print("real/im \t", maximum(realpart.^2), "\t", maximum(imagpart.^2), "\n")
+    
+    
+    # theory-NR
+    test = 4.3e-7 * alph.^(11 - 4) .* (1 .+ sqrt.(1 .- a.^2))
+    print("NR rate \t", test, "\n")
+    
+    return out
     
 end

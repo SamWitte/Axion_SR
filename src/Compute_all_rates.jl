@@ -53,7 +53,7 @@ S2 = parsed_args["S2"]
 S3 = parsed_args["S3"]
 S4 = parsed_args["S4"]
 
-function main(;kpts=14, rpts=2000, rmaxT=100, Nang=200000, Npts_Bnd=2000)
+function main(;kpts=14, rpts=50000, rmaxT=100, Nang=200000, Npts_Bnd=20000)
     a = 0.9
     M = 10.0
     
