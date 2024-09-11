@@ -35,6 +35,10 @@ function parse_commandline()
             arg_type = String
             default = "Inf"
             
+        "--ftag"
+            arg_type = String
+            default = "_"
+            
             
     end
     return parse_args(s)
@@ -79,9 +83,10 @@ function main(;kpts=14, rpts=50000, rmaxT=100, Nang=200000, Npts_Bnd=20000)
     
     if S4 == "BH"
         for i in 1:alpha_pts
-            print("alpha \t", alpha_list[i], "\n")
+            # print("alpha \t", alpha_list[i], "\n")
             mu = alpha_list[i] ./ (M * GNew)
             output_sve[i] = s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=kpts, rpts=rpts, rmaxT=rmaxT, inf_nr=inf_nr, Nang=Nang, Npts_Bnd=Npts_Bnd, debug=false, include_cont=true, bnd_thresh=1e-5)
+            print("alpha \t", alpha_list[i], "\t", output_sve[i], "\n")
         end
     elseif S4 == "Inf"
         for i in 1:alpha_pts
@@ -93,7 +98,7 @@ function main(;kpts=14, rpts=50000, rmaxT=100, Nang=200000, Npts_Bnd=20000)
         print("what is S4??? ", S4, "\n")
     end
     
-    writedlm("rate_sve/"*S1*"_"*S2*"_"*S3*"_"*S4*".dat", hcat(alpha_list, output_sve))
+    writedlm("rate_sve/"*S1*"_"*S2*"_"*S3*"_"*S4*ftag*".dat", hcat(alpha_list, output_sve))
     
 end
 
