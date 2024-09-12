@@ -728,7 +728,7 @@ function spheroidals(l, m, a, erg)
     return Zlm
 end
 
-function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=200, iter=10000, xtol=1e-20, ftol=1e-90, return_both=false, for_s_rates=false, QNM=false, QNM_E=1.0)
+function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=200, iter=10000, xtol=1e-20, ftol=1e-90, return_both=false, for_s_rates=false, QNM=false, QNM_E=1.0, erg_Guess=nothing)
     
     OmegaH = a ./ (2 .* (GNew .* M) .* (1 .+ sqrt.(1 .- a.^2)))
     
@@ -767,12 +767,16 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=200, iter=10000
         
         
         if !QNM
-            SR211_g = sr_rates(n, l, m, alph_ev ./ (GNew * M), M, a)
-            # print("test \t ", SR211_g, "\n")
-            if SR211_g == 0
-                SR211_g = -1e-10 .* mu
+            if isnothing(erg_Guess)
+                SR211_g = sr_rates(n, l, m, alph_ev ./ (GNew * M), M, a)
+                # print("test \t ", SR211_g, "\n")
+                if SR211_g == 0
+                    SR211_g = -1e-10 .* mu
+                end
+                w0 = (ergL(n, l, m, alph_ev ./ (GNew * M), M, a; full=false) .+ im * SR211_g) .* GNew * M
+            else
+                w0 = erg_Guess
             end
-            w0 = (ergL(n, l, m, alph_ev ./ (GNew * M), M, a; full=false) .+ im * SR211_g) .* GNew * M
         else
             w0 = QNM_E .+ 0.0 * im
         end
@@ -1235,6 +1239,7 @@ function integrate_radialEq(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1
     val3 = sr_rates(n3, l3, m3,  mu, M, a, impose_low_cut=1e-10) * (GNew .* M)
     erg_3 = erg_3G * GNew * M .+ val3 .* im
 
+    # writedlm("test_store/test_test.dat", hcat(rlist, (rf_1 .* rf_2 .* conj(rf_3))))
     
     wR1, wI1 = find_im_part(mu, M, a, n1, l1, m1; debug=false, return_both=true, for_s_rates=true)
     wR2, wI2 = find_im_part(mu, M, a, n2, l2, m2; debug=false, return_both=true, for_s_rates=true)
@@ -1270,8 +1275,8 @@ function integrate_radialEq(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1
     
     print("CG / CG2 \t", CG, "\t", CG_2,  "\t rp  ", rp, "\t alpha \t", alph, "\n")
     
-    
-    unitMatch = 1.0 ./ (2 .* alph).^(3/2)
+    lam_eff = 1
+    unitMatch = 1.0 ./ (2 .* alph).^(3/2) .* lam_eff
     gammaT = (preFac .* (rf_1 .* rf_2 .* conj(rf_3)) ./ 6.0 .* unitMatch)
 
     
@@ -1298,13 +1303,13 @@ function integrate_radialEq(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1
     function radial_diff!(du, u, Mvars, rstar)
         # u = [real(R), real(y), imag(R), imag(y)]
         du[1] = u[2]
-        du[3] = u[4]
+        
       
         r = itp_rrstar(rstar)
         delt = (r.^2 .- 2 .* r .+ a.^2)
         
-        Rr = u[1] .+ im * u[3]
-        y = u[2] .+ im * u[4]
+        Rr = u[1]
+        y = u[2]
         
         # NR
         # secDer = -2 * y ./ r .- 2 * alph.^2 ./ r .* Rr .+ (alph.^2 .- erg.^2) .* Rr
@@ -1332,14 +1337,12 @@ function integrate_radialEq(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1
            secDer += delt ./ ff.^(3/2) .* (itpG(log10.(r)) + im * itpGI(log10.(r))) .* (CG .* r.^2 .+ CG_2)
         end
         
-  
         du[2] = real(secDer)
-        du[4] = imag(secDer)
         
     end
   
     
-    y0 = [1e-80 1e-100 1e-80 1e-100]
+    y0 = [1e-60 1e-100]
     tspan_r = (rmax / 10, BigFloat(rp * (1.0 .+ eps_fac)))
     r_list_map = 10 .^LinRange(log10.(tspan_r[2]), log10.(tspan_r[1]), rpts)
     rout_star = zeros(rpts)
@@ -1361,12 +1364,11 @@ function integrate_radialEq(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1
   
     radVals = sol.t
     realpart = [sol.u[i][1] ./ sqrt.(itp_rrstar(radVals[i]).^2 .+ a.^2) ./ (GNew .* M) for i in 1:length(sol.u)]
-    imagpart = [sol.u[i][3] ./ sqrt.(itp_rrstar(radVals[i]).^2 .+ a.^2) ./ (GNew .* M) for i in 1:length(sol.u)]
     
 
     if sve_for_test
         trapz(y,x) = @views sum(((y[1:end-1].+y[2:end])/2).*(x[2:end].-x[1:end-1]))
-        realP = reverse(float(abs.(realpart))).^2 .+ reverse(float(abs.(imagpart))).^2
+        realP = reverse(float(abs.(realpart))).^2
         rout = reverse(itp_rrstar(radVals))
         nm = trapz(realP .* rout.^2, rout)
         writedlm("test_store/test_compute.dat", hcat(rout, sqrt.(realP) ./ sqrt.(nm)))
@@ -1384,16 +1386,16 @@ function integrate_radialEq(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1
     end
     
     
-    writedlm("test_store/test_RAD.dat", hcat(itp_rrstar(radVals), float(abs.(realpart.^2 .+ imagpart.^2))))
+    writedlm("test_store/test_RAD.dat", hcat(itp_rrstar(radVals), float(abs.(realpart.^2))))
     
-    maxV = maximum(realpart.^2 .+ imagpart.^2)
-    out = Float64.(real(maxV .* erg.^2 ./ mu.^2 .* (1 .+ sqrt.(1 .- a.^2))))
+    maxV = maximum(realpart.^2 )
+    out = Float64.(real(maxV .* erg.^2 ./ mu.^2 .* (1 .+ sqrt.(1 .- a.^2)) ./ lam_eff.^2))
     print("Output: ", out, "\n")
     
-    maxV = (realpart[end].^2 .+ imagpart[end].^2)
-    out = Float64.(real(maxV .* erg.^2 ./ mu.^2 .* (1 .+ sqrt.(1 .- a.^2))))
+    maxV = (realpart[end].^2)
+    out = Float64.(real(maxV .* erg.^2 ./ mu.^2 .* (1 .+ sqrt.(1 .- a.^2)) ./ lam_eff.^2))
     print("Output 2: ", out, "\n")
-    # print("real/im \t", maximum(realpart.^2), "\t", maximum(imagpart.^2), "\n")
+    
     
     
     # theory-NR
