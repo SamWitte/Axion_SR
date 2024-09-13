@@ -738,7 +738,11 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=200, iter=10000
         erg0_i = open(readdlm, "input_info/ErgEvol_I_n_$(n)_l_0_m_0_.dat");
         itp = LinearInterpolation(erg0_r[:, 1], erg0_r[:, 2], extrapolation_bc=Line())
         itpI = LinearInterpolation(erg0_i[:, 1], erg0_i[:, 2], extrapolation_bc=Line())
-        return itp(alph) .+ im .* itpI(alph)
+        if return_both
+            return itp(alph), im .* itpI(alph)
+        else
+            im .* itpI(alph)
+        end
     end
     
     if (ergL(n, l, m, mu, M, a) < m .* OmegaH)||(for_s_rates==true)||QNM
@@ -1222,7 +1226,6 @@ function integrate_radialEq(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1
     q = abs.(real(- sqrt.(abs.(alph.^2 .- (erg_pxy .* GNew .* M).^2))))
     rmax = Float64.(rmaxT ./ q)
     rlist = range(rp .* (1.0 .+ eps_fac), rmax, rpts)
-    h = rlist[2] - rlist[1]
     
     # rl, r1, erg_1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true, Ntot_safe=Ntot_safe)
     # itp = LinearInterpolation(log10.(rl), r1, extrapolation_bc=Line())
@@ -1253,8 +1256,8 @@ function integrate_radialEq(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1
     wR2, wI2 = find_im_part(mu, M, a, n2, l2, m2; debug=false, return_both=true, for_s_rates=true, Ntot_force=10000)
     wR3, wI3 = find_im_part(mu, M, a, n3, l3, m3; debug=false, return_both=true, for_s_rates=true, Ntot_force=10000)
     
-    # erg = ((wR1 .+ wR2 .- wR3) .+ im * (wI1 .+ wI2 .- wI3))   #
-    erg = (erg_1 + erg_2 - conj(erg_3))  # needs to be a bit larger??
+    erg = ((wR1 .+ wR2 .- wR3) .+ im * (wI1 .+ wI2 .- wI3))   #
+    # erg = (erg_1 + erg_2 - conj(erg_3))  # needs to be a bit larger??
     print("ERG \t", Float64.(real(erg)), "\n")
 
     Z1 = spheroidals(l1, m1, a, erg_1)
@@ -1352,6 +1355,7 @@ function integrate_radialEq(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1
         
     end
   
+    ##### CHECK #####
     function check_print(u, t, integrator)
         r = itp_rrstar(t)
         Rr = u[1]
@@ -1360,7 +1364,6 @@ function integrate_radialEq(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1
         ff = (r.^2 .+ a.^2)
         secDer = delt .* alph.^2 ./ ff .+ delt .* ( a.^2 .* (erg.^2 .- alph.^2)) ./ ff.^2 .+ delt .* (3 .* r.^2 - 4 .* r .+ a.^2) ./ ff.^3 .- 3 .* delt.^2 .* r.^2 ./ ff.^4 .- erg.^2
         secDer *= Rr
-        
         
         secDer2 = delt ./ ff.^(3/2) .* (itpG(log10.(r)) + im * itpGI(log10.(r))) .* (CG .* r.^2 .+ CG_2)
         print(Float64(real(r)), "\t", Float64(real(secDer)), "\t", Float64(real(secDer2)), "\n")
@@ -1371,8 +1374,10 @@ function integrate_radialEq(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1
     end
     cb_pt = DiscreteCallback(check_print, affect_print!, save_positions=(false, true))
     cbset = CallbackSet(cb_pt)
+    ##### CHECK #####
     
-    y0 = [1e-80 1e-100]
+    
+    y0 = [1e-70 0]
     tspan_r = (BigFloat(rmax / 10), BigFloat(rp * (1.0 .+ eps_fac)))
     r_list_map = 10 .^LinRange(log10.(tspan_r[2]), log10.(tspan_r[1]), rpts)
     rout_star = zeros(rpts)
