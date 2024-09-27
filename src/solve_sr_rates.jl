@@ -1584,8 +1584,8 @@ function integrate_radialEq_2(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts
     # wR3, wI3 = find_im_part(mu, M, a, n3, l3, m3; debug=false, return_both=true, for_s_rates=true, Ntot_force=10000)
     
     # erg = ((wR1 .+ wR2 .- wR3) .+ im * (wI1 .+ wI2 .- wI3))   #
-    erg = ergL(1, 0, 0, mu, M, a; full=false) * GNew * M .+ 0 * im ## TEST!!!!
-    # erg = (erg_1 + erg_2 - erg_3)  #
+    # erg = ergL(1, 0, 0, mu, M, a; full=false) * GNew * M .+ 0 * im ## TEST!!!!
+    erg = (erg_1 + erg_2 - erg_3)  #
     print("ERG \t", Float64.(real(erg)), "\t [Im]", Float64.(imag(erg)), "\n")
 
     Z1 = spheroidals(l1, m1, a, erg_1)
