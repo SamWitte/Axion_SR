@@ -1706,8 +1706,9 @@ function integrate_radialEq_2(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts
                 newV += (h1.^2 .+ h1 .* h2) .* outWF[idx] .* (-4 .+ a.^2 .+ a.^4 .* (alph.^2 .- erg.^2)) ./ r_input.^4 ./ 2.0
               
             end
-            
-            append!(outWF, newV)
+            newV_r = Float64.(real(newV))
+            newV_i = Float64.(imag(newV))
+            append!(outWF, newV_r + im * newV_i)
         else
             
             delt = (r_input.^2 .- 2 .* r_input .+ a.^2)
@@ -1718,14 +1719,18 @@ function integrate_radialEq_2(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts
                 newV += - (h1.^2 .+ h1 .* h2) .* SS .* (CG .* r_input.^2 .+ CG_2 .* a.^2) .* delt ./ ff.^(3/2) ./ 2.0
                 
             end
-            append!(SS_out, -SS .* CG)
-            append!(outWF, newV)
+            
+            newV_r = Float64.(real(newV))
+            newV_i = Float64.(imag(newV))
+            
+            
+            SS_r = Float64.(real(-SS .* CG))
+            SS_i = Float64.(real(-SS .* CG))
+            append!(SS_out, SS_r + im * SS_i)
+            append!(outWF, newV_r + im * newV_i)
         end
         
         append!(rvals, rr)
-        
-        # print(Float64(rr), "\t", Float64(real(outWF[end])), "\n")
-        
 
         rr -= h_step
         idx += 1
@@ -1744,7 +1749,7 @@ function integrate_radialEq_2(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts
     outWF .*= 1.0 ./ (sqrt.(itp_rrstar(rvals).^2 .+ a.^2)  .* (GNew .* M) )
     
     ### TESTING NR
-    testit = true
+    testit = false
     sv1 = []
     sv2 = []
     rt = []
