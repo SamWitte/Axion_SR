@@ -1586,6 +1586,7 @@ function integrate_radialEq_2(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts
     # erg = ((wR1 .+ wR2 .- wR3) .+ im * (wI1 .+ wI2 .- wI3))   #
     # erg = ergL(1, 0, 0, mu, M, a; full=false) * GNew * M .+ 0 * im ## TEST!!!!
     erg = (erg_1 + erg_2 - erg_3)  #
+    
     print("ERG \t", Float64.(real(erg)), "\t [Im]", Float64.(imag(erg)), "\n")
 
     Z1 = spheroidals(l1, m1, a, erg_1)
@@ -1656,9 +1657,9 @@ function integrate_radialEq_2(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts
     
     
 
-    h_step = rp ./ h_mve
+    h_step = Float64.(rp ./ h_mve)
     if add_source
-        rstart = 0.0 .* (1 + im)
+        rstart = 1e-70 .* (1 + im)
     else
         rstart = 1e-70 .* (1 + im)
     end
@@ -1669,7 +1670,7 @@ function integrate_radialEq_2(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts
     rr = itp_rrstar(rmax)
 
 
-    append!(outWF, rstart)
+    append!(outWF, rstart) ## TESTING....
     append!(rvals, rr)
     append!(SS_out, 0.0)
     rr -= h_step
@@ -1678,56 +1679,62 @@ function integrate_radialEq_2(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts
     append!(SS_out, 0.0)
     rr -= h_step
     
-    HigherO = true
+    stop_running = false
     run_it = true
     idx = 2
     while run_it
         r_input = itp_rrstar(rr)
         h1 = rvals[idx] - rvals[idx - 1]
         h2 = rr - rvals[idx]
+        delt = (r_input.^2 .- 2 .* r_input .+ a.^2)
+        ff = (r_input.^2 .+ a.^2)
+            
         SS = (itpG(log10.(r_input)) + im * itpGI(log10.(r_input)))
         
         if NON_REL
-            newV = outWF[idx] .* (1 .+ h1 ./ h2) .- outWF[idx - 1] .* (h1 ./ h2) .+ (h1.^2 .+ h1 .* h2) .* ((alph.^2 .- erg.^2) .* outWF[idx] .- 2 .* alph.^2 ./ r_input .* outWF[idx]) ./ 2.0
+            append!(SS_out, -SS .* CG .* delt.^2 ./ ff.^(3/2))
             
-            append!(SS_out, -SS .* CG)
-            if add_source
-                newV += - (h1.^2 .+ h1 .* h2) .* SS .* (CG .* (r_input .- 2 .- a.^2 ./ (2 .* r_input)) .+ CG_2 .* a.^2 ./ r_input) ./ 2.0
+            if !stop_running
+                firstD_pre = (-2 ./ r_input .+ 2 .* (r_input .+ 1) ./ ff)
+                newV = (outWF[idx] .* 2 .* (h1 .+ h2) .+ outWF[idx - 1] .* h1 .* (-2 .+ h2 * firstD_pre) ) ./ (h2 .* (2 .+ h1 .* firstD_pre))
                 
-            end
-            
-            if HigherO
-                newV += (h1.^2 .+ h1 .* h2) .* outWF[idx] .* (a.^2 .* (- alph.^2 .+ erg.^2)) ./ r_input.^2 ./ 2.0
+                net_rescale = (h1 .+ h2) .* h1 ./ (2 .+ firstD_pre .* h1)
+                newV += net_rescale .* (3 .* a .* delt.^2 ./ ff.^4 .+ delt.^2 .* ( -2 .* alph.^2 .+  r_input .* (alph.^2 .- erg.^2) ) ./ (r_input.^2 .* ff.^(3/2)) ) .* outWF[idx]
+                
                 if add_source
-                    newV += - (h1.^2 .+ h1 .* h2) .* SS .* (CG .* 3 ./ r_input.^2 .- 2 .* CG_2 ./ r_input.^2 ) ./ 2.0
+                    newV += - net_rescale .* SS .* (CG .* delt.^2 ./ ff.^(3/2))
                 end
-                
-                newV += (h1.^2 .+ h1 .* h2) .* outWF[idx] .* (2 .+ a.^2 .* (4 .* alph.^2 .- 2 .* erg.^2)) ./ r_input.^3 ./ 2.0
-                newV += (h1.^2 .+ h1 .* h2) .* outWF[idx] .* (-4 .+ a.^2 .+ a.^4 .* (alph.^2 .- erg.^2)) ./ r_input.^4 ./ 2.0
-              
+                newV_r = Float64.(real(newV))
+                newV_i = Float64.(imag(newV))
+                append!(outWF, newV_r + im * newV_i)
+            else
+                append!(outWF, outWF[end] .* sqrt.((r_input.^2 .+ a.^2) ./ (itp_rrstar(rvals[idx]).^2 .+ a.^2)))
             end
-            newV_r = Float64.(real(newV))
-            newV_i = Float64.(imag(newV))
-            append!(outWF, newV_r + im * newV_i)
+            
+            
         else
-            
-            delt = (r_input.^2 .- 2 .* r_input .+ a.^2)
-            ff = (r_input.^2 .+ a.^2)
-            Vv = delt .* alph.^2 ./ ff .+ delt .* (LLM .+ a.^2 .* (erg.^2 .- alph.^2)) ./ ff.^2 .+ delt .* (3 .* r_input.^2 .- 4 .* r_input .+ a.^2) ./ ff.^3 .- 3 .* delt.^2 .* r_input.^2 ./ ff.^4
-            newV = outWF[idx] .* (1 .+ h1 ./ h2) .- outWF[idx - 1] .* (h1 ./ h2) .+ (h1.^2 .+ h1 .* h2) .* (Vv .- erg.^2) .* outWF[idx] ./ 2.0
-            if add_source
-                newV += - (h1.^2 .+ h1 .* h2) .* SS .* (CG .* r_input.^2 .+ CG_2 .* a.^2) .* delt ./ ff.^(3/2) ./ 2.0
-                
-            end
-            
-            newV_r = Float64.(real(newV))
-            newV_i = Float64.(imag(newV))
-            
-            
             SS_r = Float64.(real(-SS .* CG))
             SS_i = Float64.(real(-SS .* CG))
             append!(SS_out, SS_r + im * SS_i)
-            append!(outWF, newV_r + im * newV_i)
+            
+            if !stop_running
+                Vv = delt .* alph.^2 ./ ff .+ delt .* (LLM .+ a.^2 .* (erg.^2 .- alph.^2)) ./ ff.^2 .+ delt .* (3 .* r_input.^2 .- 4 .* r_input .+ a.^2) ./ ff.^3 .- 3 .* delt.^2 .* r_input.^2 ./ ff.^4
+                newV = outWF[idx] .* (1 .+ h1 ./ h2) .- outWF[idx - 1] .* (h1 ./ h2) .+ (h1.^2 .+ h1 .* h2) .* (Vv .- erg.^2) .* outWF[idx] ./ 2.0
+                if add_source
+                    newV += - (h1.^2 .+ h1 .* h2) .* SS .* (CG .* r_input.^2 .+ CG_2 .* a.^2) .* delt ./ ff.^(3/2) ./ 2.0
+                    
+                end
+                
+                newV_r = Float64.(real(newV))
+                newV_i = Float64.(imag(newV))
+                append!(outWF, newV_r + im * newV_i)
+            
+            else
+                append!(outWF, outWF[end] .* sqrt.((r_input.^2 .+ a.^2) ./ (itp_rrstar(rvals[idx]).^2 .+ a.^2)))
+            end
+            
+            
+            
         end
         
         append!(rvals, rr)
@@ -1740,16 +1747,57 @@ function integrate_radialEq_2(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts
         end
         
         
+        firstD = Float64(real(outWF[idx] ./ itp_rrstar(rvals[idx]) .- outWF[idx - 1] ./ itp_rrstar(rvals[idx-1])))
+        secD = Float64(real(outWF[idx - 1] ./ itp_rrstar(rvals[idx - 1]) .- outWF[idx - 2] ./ itp_rrstar(rvals[idx-2])))
+        # print(Float64(r_input), "\t", Float64.(real(outWF[idx])), "\t", firstD, "\t", secD, "\t", itp_rrstar(rr) ./ rmax, "\n")
+#        if (sign(firstD) != sign(secD))&&( itp_rrstar(rr) ./ rmax < 0.5)
+#            stop_running = true
+#        end
+        
+        
         
     end
     
     rvals = reverse(rvals)
     outWF = reverse(outWF)
     SS_out = reverse(SS_out)
+    
     outWF .*= 1.0 ./ (sqrt.(itp_rrstar(rvals).^2 .+ a.^2)  .* (GNew .* M) )
     
+    
+    
+    function wrapper!(F, x)
+       
+        
+        for i in 2:(length(x) - 1)
+            r_input = Float64.(itp_rrstar(rvals[i]))
+
+            ## now do variable transform check
+            potV2 = Float64.(real(alph.^2 .- erg.^2 .- 2 .* alph.^2 ./ r_input)) .* x[i] .* (GNew .* M)
+            secD = - (x[i+1] .- 2 .* x[i] .+ x[i-1]) .* (GNew .* M) ./ h_step.^2
+            firD = - 2 .* (x[i+1] .- x[i-1]) .* (GNew .* M) ./ (2 .* h_step .* r_input)
+            
+            temp =  (secD .+ firD .+ potV2)
+            
+            rat = real(SS_out[i]) ./ temp
+            if abs.(rat) .> 1e-100
+                F[i] =  log10.(abs.(rat)) ./ log10.(abs.(SS_out[i]))
+            else
+                F[i] = 0.0
+            end
+        end
+        
+        F[1] = F[2]
+        F[end] = F[end - 1]
+    end
+
+    sol = nlsolve(wrapper!, Float64.(abs.(real(outWF))), show_trace=true, autodiff = :forward, xtol=1e-30, ftol=1e-30, iterations=40)
+    print(sol, "\n")
+    outWF = sol.zero
+    
+    
     ### TESTING NR
-    testit = false
+    testit = true
     sv1 = []
     sv2 = []
     rt = []
@@ -1838,3 +1886,4 @@ function integrate_radialEq_2(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts
     return out
     
 end
+
