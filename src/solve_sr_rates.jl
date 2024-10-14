@@ -1302,7 +1302,7 @@ function integrate_radialEq_2(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts
     if NON_REL
         maxV = maximum(real(outWF[idx_hold] .* conj.(outWF[idx_hold])))
         rr_at_max = rvals[argmax(real(outWF[idx_hold] .* conj.(outWF[idx_hold])))]
-        maxV .*= rr_at_max.^2
+        maxV *= rr_at_max.^2
         out = Float64.(real(8 * pi .* maxV .* alph.^4 .* (1 .+ sqrt.(1 .- a.^2)) .* 2 ./ lam_eff.^2))
     else
         maxV = maximum(real(outWF[idx_hold] .* conj.(outWF[idx_hold])))
