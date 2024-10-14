@@ -9,7 +9,7 @@ function parse_commandline()
     
         "--alpha_max"
             arg_type = Float64
-            default = 1.0
+            default = 1.5
             
         "--alpha_min"
             arg_type = Float64
@@ -50,18 +50,29 @@ parsed_args = parse_commandline()
 alpha_max = parsed_args["alpha_max"];
 alpha_min = parsed_args["alpha_min"];
 alpha_pts = parsed_args["alpha_pts"];
-inf_nr=false
+inf_nr=true
 
 S1 = parsed_args["S1"]
 S2 = parsed_args["S2"]
 S3 = parsed_args["S3"]
 S4 = parsed_args["S4"]
 
+ftag = parsed_args["ftag"];
+
+include_cont = true
+NON_REL = false
+debug = false
+
+print("Non Rel? \t", NON_REL, "\n")
+print(S1, "\t", S2, "\t", S3, "\t", S4, "\n")
+
 function main(;kpts=14, rpts=50000, rmaxT=100, Nang=200000, Npts_Bnd=20000)
     a = 0.9
     M = 10.0
     
     alpha_list = 10 .^LinRange(log10(alpha_min), log10(alpha_max), alpha_pts)
+    # alpha_list = [0.1]
+    # alpha_list = [0.3]
     output_sve = zeros(alpha_pts)
     
     State1 = [parse(Int, c) for c in S1]
@@ -85,7 +96,7 @@ function main(;kpts=14, rpts=50000, rmaxT=100, Nang=200000, Npts_Bnd=20000)
         for i in 1:alpha_pts
             # print("alpha \t", alpha_list[i], "\n")
             mu = alpha_list[i] ./ (M * GNew)
-            output_sve[i] = s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=kpts, rpts=rpts, rmaxT=rmaxT, inf_nr=inf_nr, Nang=Nang, Npts_Bnd=Npts_Bnd, debug=false, include_cont=true, bnd_thresh=1e-5)
+            output_sve[i] = s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=kpts, rpts=rpts, rmaxT=rmaxT, inf_nr=inf_nr, Nang=Nang, Npts_Bnd=Npts_Bnd, debug=debug, include_cont=include_cont, bnd_thresh=1e-4, NON_REL=NON_REL, eps_r=1e-6)
             print("alpha \t", alpha_list[i], "\t", output_sve[i], "\n")
         end
     elseif S4 == "Inf"
