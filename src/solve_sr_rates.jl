@@ -268,12 +268,10 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=10, rpts=
             end
         end
         if NON_REL
-            # itp = LinearInterpolation(log10.(rl), log10.(r4), extrapolation_bc=Line())
             itp = LinearInterpolation(log10.(rl), r4, extrapolation_bc=Line())
             rf_4 = itp(log10.(rlist))
  
         else
-            # itp = LinearInterpolation(log10.(rl), log10.(r4 .* sqrt.(rl.^2 .+ a.^2)), extrapolation_bc=Line())
             itp = LinearInterpolation(log10.(rl), (r4 .* sqrt.(rl.^2 .+ a.^2)), extrapolation_bc=Line())
             rf_4 = itp(log10.(rlist))
         end
@@ -326,11 +324,13 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=10, rpts=
             done_nmax = true
         end
         n += 1
+        
+        done_nmax = true ### TEMP HOLD
     end
     
 
 
-    if include_cont
+    if include_cont && NON_REL
         # compute continuous contribution
         for i in 1:kpts
             k = kk_list[i] ./ (GNew .* M) # physical units
@@ -387,6 +387,66 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=10, rpts=
             end
         end
         contin_c += trapz(ck_list, kk_list / UnF)
+    elseif !NON_REL
+        n = 1
+        l = 0
+        done_nmax = false
+        QNM_list = find_im_part(mu, M, a, n, l, 0; QNM=true, Ntot_force=20000)
+        if length(QNM_list) == 0
+            done_nmax = true
+        end
+        
+        print("Doing QNMs \n")
+        while !done_nmax
+            erg_in = QNM_list[n, 2] .+ im * QNM_list[n, 3]
+            
+            rl, r4, erg_4 = solve_radial(mu, M, a, n, l, 0; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true, Ntot_safe=Ntot_safe, QNM=true, QNM_ergs=erg_in)
+            writedlm("test_store/test_$n.dat", hcat(rl, Float64.(real(r4 .* conj(r4)))))
+        
+            itp = LinearInterpolation(log10.(rl), (r4 .* sqrt.(rl.^2 .+ a.^2)), extrapolation_bc=Line())
+            rf_4 = itp(log10.(rlist))
+ 
+
+            
+            Z4 = spheroidals(0, 0, a, erg_4 ./ (GNew .* M))
+            
+            thetaV = acos.(1.0 .- 2.0 .* rand(Nang))
+            phiV = rand(Nang) .* 2*pi
+            CG = 0.0
+            for i in 1:Nang
+                CG += func_ang([thetaV[i], phiV[i]], Z1, Z2, Z3, Z4)
+            end
+            CG *= 4*pi / Nang
+           
+            
+            # dropping a^2 term in CG_2
+            r_integrd = rf_1 .* rf_2 .* conj(rf_3) .* conj(rf_4) .* (rlist.^2 .* (rlist.^2 .- 2 .* rlist .+ a.^2) ./ (rlist.^2 .+ a.^2).^(3/2)) .* rlist.^2 ./ (rlist.^2 .+ a.^2)
+            radial_int = trapz(r_integrd, rlist)
+            
+            kdiff_sq = (erg_4.^2 .- erg_ind^2)
+        
+            ff = CG .* radial_int ./ (2 .* alph).^(3 / 2) ./ (kdiff_sq)
+            ### double factor 1/2
+            if (n1==n2)&&(l1==l2)&&(m1==m2)
+                ff /= 2
+            end
+            res_n = (rf_4[1] ./ sqrt.(rlist[1].^2 .+ a.^2)) .* ff ./ (GNew .* M)
+            
+            
+
+            if debug
+                print(n, "\t", erg_in, "\t", Float64(abs.(res_n)), "\n")
+            end
+            
+            contin_c += res_n
+#            if abs.(res_n / contin_c) < bnd_thresh
+#                done_nmax = true
+#            end
+            n += 1
+            if n > QNM_list[end, 1]
+                done_nmax = true
+            end
+        end
     end
     
     psi_1 = bound_c .+ contin_c
@@ -520,7 +580,7 @@ function s_rate_inf(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3, lF_min; rpts=4
     
 end
 
-function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=500, xtol=1e-20, ftol=1e-90, sve=false, fnm="test_store/WF_", return_erg=false, Ntot_safe=5000, eps_r=1e-10)
+function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=500, xtol=1e-20, ftol=1e-90, sve=false, fnm="test_store/WF_", return_erg=false, Ntot_safe=5000, eps_r=1e-10, QNM=false, QNM_ergs=nothing)
     ### dolan 2007
     # everything normalized
     alph = GNew .* M .* mu
@@ -542,15 +602,30 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
     if Ntot_safe > Ntot
         Ntot = Ntot_safe
     end
-    
-    wR, wI = find_im_part(mu, M, a, n, l, m; debug=debug, iter=iter, xtol=xtol, ftol=ftol, return_both=true, for_s_rates=true)
+    if !QNM
+        wR, wI = find_im_part(mu, M, a, n, l, m; debug=debug, iter=iter, xtol=xtol, ftol=ftol, return_both=true, for_s_rates=true, QNM=false)
+    else
+        wR = real(QNM_ergs)
+        wI = imag(QNM_ergs)
+    end
     erg = wR .+ im .* wI
     if debug
         print("erg \t", erg, "\n")
     end
     
-    q = - sqrt.(alph.^2 .- erg.^2)
     
+    q = - sqrt.(alph.^2 .- erg.^2)
+    if !QNM
+        if real(q) > 0
+            q *= -1
+        end
+    else
+        if real(q) < 0
+            q *= -1
+        end
+    end
+    
+
     # rmax = rmaxT * 1.0 ./ abs.(real(q))
     rmax = Float64.(100 * n ./ alph.^2)
     # print("Check \t", rmax, "\t", rmaxT * 1.0 ./ abs.(real(q)), "\n")
@@ -598,7 +673,11 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
         return rlist, zeros(length(rlist))
     end
     
-    preF = (rlist .- rp).^(- im .* sigm) .* (rlist .- rm).^(im .* sigm .+ chi .- 1.0) .* exp.(q .* rlist)
+    if !QNM
+        preF = (rlist .- rp).^(- im .* sigm) .* (rlist .- rm).^(im .* sigm .+ chi .- 1.0) .* exp.(q .* rlist)
+    else
+        preF = (rlist .- rp).^(- im .* sigm) .* (rlist .- rm).^(im .* sigm .+ chi .- 1.0) .* exp.(im .* q .* rlist)
+    end
     
     nfactor = ((rlist .- rp) ./ (rlist .- rm))
     Rout = zeros(Complex, length(rlist))
@@ -617,6 +696,12 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
     # Normalize integration
     trapz(y,x) = @views sum(((y[1:end-1].+y[2:end])/2).*(x[2:end].-x[1:end-1]))
     
+    
+    if QNM
+        # nm = 1.0
+        alp_trans = 2 .* rp ./ (rp .- rm) .* log.(abs.(rlist .- rp)) .- 2 .* rm ./ (rp .- rm) .* log.(abs.(rlist .- rm))
+        Rout .*= exp.(im * erg .* alp_trans) # change coord
+    end
     nm = trapz(Rout .* conj(Rout) .* rlist.^2, rlist)
     
     # print(Float64.(real(Rout ./ sqrt.(nm))), "\n")
@@ -826,7 +911,8 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=200, iter=10000
             end
 #            end
         else
-            w0 = QNM_E .+ 0.0 * im
+            ### only valid for l= 0,m=0, otherwise better guesses are needed
+            w0 = 0.117 .+ 0.004 .* (alph ./ 0.1) .- 0.084 * im .- 0.01 .* (alph ./ 0.1)  # rough guess for n = 1, l=0, m=0
         end
         
         
@@ -837,10 +923,16 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=200, iter=10000
             wI = x[2]  # imag
             erg = wR + im * wI
     
+            q = - sqrt.(alph_ev.^2 .- erg.^2)
+            
             if !QNM
-                q = - sqrt.(alph_ev.^2 .- erg.^2)
+                if real(q) > 0
+                    q *= -1
+                end
             else
-                q = sqrt.(alph_ev.^2 .- erg.^2)
+                if real(q) < 0
+                    q *= -1
+                end
             end
            
             
@@ -884,7 +976,46 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=200, iter=10000
         end
         
         # sol = nlsolve(wrapper!, [BigFloat(log10.(real(w0))), BigFloat(imag(w0))], autodiff = :forward, xtol=xtol, ftol=ftol, iterations=iter)
-        sol = nlsolve(wrapper!, [BigFloat((real(w0))), BigFloat(imag(w0))], autodiff = :forward, xtol=xtol, ftol=ftol, iterations=iter)
+        if !QNM
+            sol = nlsolve(wrapper!, [BigFloat((real(w0))), BigFloat(imag(w0))], autodiff = :forward, xtol=xtol, ftol=ftol, iterations=iter)
+        else
+            sol = nlsolve(wrapper!, [BigFloat((real(w0))), BigFloat(imag(w0))], autodiff = :forward, xtol=xtol, ftol=ftol, iterations=iter)
+            outSend = [n sol.zero[1] sol.zero[2]] # n, real, im
+            
+            nmax = n+5
+            nn_in = n+1
+            while nn_in < nmax
+                guess = outSend[end, 2] + (outSend[end, 3] .- 0.1) * im
+                found_it = false
+                trialF = 0
+                while !found_it
+                    sol = nlsolve(wrapper!, [BigFloat((real(guess))), BigFloat(imag(guess))], autodiff = :forward, xtol=xtol, ftol=ftol, iterations=iter)
+                    # print("guess \t", guess, "\t", trialF, "\n")
+                    # print("trial \t ", sol.zero, "\n\n")
+                    if (!isapprox(sol.zero[1], outSend[end, 2]; atol = 0.0001)&&!isapprox(sol.zero[2], outSend[end, 3]; atol = 0.0001))&&(sol.zero[1] > 0)&&(sol.zero[2] < outSend[end, 3])
+                        outSend = cat(outSend, [nn_in sol.zero[1] sol.zero[2]], dims=1)
+                        found_it = true
+                    else
+                        guess = real(guess) + im .* imag(guess) - 0.005 * im
+                    end
+                    
+                    if (sol.zero[1] == 0)&&(sol.zero[2] == 0)
+                       found_it = true
+                       nn_in = nmax
+                    end
+                    
+                    trialF +=1
+                    if trialF > 200
+                        found_it = true
+                        nn_in = nmax
+                    end
+                end
+                
+                nn_in += 1
+            end
+            
+            return outSend
+        end
         
         if debug
             print(sol, "\n\n")
@@ -1107,11 +1238,8 @@ function integrate_radialEq_2(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts
     
     
     rmax = Float64.(100 ./ alph.^2 .* (minN ./ 2.0) )
-    if NON_REL
-        rlist = range(1e-3, rmax, rpts)
-    else
-        rlist = range(rp .* (1.0 .+ eps_fac), rmax, rpts)
-    end
+    
+    rlist = 10 .^range(log10(rp .* (1.0 .+ eps_fac)), log10.(rmax), rpts)
     
     # rl, r1, erg_1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true, Ntot_safe=Ntot_safe)
     # itp = LinearInterpolation(log10.(rl), r1, extrapolation_bc=Line())
@@ -1193,7 +1321,8 @@ function integrate_radialEq_2(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts
     
     
     r_list_map = 10 .^LinRange(log10.(rp * (1.0 .+ eps_fac)), log10.(rmax), 100000)
-    rout_star = r_list_map .+ 2.0 .* rp ./ (rp .- rmm) .* log.(r_list_map ./ rp .- 1.0) .- 2.0 .* rmm .* log.(r_list_map ./ rmm .- 1.0) ./ (rp .- rmm)
+    # rout_star = r_list_map .+ 2.0 .* rp ./ (rp .- rmm) .* log.(r_list_map ./ rp .- 1.0) .- 2.0 .* rmm .* log.(r_list_map ./ rmm .- 1.0) ./ (rp .- rmm)
+    rout_star = r_list_map .+ 2.0 .* rp ./ (rp .- rmm) .* log.((r_list_map .- rp) ./ 2.0) .- 2.0 .* rmm .* log.((r_list_map .- rmm) ./ 2.0) ./ (rp .- rmm)
     if NON_REL
         itp_rrstar(x) = x
         itp_rrstar_inv(x) = x
@@ -1214,10 +1343,225 @@ function integrate_radialEq_2(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts
     rvals = []
     SS_out = []
     
+    # set D to 1
+    #
+    
+    append!(outWF, itp_rrstar.(rr).^3 .* exp.(-sqrt.(alph.^2 .- erg.^2) .* rr) .* sqrt.(itp_rrstar.(rr).^2 .+ a.^2)) ##
+    append!(rvals, rr)
+    rr -= h_step
+    append!(outWF, itp_rrstar.(rr).^3 .* exp.(-sqrt.(alph.^2 .- erg.^2) .* rr) .* sqrt.(itp_rrstar.(rr).^2 .+ a.^2))
+    append!(rvals, rr)
+    rr -= h_step
+
+    
+    stop_running = false
+    run_it = true
+    idx = 2
+    while run_it
+        
+        r_input = itp_rrstar(rvals[idx])
+    
+        delt = (r_input.^2 .- 2 .* r_input .+ a.^2)
+        ff = (r_input.^2 .+ a.^2)
+            
+        
+        net_rescale = h_step.^2
+        Vv = delt .* alph.^2 ./ ff .+ delt .* (LLM .+ a.^2 .* (erg.^2 .- alph.^2)) ./ ff.^2 .+ delt .* (3 .* r_input.^2 .- 4 .* r_input .+ a.^2) ./ ff.^3 .- 3 .* delt.^2 .* r_input.^2 ./ ff.^4
+        newV = 2 * outWF[idx] .- outWF[idx - 1] .+ net_rescale .* (Vv .- erg.^2) .* outWF[idx]
+#        if add_source
+#            newV += - net_rescale .* SS .* (CG .* r_input.^2 .+ CG_2 .* a.^2) .* delt ./ ff.^(3/2)
+#        end
+        
+        newV_r = Float64.(real(newV))
+        newV_i = Float64.(imag(newV))
+        append!(outWF, newV_r + im * newV_i)
+            
+        append!(rvals, rr)
+
+        rr -= h_step
+        idx += 1
+        
+        if !NON_REL
+            if (itp_rrstar(rr) < rp .*  (1.0 .+ eps_fac))
+                run_it = false
+            end
+        else
+            if rr < rp
+                run_it = false
+            end
+        end
+        
+    end
+    
+    rvals = reverse(rvals)
+    outWF = reverse(outWF)
+    
+    outWF .*= 1.0 ./ sqrt.(itp_rrstar.(rvals).^2 .+ a.^2)
+    Tmm = (itpG(log10.(itp_rrstar.(rvals))) + im * itpGI(log10.(itp_rrstar.(rvals)))) .* (CG .* itp_rrstar.(rvals).^2 .+ CG_2 .* a.^2)
+    
+    writedlm("test_store/test_1.dat", hcat(itp_rrstar.(rvals), Float64.(real(outWF .* conj.(outWF)))))
+    writedlm("test_store/test_2.dat", hcat(itp_rrstar.(rvals), Float64.(real(Tmm .* conj.(Tmm)))))
+    
+    trapz(y,x) = @views sum(((y[1:end-1].+y[2:end])/2).*(x[2:end].-x[1:end-1]))
+    
+    rnew_rp = trapz(outWF .* Tmm, itp_rrstar.(rvals)) ./ (2 .* im .* erg) .* (rp.^2 .- 2 .* rp .+ a.^2).^2
+        
+    maxV = real(rnew_rp.* conj.(rnew_rp))
+
+    lam = (mu ./ (M_pl .* 1e9))^2
+    rate_out = 4 .* alph.^2 .* (1 .+ sqrt.(1 - a.^2)) .* Float64(maxV) .* lam^2
+    
+
+    # print("Output: ", out, "\n")
+    
+    # theory-NR
+    if (n1==2)&&(n2==2)&&(n3==3) && (l1==1)&&(l2==1)&&(l3==2)
+        test = 4.3e-7 * alph.^(11) .* (1 .+ sqrt.(1 .- a.^2)) # good
+    elseif (n1==2)&&(n2==4)&&(n3==3) && (l1==1)&&(l2==1)&&(l3==2)
+        test = 2.5e-8 * alph.^(11) .* (1 .+ sqrt.(1 .- a.^2)) #
+    elseif (n1==4)&&(n2==4)&&(n3==3) && (l1==1)&&(l2==1)&&(l3==2)
+        test = 1.7e-11 * alph.^(11) .* (1 .+ sqrt.(1 .- a.^2)) ##  I get basically 0????
+    elseif (n1==2)&&(n2==2)&&(n3==4) && (l1==1)&&(l2==1)&&(l3==2)
+        test = 1.5e-7 * alph.^(11) .* (1 .+ sqrt.(1 .- a.^2))
+    elseif (n1==4)&&(n2==4)&&(n3==4) && (l1==1)&&(l2==1)&&(l3==2)
+        test = 2.3e-7 * alph.^(7) .* (1 .+ sqrt.(1 .- a.^2)) ## I get basically 0????
+    elseif (n1==2)&&(n2==3)&&(n3==4) && (l1==1)&&(l2==2)&&(l3==3)
+        test = 9.1e-8 * alph.^(11) .* (1 .+ sqrt.(1 .- a.^2)) ## double check calc?
+    elseif (n1==2)&&(n2==4)&&(n3==4) && (l1==1)&&(l2==2)&&(l3==3)
+        test = 7.8e-11 * alph.^(7) .* (1 .+ sqrt.(1 .- a.^2)) #
+    end
+    print("NR Rate: ", test, "\n")
+    # print("Ratio : ", out ./ test, "\n")
+    
+    
+
+
+    
+    # return out
+    print("Rate \t", rate_out ./ mu^2 .* (GNew * M^2 * M_to_eV)^2, "\n")
+    return rate_out ./ mu^2 .* (GNew * M^2 * M_to_eV)^2 # unitless [gamma / mu]
+    
+end
+
+
+function integrate_radialEq_3(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, rmaxT=100, debug=false, Ntot_safe=5000, sve_for_test=false,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=100000, n_times=300000, add_source=true, eps_fac = 1e-10, dtmax_slv, m=0, l=0, reltol=1e-8, NON_REL=false, h_mve=100)
+    
+    rp = BigFloat(1.0 .+ sqrt.(1.0 .- a.^2))
+    rmm = BigFloat(1.0 .- sqrt.(1.0 .- a.^2))
+    alph = mu * GNew * M
+    
+
+    
+    erg_1G = ergL(n1, l1, m1, mu, M, a; full=false)
+    erg_2G = ergL(n2, l2, m2, mu, M, a; full=false)
+    erg_3G = ergL(n3, l3, m3, mu, M, a; full=false)
+    erg_pxy = erg_1G + erg_2G - erg_3G
+    
+    maxN = maximum([n1 n2 n3])
+    minN = maximum([n1 n2 n3])
+    
+    
+    rmax = Float64.(100 ./ alph.^2 .* (minN ./ 2.0) )
+    
+    rlist = 10 .^range(log10(rp .* (1.0 .+ eps_fac)), log10.(rmax), rpts)
+    
+    # rl, r1, erg_1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true, Ntot_safe=Ntot_safe)
+    # itp = LinearInterpolation(log10.(rl), r1, extrapolation_bc=Line())
+    # rf_1 = itp(log10.(rlist))
+    rf_1 = radial_bound_NR(n1, l1, m1, mu, M, rlist)
+    erg_1 = erg_1G * GNew * M
+    
+    
+    # rl, r2, erg_2 = solve_radial(mu, M, a, n2, l2, m2; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true, Ntot_safe=Ntot_safe)
+    # itp = LinearInterpolation(log10.(rl), r2, extrapolation_bc=Line())
+    # rf_2 = itp(log10.(rlist))
+    rf_2 = radial_bound_NR(n2, l2, m2, mu, M, rlist)
+    erg_2 = erg_2G * GNew * M
+    
+    
+    # rl, r3, erg_3 = solve_radial(mu, M, a, n3, l2, m3; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true, Ntot_safe=Ntot_safe)
+    # itp = LinearInterpolation(log10.(rl), r3, extrapolation_bc=Line())
+    # rf_3 = itp(log10.(rlist))
+    rf_3 = radial_bound_NR(n3, l3, m3, mu, M, rlist)
+    erg_3 = erg_3G * GNew * M
+
+
+    # wR1, wI1 = find_im_part(mu, M, a, n1, l1, m1; debug=false, return_both=true, for_s_rates=true, Ntot_force=10000)
+    # wR2, wI2 = find_im_part(mu, M, a, n2, l2, m2; debug=false, return_both=true, for_s_rates=true, Ntot_force=10000)
+    # wR3, wI3 = find_im_part(mu, M, a, n3, l3, m3; debug=false, return_both=true, for_s_rates=true, Ntot_force=10000)
+    
+    # erg = ((wR1 .+ wR2 .- wR3) .+ im * (wI1 .+ wI2 .- wI3))   #
+    erg = (erg_1 + erg_2 - conj(erg_3)) + 0 * im #
+    
+    print("ERG \t", Float64.(real(erg)), "\t [Im]", Float64.(imag(erg)), "\n")
+
+    Z1 = spheroidals(l1, m1, a, erg_1)
+    Z2 = spheroidals(l2, m2, a, erg_2)
+    Z3 = spheroidals(l3, m3, a, erg_3)
+    Z4 = spheroidals(l, m, a, erg)
+   
+    thetaV = acos.(1.0 .- 2.0 .* rand(Nang))
+    phiV = rand(Nang) .* 2*pi
+
+    function func_ang(x)
+        return real(Z1.(x[1], x[2]) .* Z2.(x[1], x[2]) .* conj(Z3.(x[1], x[2])) .* conj(Z4.(x[1], x[2])))
+    end
+    function func_ang_2(x)
+        return real(Z1.(x[1], x[2]) .* Z2.(x[1], x[2]) .* conj(Z3.(x[1], x[2])) .* conj(Z4.(x[1], x[2]))) .* a.^2 .* cos.(x[1]).^2
+    end
+    CG = 0.0
+    CG_2 = 0.0
+    for i in 1:Nang
+        CG += func_ang([thetaV[i], phiV[i]])
+        CG_2 += func_ang_2([thetaV[i], phiV[i]])
+    end
+    CG *= 4*pi / Nang
+    CG_2 *= 4*pi / Nang
+    
+    print("CG / CG2 \t", CG, "\t", CG_2, "\n")
+    print("rp  ", Float64.(rp), "\t alpha \t", alph, "\n")
+    
+    lam_eff = 1.0e0
+    if (n1==n2)&&(l1==l2)&&(m1==m2)
+        preFac = 1.0 ./ 2.0
+    else
+        preFac = 1
+    end
+    unitMatch = -1.0 ./ (2 .* alph).^(3/2) .* lam_eff
+    gammaT = (preFac .* (rf_1 .* rf_2 .* conj(rf_3)) .* unitMatch)
+        
+    itpG = LinearInterpolation(log10.(rlist), Float64.(real.(gammaT)), extrapolation_bc=Line())
+    itpGI = LinearInterpolation(log10.(rlist), Float64.(imag.(gammaT)), extrapolation_bc=Line())
+    
+    Mvars = [1.0]
+    
+    
+    gam = im * a * sqrt.(erg.^2 .- alph.^2)
+    LLM = l * (l + 1)
+    LLM += (-1 + 2 * l * (l + 1) - 2 * m.^2) * gam.^2 ./ (-3 + 4 * l * (l + 1))
+    LLM += ((l - m - 1 * (l - m) * (l + m) * (l + m - 1)) ./ ((-3 + 2 * l) * (2 * l - 1).^2) - (l + 1 - m) * (2 * l - m) * (l + m + 1) * (2 + l + m) ./ ((3 + 2 * l).^2 * (5 + 2 * l))) * gam.^4 ./ (2 * (1 + 2 * l))
+    LLM += (4 * ((-1 + 4 * m^2) * (l * (1 + l) * (121 + l * (1 + l) * (213 + 8 * l * (1 + l) * (-37 + 10 * l * (1 + l)))) - 2 * l * (1 + l) * (-137 + 56 * l * (1 + l) * (3 + 2 * l * (1 + l))) * m^2 + (705 + 8 * l * (1 + l) * (125 + 18 * l * (1 + l))) * m^4 - 15 * (1 + 46 * m^2))) * gam^6) / ((-5 + 2 * l) * (-3 + 2 * l) * (5 + 2 * l) * (7 + 2 * l) * (-3 + 4 * l * (1 + l))^5)
+    
+    
+    
+   
+    rr = rmax
+    
+
+    h_step = Float64.(rp ./ h_mve)
+    if add_source
+        rstart = 1e-70 .* (1 + im)
+    else
+        rstart = 1e-70 .* (1 + im)
+    end
+    outWF = []
+    rvals = []
+    SS_out = []
+    
    
 
 
-    append!(outWF, rstart) ##
+    append!(outWF, rstart ) ##
     append!(rvals, rr)
     append!(SS_out, 0.0)
     rr -= h_step
@@ -1232,51 +1576,46 @@ function integrate_radialEq_2(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts
     idx = 2
     while run_it
         
-        r_input = itp_rrstar(rvals[idx])
+        r_input = rvals[idx]
     
         delt = (r_input.^2 .- 2 .* r_input .+ a.^2)
+        
         ff = (r_input.^2 .+ a.^2)
             
         SS = (itpG(log10.(r_input)) + im * itpGI(log10.(r_input)))
-        append!(SS_out, -SS .* CG .* r_input)
-        if NON_REL
+        
+       
+        net_rescale = h_step.^2
+        
+        # Vv = delt .* alph.^2 ./ ff .+ delt .* (LLM .+ a.^2 .* (erg.^2 .- alph.^2)) ./ ff.^2 .+ delt .* (3 .* r_input.^2 .- 4 .* r_input .+ a.^2) ./ ff.^3 .- 3 .* delt.^2 .* r_input.^2 ./ ff.^4
+        # newV = 2 * outWF[idx] .- outWF[idx - 1] .+ net_rescale .* (Vv .- erg.^2) .* outWF[idx]
+        
+        # zeroT = (- SS .* CG .* r_input.^2 .+ (alph.^2 .* r_input.^2 .- erg.^2 .* (r_input.^2 .+ 2 .* r_input) .- 2 .* im .* erg) .* outWF[idx]) ./ delt
+        # firstT_pre = (r_input .* (2 .+ 2 .* im .* erg) .- 2) ./ delt
+        
+        prezero = r_input.^2 .* (alph.^2 .- erg.^2) .+ (2 * im .* erg .- 2 .* r_input .* erg.^2)
+        firstT_pre = 2 .* (1 .- r_input .+ 2 .* im .* erg .* r_input) ./ delt
+        newV = (4 * outWF[idx] - 2 .* outWF[idx - 1] .+ h_step .* firstT_pre .* outWF[idx - 1]) ./ (h_step .* firstT_pre .+ 2.0)
+        
+        newV += (2 .* h_step.^2) ./ (h_step .* firstT_pre .+ 2.0) .* (-SS .* CG .* r_input.^2 .+ prezero .* outWF[idx])  ./ delt
+        
+        
+        newV_r = Float64.(real(newV))
+        newV_i = Float64.(imag(newV))
+        append!(outWF, newV_r + im * newV_i)
             
-            net_rescale = h_step.^2
-            newV = 2 .* outWF[idx] .- outWF[idx - 1] .+ net_rescale .* (alph.^2 .- erg.^2 .- 2 .* alph.^2 ./ r_input .+ LLM ./ r_input) .* outWF[idx]
-            if add_source
-                newV += - net_rescale .* SS .* CG .* r_input
-            end
-            newV_r = Float64.(real(newV))
-            newV_i = Float64.(imag(newV))
-            append!(outWF, newV_r + im * newV_i)
-        else
-            net_rescale = h_step.^2
-            Vv = delt .* alph.^2 ./ ff .+ delt .* (LLM .+ a.^2 .* (erg.^2 .- alph.^2)) ./ ff.^2 .+ delt .* (3 .* r_input.^2 .- 4 .* r_input .+ a.^2) ./ ff.^3 .- 3 .* delt.^2 .* r_input.^2 ./ ff.^4
-            newV = 2 * outWF[idx] .- outWF[idx - 1] .+ net_rescale .* (Vv .- erg.^2) .* outWF[idx]
-            if add_source
-                newV += - net_rescale .* SS .* (CG .* r_input.^2 .+ CG_2 .* a.^2) .* delt ./ ff.^(3/2)
-            end
-            
-            newV_r = Float64.(real(newV))
-            newV_i = Float64.(imag(newV))
-            append!(outWF, newV_r + im * newV_i)
-            
-        end
+        
         
         append!(rvals, rr)
 
         rr -= h_step
         idx += 1
         
-        if !NON_REL
-            if (itp_rrstar(rr) < rp .*  (1.0 .+ eps_fac))
-                run_it = false
-            end
-        else
-            if rr < 0
-                run_it = false
-            end
+        # print(rr, "\t", outWF[idx], "\n")
+        if (rr < rp .*  (1.0 .+ eps_fac))
+            run_it = false
         end
+
         
     end
     
@@ -1284,62 +1623,48 @@ function integrate_radialEq_2(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts
     outWF = reverse(outWF)
     SS_out = reverse(SS_out)
     
-    if NON_REL
-        outWF .*= 1.0 ./ itp_rrstar.(rvals) ./ (GNew .* M)
-    else
-        outWF .*= 1.0 ./ sqrt.(itp_rrstar.(rvals).^2 .+ a.^2) ./ (GNew .* M)
-    end
-
-    maxV = maximum(real(outWF .* conj.(outWF)))
+    outWF .*= 1.0 ./ (GNew .* M)
     
+    writedlm("test_store/test1.dat", hcat(rvals, Float64.(real(outWF .* conj(outWF)))))
     
-    # out = Float64.(real(8 * pi .* maxV .* erg.^2 ./ mu.^2 .* (1 .+ sqrt.(1 .- a.^2)) ./ lam_eff.^2))
     trapz(y,x) = @views sum(((y[1:end-1].+y[2:end])/2).*(x[2:end].-x[1:end-1]))
     
 
-    idx_hold = itp_rrstar(rvals) .< rp * 1.1
-    
-    if NON_REL
-        maxV = maximum(real(outWF[idx_hold] .* conj.(outWF[idx_hold])))
-        rr_at_max = rvals[argmax(real(outWF[idx_hold] .* conj.(outWF[idx_hold])))]
-        maxV *= rr_at_max.^2
-        out = Float64.(real(8 * pi .* maxV .* alph.^4 .* (1 .+ sqrt.(1 .- a.^2)) .* 2 ./ lam_eff.^2))
-    else
-        maxV = maximum(real(outWF[idx_hold] .* conj.(outWF[idx_hold])))
-        out = Float64.(real(8 * pi .* maxV .* alph.^4 .* (1 .+ sqrt.(1 .- a.^2)) .* 2 ./ lam_eff.^2))
-    end
-    
+    idx_hold = rvals .< rp * 1.1
+    maxV = maximum(real(outWF[idx_hold] .* conj.(outWF[idx_hold])))
+
     
     lam = (mu ./ (M_pl .* 1e9))^2
     rate_out = 4 .* alph.^2 .* (1 .+ sqrt.(1 - a.^2)) .* Float64(maxV) .* lam^2
     
 
-    print("Output: ", out, "\n")
+    # print("Output: ", out, "\n")
     
     # theory-NR
     if (n1==2)&&(n2==2)&&(n3==3) && (l1==1)&&(l2==1)&&(l3==2)
-        test = 4.3e-7 * alph.^(11 - 4) .* (1 .+ sqrt.(1 .- a.^2)) # good
+        test = 4.3e-7 * alph.^(11) .* (1 .+ sqrt.(1 .- a.^2)) # good
     elseif (n1==2)&&(n2==4)&&(n3==3) && (l1==1)&&(l2==1)&&(l3==2)
-        # test = 2.5e-8 * alph.^(11 - 4) .* (1 .+ sqrt.(1 .- a.^2)) # low by factor of 4? also dominated by continuum states?
-        test = 9.2e-9 * alph.^(11 - 4) .* (1 .+ sqrt.(1 .- a.^2)) # low by factor of 0.7? also dominated by continuum states?
+        test = 2.5e-8 * alph.^(11) .* (1 .+ sqrt.(1 .- a.^2)) #
     elseif (n1==4)&&(n2==4)&&(n3==3) && (l1==1)&&(l2==1)&&(l3==2)
-        test = 1.7e-11 * alph.^(11 - 4) .* (1 .+ sqrt.(1 .- a.^2)) ## high by factor of ~5, but scales with energy [seems to converge very slowly...]? bound states comparable to continuum?
+        test = 1.7e-11 * alph.^(11) .* (1 .+ sqrt.(1 .- a.^2)) ##  I get basically 0????
     elseif (n1==2)&&(n2==2)&&(n3==4) && (l1==1)&&(l2==1)&&(l3==2)
-        test = 1.5e-7 * alph.^(11 - 7) .* (1 .+ sqrt.(1 .- a.^2)) ## resonant rates seem to disagree? common theme.
+        test = 1.5e-7 * alph.^(11) .* (1 .+ sqrt.(1 .- a.^2))
     elseif (n1==4)&&(n2==4)&&(n3==4) && (l1==1)&&(l2==1)&&(l3==2)
-        test = 2.3e-7 * alph.^(7 - 4) .* (1 .+ sqrt.(1 .- a.^2)) ## resonant rates seem wrong? common theme.
+        test = 2.3e-7 * alph.^(7) .* (1 .+ sqrt.(1 .- a.^2)) ## I get basically 0????
     elseif (n1==2)&&(n2==3)&&(n3==4) && (l1==1)&&(l2==2)&&(l3==3)
-        test = 9.1e-8 * alph.^(11 - 4) .* (1 .+ sqrt.(1 .- a.^2)) ## pretty good? some very mild alpha dependence?
+        test = 9.1e-8 * alph.^(11) .* (1 .+ sqrt.(1 .- a.^2)) ## double check calc?
     elseif (n1==2)&&(n2==4)&&(n3==4) && (l1==1)&&(l2==2)&&(l3==3)
-        test = 7.8e-11 * alph.^(7 - 4) .* (1 .+ sqrt.(1 .- a.^2)) # resonant rates have problem.
+        test = 7.8e-11 * alph.^(7) .* (1 .+ sqrt.(1 .- a.^2)) #
     end
     print("NR Rate: ", test, "\n")
-    print("Ratio : ", out ./ test, "\n")
+    # print("Ratio : ", out ./ test, "\n")
+    
+    
 
 
     
     # return out
-    print(rate_out ./ mu^2 .* (GNew * M^2 * M_to_eV)^2, "\n")
+    print("Rate \t", rate_out ./ mu^2 .* (GNew * M^2 * M_to_eV)^2, "\n")
     return rate_out ./ mu^2 .* (GNew * M^2 * M_to_eV)^2 # unitless [gamma / mu]
     
 end
