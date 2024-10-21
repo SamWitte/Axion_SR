@@ -401,7 +401,7 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=10, rpts=
             erg_in = QNM_list[n, 2] .+ im * QNM_list[n, 3]
             
             rl, r4, erg_4 = solve_radial(mu, M, a, n, l, 0; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true, Ntot_safe=Ntot_safe, QNM=true, QNM_ergs=erg_in)
-            writedlm("test_store/test_$n.dat", hcat(rl, Float64.(real(r4 .* conj(r4)))))
+            # writedlm("test_store/test_$n.dat", hcat(rl, Float64.(real(r4 .* conj(r4)))))
         
             itp = LinearInterpolation(log10.(rl), (r4 .* sqrt.(rl.^2 .+ a.^2)), extrapolation_bc=Line())
             rf_4 = itp(log10.(rlist))
