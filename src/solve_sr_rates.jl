@@ -391,14 +391,14 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=10, rpts=
         n = 1
         l = 0
         done_nmax = false
-        QNM_list = find_im_part(mu, M, a, n, l, 0; QNM=true, Ntot_force=20000)
+        QNM_list = find_im_part(mu, M, a, n, l, 0; QNM=true, Ntot_force=20000, max_n_qnm=3)
         if length(QNM_list) == 0
             done_nmax = true
         end
-        
+        idx = 1
         print("Doing QNMs \n")
         while !done_nmax
-            erg_in = QNM_list[n, 2] .+ im * QNM_list[n, 3]
+            erg_in = QNM_list[idx, 2] .+ im * QNM_list[idx, 3]
             
             rl, r4, erg_4 = solve_radial(mu, M, a, n, l, 0; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true, Ntot_safe=Ntot_safe, QNM=true, QNM_ergs=erg_in)
             # writedlm("test_store/test_$n.dat", hcat(rl, Float64.(real(r4 .* conj(r4)))))
@@ -408,7 +408,7 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=10, rpts=
  
 
             
-            Z4 = spheroidals(0, 0, a, erg_4 ./ (GNew .* M))
+            Z4 = spheroidals(l, 0, a, erg_4 ./ (GNew .* M))
             
             thetaV = acos.(1.0 .- 2.0 .* rand(Nang))
             phiV = rand(Nang) .* 2*pi
@@ -443,6 +443,65 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=10, rpts=
 #                done_nmax = true
 #            end
             n += 1
+            idx += 1
+            if n > QNM_list[end, 1]
+                done_nmax = true
+            end
+        end
+        n = 3
+        l = 2
+        done_nmax = false
+        QNM_list = find_im_part(mu, M, a, n, l, 0; QNM=true, Ntot_force=20000, max_n_qnm=3)
+        if length(QNM_list) == 0
+            done_nmax = true
+        end
+        idx = 1
+        while !done_nmax
+            erg_in = QNM_list[idx, 2] .+ im * QNM_list[idx, 3]
+            
+            rl, r4, erg_4 = solve_radial(mu, M, a, n, l, 0; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true, Ntot_safe=Ntot_safe, QNM=true, QNM_ergs=erg_in)
+            # writedlm("test_store/test_$n.dat", hcat(rl, Float64.(real(r4 .* conj(r4)))))
+        
+            itp = LinearInterpolation(log10.(rl), (r4 .* sqrt.(rl.^2 .+ a.^2)), extrapolation_bc=Line())
+            rf_4 = itp(log10.(rlist))
+ 
+
+            
+            Z4 = spheroidals(l, 0, a, erg_4 ./ (GNew .* M))
+            
+            thetaV = acos.(1.0 .- 2.0 .* rand(Nang))
+            phiV = rand(Nang) .* 2*pi
+            CG = 0.0
+            for i in 1:Nang
+                CG += func_ang([thetaV[i], phiV[i]], Z1, Z2, Z3, Z4)
+            end
+            CG *= 4*pi / Nang
+           
+            
+            # dropping a^2 term in CG_2
+            r_integrd = rf_1 .* rf_2 .* conj(rf_3) .* conj(rf_4) .* (rlist.^2 .* (rlist.^2 .- 2 .* rlist .+ a.^2) ./ (rlist.^2 .+ a.^2).^(3/2)) .* rlist.^2 ./ (rlist.^2 .+ a.^2)
+            radial_int = trapz(r_integrd, rlist)
+            
+            kdiff_sq = (erg_4.^2 .- erg_ind^2)
+        
+            ff = CG .* radial_int ./ (2 .* alph).^(3 / 2) ./ (kdiff_sq)
+            ### double factor 1/2
+            if (n1==n2)&&(l1==l2)&&(m1==m2)
+                ff /= 2
+            end
+            res_n = (rf_4[1] ./ sqrt.(rlist[1].^2 .+ a.^2)) .* ff ./ (GNew .* M)
+            
+
+            if debug
+                print(n, "\t", erg_in, "\t", Float64(abs.(res_n)), "\n")
+            end
+            
+            contin_c += res_n
+#            if abs.(res_n / contin_c) < bnd_thresh
+#                done_nmax = true
+#            end
+            n += 1
+            idx += 1
             if n > QNM_list[end, 1]
                 done_nmax = true
             end
@@ -852,7 +911,7 @@ function spheroidals(l, m, a, erg)
     return Zlm
 end
 
-function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=200, iter=10000, xtol=1e-20, ftol=1e-90, return_both=false, for_s_rates=false, QNM=false, QNM_E=1.0, erg_Guess=nothing)
+function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=200, iter=10000, xtol=1e-20, ftol=1e-90, return_both=false, for_s_rates=false, QNM=false, QNM_E=1.0, erg_Guess=nothing, max_n_qnm=5)
     
     OmegaH = a ./ (2 .* (GNew .* M) .* (1 .+ sqrt.(1 .- a.^2)))
     alph = mu * GNew * M
@@ -982,19 +1041,25 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=200, iter=10000
             sol = nlsolve(wrapper!, [BigFloat((real(w0))), BigFloat(imag(w0))], autodiff = :forward, xtol=xtol, ftol=ftol, iterations=iter)
             outSend = [n sol.zero[1] sol.zero[2]] # n, real, im
             
-            nmax = n+5
-            nn_in = n+1
+            nmax = n + max_n_qnm
+            nn_in = n + 1
             while nn_in < nmax
                 guess = outSend[end, 2] + (outSend[end, 3] .- 0.1) * im
+                if real(guess) < 0.05
+                    guess += 0.05
+                end
                 found_it = false
                 trialF = 0
                 while !found_it
-                    sol = nlsolve(wrapper!, [BigFloat((real(guess))), BigFloat(imag(guess))], autodiff = :forward, xtol=xtol, ftol=ftol, iterations=iter)
+                    sol = nlsolve(wrapper!, [BigFloat((real(guess))), BigFloat(imag(guess))], autodiff = :forward, xtol=(xtol ./ 1e10) , ftol=ftol, iterations=iter)
                     # print("guess \t", guess, "\t", trialF, "\n")
                     # print("trial \t ", sol.zero, "\n\n")
-                    if (!isapprox(sol.zero[1], outSend[end, 2]; atol = 0.0001)&&!isapprox(sol.zero[2], outSend[end, 3]; atol = 0.0001))&&(sol.zero[1] > 0)&&(sol.zero[2] < outSend[end, 3])
+                    if (!isapprox(sol.zero[1], outSend[end, 2]; atol = 0.0001)&&!isapprox(sol.zero[2], outSend[end, 3]; atol = 0.0001))&&(sol.zero[1] > 0)&&(sol.zero[2] < outSend[end, 3])&&(sol.zero[1] > 1e-3)
                         outSend = cat(outSend, [nn_in sol.zero[1] sol.zero[2]], dims=1)
                         found_it = true
+                        if debug
+                            print(sol, "\n")
+                        end
                     else
                         guess = real(guess) + im .* imag(guess) - 0.005 * im
                     end
