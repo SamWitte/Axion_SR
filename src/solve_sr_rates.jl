@@ -1373,12 +1373,13 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     
     midP = Int(round(length(rvals)/2))
     wronk  = (outWF_fw[midP] .* (outWF[midP+1] .- outWF[midP-1]) .-  outWF[midP] .* (outWF_fw[midP+1] .- outWF_fw[midP-1]) )./ (2 * h_step)
+    wronk *= (itp_rrstar.(rvals[midP]).^2 .- 2 .* itp_rrstar.(rvals[midP]) .+ a.^2) .* (GNew .* M)
     Tmm = (itpG(log10.(itp_rrstar.(rvals))) + im * itpGI(log10.(itp_rrstar.(rvals)))) .* (CG .* itp_rrstar.(rvals).^2 .+ CG_2 .* a.^2)
     
     ####
     if to_inf
-        wronN = (wronk .* (itp_rrstar.(rvals[midP]).^2 .- 2 .* itp_rrstar.(rvals[midP]) .+ a.^2)) .* (GNew .* M)
-        out_R = outWF[end] .* trapz(outWF_fw .* Tmm, itp_rrstar.(rvals)) ./ wronN
+        
+        out_R = outWF[end] .* trapz(outWF_fw .* Tmm, itp_rrstar.(rvals)) ./ wronk
         maxV = Float64.(real(out_R .* conj.(out_R)))
 
         lam = (mu ./ (M_pl .* 1e9))^2
@@ -1402,7 +1403,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         ####
     else
         idx_hold = itp_rrstar.(rvals) .> 1.01 .* rp
-        rnew_rp = trapz(outWF[idx_hold] .* Tmm[idx_hold] , itp_rrstar.(rvals[idx_hold])) .* outWF_fw[idx_hold][1] ./ (wronk[end] .* (itp_rrstar.(rvals[end]).^2 .- 2 .* itp_rrstar.(rvals[end]) .+ a.^2)) ./ (GNew .* M)
+        rnew_rp = trapz(outWF[idx_hold] .* Tmm[idx_hold] , itp_rrstar.(rvals[idx_hold])) .* outWF_fw[idx_hold][1] ./ wronk
 
         maxV = real(rnew_rp.* conj.(rnew_rp))
 
