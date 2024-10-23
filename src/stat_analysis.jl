@@ -236,9 +236,7 @@ function mcmc_func_minimize(data, Fname; lg_m_low=-20, lg_m_high=-18, lg_f_high=
         return log_probability(x, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high, tau_max=tau_max, alpha_max_cut=alpha_max_cut, use_input_table=use_input_table, solve_322=solve_322, impose_low_cut=alpha_min_cut, max_mass_matrix=max_mass_matrix, input_data=input_data, solve_n4=solve_n4, solve_n5=solve_n5, stop_on_a=stop_on_a, eq_threshold=eq_threshold, abstol=abstol, non_rel=non_rel)
     end
 
-    # Random.seed!(1215740967981745887)
     x0 = initialize_walkers(numwalkers, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high)
-    # x0 = [-12.11097910149243 -10.946032301911332 -11.186738089283743 -11.15637998808181; 13.015578527313194 17.574769391364217 15.064923984685148 13.622376649826602]
     print("Init walkers \t", x0, "\n")
     
     print("Starting burn-in...\n")

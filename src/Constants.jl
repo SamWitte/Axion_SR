@@ -1,4 +1,6 @@
 using ForwardDiff: Dual
+using DelimitedFiles
+using Interpolations
 
 const c_km = 2.99792e5
 const c_cm = 2.99792e10
@@ -18,6 +20,7 @@ const maxSpin = 0.998
 global seed = x -> [map(y -> Dual(y, (1., 0., 0.)), x[:,1]) map(y -> Dual(y, (0., 1., 0.)), x[:,2]) map(y -> Dual(y, (0., 0., 1.)), x[:,3])]
 # Extract gradient from dual
 global grad = x -> [map(x -> x.partials[1], x) map(x -> x.partials[2], x) map(x -> x.partials[3], x)]
+
 
 
 function File_Name_Out(Mass_a, Ax_g, Mns, Rns, v_NS, B0, P, θm, eta_fill, Ntrajs; file_tag="", indx=nothing, mag_mod="Dipole", B_DQ=0.0, θQ=0.0, reflect=false, dead=false, dead_rmax=30.0)
@@ -50,3 +53,4 @@ function File_Name_Out(Mass_a, Ax_g, Mns, Rns, v_NS, B0, P, θm, eta_fill, Ntraj
     fileN *= "_Ntrajs_"*string(Ntrajs)*"_"*file_tag*"_.h5";
 
 end
+

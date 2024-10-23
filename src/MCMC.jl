@@ -115,13 +115,14 @@ print("Solve 5N? \t", solve_n5, "\n")
 print("Non Rel? \t", non_rel, "\n")
 print("Nwalkers, Nsamples, Nburn \t", [numwalkers numsamples_perwalker burnin], "\n\n\n")
 
+# Random.seed!(2084339465932781399)
 
 max_mass_matrix=nothing
 
 if LowMass
     ###### Low Mass Region
     lg_m_low = -13
-    lg_m_high = log10(1.5e-11)
+    lg_m_high = log10(3e-11)
     lg_f_high = 19
     lg_f_low = 9.5
 

@@ -59,18 +59,18 @@ S4 = parsed_args["S4"]
 
 ftag = parsed_args["ftag"];
 
-include_cont = true
-NON_REL = false
-debug = false
 
-print("Non Rel? \t", NON_REL, "\n")
 print(S1, "\t", S2, "\t", S3, "\t", S4, "\n")
 
 function main(;kpts=14, rpts=50000, rmaxT=100, Nang=200000, Npts_Bnd=20000)
     a = 0.9
     M = 10.0
+    Ntot_safe=5000
+    NON_REL = false
+    h_mve = 10
     
-    alpha_list = 10 .^LinRange(log10(alpha_min), log10(alpha_max), alpha_pts)
+    # alpha_list = 10 .^LinRange(log10(alpha_min), log10(alpha_max), alpha_pts)
+    alpha_list = LinRange(alpha_min, alpha_max, alpha_pts)
     # alpha_list = [0.1]
     # alpha_list = [0.3]
     output_sve = zeros(alpha_pts)
@@ -89,25 +89,21 @@ function main(;kpts=14, rpts=50000, rmaxT=100, Nang=200000, Npts_Bnd=20000)
     n3 = State3[1]
     l3 = State3[2]
     m3 = State3[3]
-    
-    lF_min = 0
+        
     
     if S4 == "BH"
-        for i in 1:alpha_pts
-            # print("alpha \t", alpha_list[i], "\n")
-            mu = alpha_list[i] ./ (M * GNew)
-            output_sve[i] = s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=kpts, rpts=rpts, rmaxT=rmaxT, inf_nr=inf_nr, Nang=Nang, Npts_Bnd=Npts_Bnd, debug=debug, include_cont=include_cont, bnd_thresh=1e-4, NON_REL=NON_REL, eps_r=1e-6)
-            print("alpha \t", alpha_list[i], "\t", output_sve[i], "\n")
-        end
-    elseif S4 == "Inf"
-        for i in 1:alpha_pts
-            print("alpha \t", alpha_list[i], "\n")
-            mu = alpha_list[i] ./ (M * GNew)
-            output_sve[i] = s_rate_inf(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3, lF_min; rpts=rpts, rmaxT=rmaxT,  sve_for_test=false, inf_nr=inf_nr, Npts_Bnd=Npts_Bnd, Nang=Nang)
-        end
+        to_inf = false
     else
-        print("what is S4??? ", S4, "\n")
+        to_inf = true
     end
+    
+    for i in 1:alpha_pts
+        mu = alpha_list[i] ./ (M * GNew)
+        output_sve[i] = gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, Npts_Bnd=Npts_Bnd, debug=false, eps_fac=1e-3, Ntot_safe=Ntot_safe, m=0, l=0, Nang=Nang, NON_REL=NON_REL, h_mve=h_mve, to_inf=to_inf)
+    
+        print("alpha \t", alpha_list[i], "\t", output_sve[i], "\n")
+    end
+   
     
     writedlm("rate_sve/"*S1*"_"*S2*"_"*S3*"_"*S4*ftag*".dat", hcat(alpha_list, output_sve))
     
