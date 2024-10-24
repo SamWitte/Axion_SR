@@ -1282,6 +1282,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     # rout_star = r_list_map .+ 2.0 .* rp ./ (rp .- rmm) .* log.(r_list_map ./ rp .- 1.0) .- 2.0 .* rmm .* log.(r_list_map ./ rmm .- 1.0) ./ (rp .- rmm)
     rout_star = r_list_map .+ 2.0 .* rp ./ (rp .- rmm) .* log.((r_list_map .- rp) ./ 2.0) .- 2.0 .* rmm .* log.((r_list_map .- rmm) ./ 2.0) ./ (rp .- rmm)
     
+    
     itp_rrstar = LinearInterpolation(rout_star, r_list_map, extrapolation_bc=Line())
     itp_rrstar_inv = LinearInterpolation(r_list_map, rout_star, extrapolation_bc=Line())
     rr = itp_rrstar_inv(rmax)
@@ -1371,10 +1372,24 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     
     trapz(y,x) = @views sum(((y[1:end-1].+y[2:end])/2).*(x[2:end].-x[1:end-1]))
     
-    midP = Int(round(length(rvals)/2))
-    wronk  = (outWF_fw[midP] .* (outWF[midP+1] .- outWF[midP-1]) .-  outWF[midP] .* (outWF_fw[midP+1] .- outWF_fw[midP-1]) )./ (2 * h_step)
+    midP = Int(round(length(rvals) - 10))
+    wronk  = (outWF_fw[midP] .* (outWF[midP+1] .- outWF[midP-1]) .-  outWF[midP] .* (outWF_fw[midP+1] .- outWF_fw[midP-1]) )./ (itp_rrstar.(rvals[midP+1]) .- itp_rrstar.(rvals[midP-1]))
     wronk *= (itp_rrstar.(rvals[midP]).^2 .- 2 .* itp_rrstar.(rvals[midP]) .+ a.^2) .* (GNew .* M)
+
     Tmm = (itpG(log10.(itp_rrstar.(rvals))) + im * itpGI(log10.(itp_rrstar.(rvals)))) .* (CG .* itp_rrstar.(rvals).^2 .+ CG_2 .* a.^2)
+    
+#    ###
+#    wronk_test = []
+#    r_test = []
+#    for i in 2:(length(rvals)-1)
+#        tt  = (outWF_fw[i] .* (outWF[i+1] .- outWF[i-1]) .-  outWF[i] .* (outWF_fw[i+1] .- outWF_fw[i-1]) )./ (2 * (itp_rrstar.(rvals[i+1]) .- itp_rrstar.(rvals[i-1])) )
+#        tt *= (itp_rrstar.(rvals[i]).^2 .- 2 .* itp_rrstar.(rvals[i]) .+ a.^2) .* (GNew .* M)
+#        append!(wronk_test, tt)
+#        append!(r_test, itp_rrstar.(rvals[i]))
+#    end
+#    writedlm("test_store/testW_r.dat",hcat(r_test, real(wronk_test)))
+#    writedlm("test_store/testW_i.dat",hcat(r_test, real(wronk_test)))
+#    ##
     
     ####
     if to_inf
@@ -1402,8 +1417,9 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
 #        writedlm("test_store/test_1.dat", hcat(itp_rrstar.(r_out), maxV))
         ####
     else
-        idx_hold = itp_rrstar.(rvals) .> 1.01 .* rp
-        rnew_rp = trapz(outWF[idx_hold] .* Tmm[idx_hold] , itp_rrstar.(rvals[idx_hold])) .* outWF_fw[idx_hold][1] ./ wronk
+        # idx_hold = itp_rrstar.(rvals) .> 1.01 .* rp
+        # rnew_rp = trapz(outWF[idx_hold] .* Tmm[idx_hold] , itp_rrstar.(rvals[idx_hold])) .* outWF_fw[idx_hold][1] ./ wronk
+        rnew_rp = trapz(outWF .* Tmm , itp_rrstar.(rvals)) .* outWF_fw[1] ./ wronk
 
         maxV = real(rnew_rp.* conj.(rnew_rp))
 
