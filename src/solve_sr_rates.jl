@@ -1243,7 +1243,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     end
     
     erg = (erg_1 + erg_2 - erg_3) + 0 * im # leave the 0 im for NR case
-    print(alph, "\t", erg, "\n")
+    
     
     Z1 = spheroidals(l1, m1, a, erg_1)
     Z2 = spheroidals(l2, m2, a, erg_2)
@@ -1267,7 +1267,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     end
     CG *= 4*pi / Nang
     CG_2 *= 4*pi / Nang
-    print(CG, "\t", CG_2, "\n")
+    
     
     lam_eff = 1.0e0
     if (n1==n2)&&(l1==l2)&&(m1==m2)
