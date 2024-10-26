@@ -9,7 +9,7 @@ function parse_commandline()
     
         "--alpha_max"
             arg_type = Float64
-            default = 1.5
+            default = 1.2
             
         "--alpha_min"
             arg_type = Float64
@@ -17,7 +17,7 @@ function parse_commandline()
             
         "--alpha_pts"
             arg_type = Int
-            default = 20
+            default = 30
             
         "--S1"
             arg_type = String
