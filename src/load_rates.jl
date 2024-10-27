@@ -120,19 +120,19 @@ function load_rate_coeffs(mu, M, a, f_a; non_rel=true, input_data="Me", solve_n4
             nothing;
         else
             ### check if m=1 SR
-            wI_test = find_im_part(mu, M, a_test, 2, 1, 1;  for_s_rates=true, QNM=false, Ntot_force=5000)
+            wI_test = find_im_part(mu, M, a, 2, 1, 1;  for_s_rates=true, QNM=false, Ntot_force=5000)
             if wI_test < 0.0
                 include_m1 = false
             end
         
             ### check if m=2 SR
-            wI_test = find_im_part(mu, M, a_test, 3, 2, 2;  for_s_rates=true, QNM=false, Ntot_force=5000)
+            wI_test = find_im_part(mu, M, a, 3, 2, 2;  for_s_rates=true, QNM=false, Ntot_force=5000)
             if wI_test < 0.0
                 include_m2 = false
             end
             
             ### check if m=3 SR
-            wI_test = find_im_part(mu, M, a_test, 4, 3, 3;  for_s_rates=true, QNM=false, Ntot_force=5000)
+            wI_test = find_im_part(mu, M, a, 4, 3, 3;  for_s_rates=true, QNM=false, Ntot_force=5000)
             if wI_test < 0.0
                 include_m3 = false
             end
