@@ -1000,7 +1000,7 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=200, iter=10000
     end
 end
 
-function compute_gridded(mu, M, a, n, l, m; Ntot=200, iter=50, xtol=1e-7, npts=30, amin=0.0)
+function compute_gridded(mu, M, a, n, l, m; Ntot=2000, iter=50, xtol=1e-7, npts=30, amin=0.0)
     a_max = a * 1.1 # safety, just in case upward fluctuation
     if a_max > maxSpin
         a_max = maxSpin
@@ -1013,10 +1013,8 @@ function compute_gridded(mu, M, a, n, l, m; Ntot=200, iter=50, xtol=1e-7, npts=3
         alph = GNew * M * mu
 
         for i in 1:length(alist)
-            output[i] = find_im_part(mu, M, alist[i], n, l, m, Ntot_force=Ntot, iter=iter, xtol=xtol) ./ (GNew * M)
+            output[i] = find_im_part(mu, M, alist[i], n, l, m, Ntot_force=Ntot, iter=iter, xtol=xtol, for_s_rates=true) ./ (GNew * M)
         end
-        condit = output .<= 0.0
-        output[condit] .= 1e-100
     else
         alist = LinRange(a_max, amin, npts);
     end
@@ -1424,18 +1422,18 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         out_gamma = rate_out ./ mu^2 .* (GNew * M^2 * M_to_eV)^2
         
         ### save full WF?
-        outR = []
-        r_out = []
-        nskip = Int(round(length(rvals) / 100))
-        println("filling output ")
-        for i in 2:nskip:(length(rvals)-1)
-            temp = (outWF_fw[i] .* trapz(outWF[i:end] .* Tmm[i:end], itp_rrstar.(rvals[i:end])) .+ outWF[i] .* trapz(outWF_fw[1:i] .* Tmm[1:i], itp_rrstar.(rvals[1:i]))) ./ wronk
-            append!(outR, temp)
-            append!(r_out, rvals[i])
-        end
-        println("done filling output ")
-        maxV = Float64.(real(outR .* conj.(outR)))
-        writedlm("test_store/test_1.dat", hcat(itp_rrstar.(r_out), maxV))
+#        outR = []
+#        r_out = []
+#        nskip = Int(round(length(rvals) / 100))
+#        println("filling output ")
+#        for i in 2:nskip:(length(rvals)-1)
+#            temp = (outWF_fw[i] .* trapz(outWF[i:end] .* Tmm[i:end], itp_rrstar.(rvals[i:end])) .+ outWF[i] .* trapz(outWF_fw[1:i] .* Tmm[1:i], itp_rrstar.(rvals[1:i]))) ./ wronk
+#            append!(outR, temp)
+#            append!(r_out, rvals[i])
+#        end
+#        println("done filling output ")
+#        maxV = Float64.(real(outR .* conj.(outR)))
+#        writedlm("test_store/test_1.dat", hcat(itp_rrstar.(r_out), maxV))
         ####
     else
         # idx_hold = itp_rrstar.(rvals) .> 1.01 .* rp
