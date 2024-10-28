@@ -1187,6 +1187,17 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     maxN = maximum([n1 n2 n3])
     minN = maximum([n1 n2 n3])
     
+    
+    ### quick check if to inf to not!
+    erg1R, erg1I = find_im_part(mu, M, a, n1, l1, m1; Ntot_force=5000, for_s_rates=true, return_both=true)
+    erg2R, erg2I = find_im_part(mu, M, a, n2, l2, m2; Ntot_force=5000, for_s_rates=true, return_both=true)
+    erg3R, erg3I = find_im_part(mu, M, a, n3, l3, m3; Ntot_force=5000, for_s_rates=true, return_both=true)
+    if (erg1R .+ erg2R .- erg3R) .> alph
+        to_inf = true
+    else
+        to_inf = false
+    end
+    
     #### fix l,m
     if to_inf
         m = (m1 + m2 - m3)
@@ -1413,18 +1424,18 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         out_gamma = rate_out ./ mu^2 .* (GNew * M^2 * M_to_eV)^2
         
         ### save full WF?
-#        outR = []
-#        r_out = []
-#        nskip = Int(round(length(rvals) / 100))
-#        println("filling output ")
-#        for i in 2:nskip:(length(rvals)-1)
-#            temp = (outWF_fw[i] .* trapz(outWF[i:end] .* Tmm[i:end], itp_rrstar.(rvals[i:end])) .+ outWF[i] .* trapz(outWF_fw[1:i] .* Tmm[1:i], itp_rrstar.(rvals[1:i]))) ./ wronN
-#            append!(outR, temp)
-#            append!(r_out, rvals[i])
-#        end
-#        println("done filling output ")
-#        maxV = Float64.(real(outR .* conj.(outR)))
-#        writedlm("test_store/test_1.dat", hcat(itp_rrstar.(r_out), maxV))
+        outR = []
+        r_out = []
+        nskip = Int(round(length(rvals) / 100))
+        println("filling output ")
+        for i in 2:nskip:(length(rvals)-1)
+            temp = (outWF_fw[i] .* trapz(outWF[i:end] .* Tmm[i:end], itp_rrstar.(rvals[i:end])) .+ outWF[i] .* trapz(outWF_fw[1:i] .* Tmm[1:i], itp_rrstar.(rvals[1:i]))) ./ wronk
+            append!(outR, temp)
+            append!(r_out, rvals[i])
+        end
+        println("done filling output ")
+        maxV = Float64.(real(outR .* conj.(outR)))
+        writedlm("test_store/test_1.dat", hcat(itp_rrstar.(r_out), maxV))
         ####
     else
         # idx_hold = itp_rrstar.(rvals) .> 1.01 .* rp
