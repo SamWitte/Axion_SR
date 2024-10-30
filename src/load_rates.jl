@@ -140,6 +140,7 @@ function load_rate_coeffs(mu, M, a, f_a; non_rel=true, input_data="Me", solve_n4
                 else
                     data = open(readdlm, dirN * RateLoad_List[i] * ftag * ".dat")
                     data = data[data[:,2] .!= 0.0, :]
+                    # data[data[:,2] .!= 0.0, 2] .= 1e-100
                     itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
                     rate_out = 10 .^itp(log10.(alph)) .* faFac
                     if occursin("BH", RateLoad_List[i])

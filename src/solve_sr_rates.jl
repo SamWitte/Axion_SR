@@ -1000,23 +1000,111 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=200, iter=10000
     end
 end
 
-function compute_gridded(mu, M, a, n, l, m; Ntot=2000, iter=50, xtol=1e-7, npts=30, amin=0.0)
+
+function find_im_zero(mu, M, n, l, m; debug=false, Ntot=3000, iter=1000, xtol=1e-6, ftol=1e-20)
+    
+    
+    alph = mu * GNew * M
+    QNM = false
+        
+    function wrapper!(F, x)
+        # wR = 10 .^ x[1]  # real
+        wR = x[1]
+        a =  x[2]
+        
+        
+        wI = 0.0
+        erg = wR + im * wI
+        
+        b = sqrt.(Complex(1 - a.^2))
+
+        q = - sqrt.(Complex(alph.^2 .- erg.^2))
+        
+        if !QNM
+            if real(q) > 0
+                q *= -1
+            end
+        else
+            if real(q) < 0
+                q *= -1
+            end
+        end
+       
+        
+        gam = im * a * sqrt.(Complex(erg.^2 .- alph.^2))
+        LLM = l * (l + 1)
+        LLM += (-1 + 2 * l * (l + 1) - 2 * m.^2) * gam.^2 ./ (-3 + 4 * l * (l + 1))
+        LLM += ((l - m - 1 * (l - m) * (l + m) * (l + m - 1)) ./ ((-3 + 2 * l) * (2 * l - 1).^2) - (l + 1 - m) * (2 * l - m) * (l + m + 1) * (2 + l + m) ./ ((3 + 2 * l).^2 * (5 + 2 * l))) * gam.^4 ./ (2 * (1 + 2 * l))
+        LLM += (4 * ((-1 + 4 * m^2) * (l * (1 + l) * (121 + l * (1 + l) * (213 + 8 * l * (1 + l) * (-37 + 10 * l * (1 + l)))) - 2 * l * (1 + l) * (-137 + 56 * l * (1 + l) * (3 + 2 * l * (1 + l))) * m^2 + (705 + 8 * l * (1 + l) * (125 + 18 * l * (1 + l))) * m^4 - 15 * (1 + 46 * m^2))) * gam^6) / ((-5 + 2 * l) * (-3 + 2 * l) * (5 + 2 * l) * (7 + 2 * l) * (-3 + 4 * l * (1 + l))^5)
+
+        
+        c0 = 1.0 .- 2.0 * im * erg - 2 * im ./ b .* (erg .- a .* m ./ 2.0)
+        c1 = -4.0 .+ 4 * im * (erg - im * q * (1.0 + b)) + 4 * im / b * (erg - a * m / 2.0) .- 2.0 * (erg.^2 .+ q.^2) ./ q
+        c2 = 3.0 - 2 * im * erg - 2.0 * (q.^2 - erg.^2) ./ q - 2.0 * im / b * (erg - a * m ./ 2)
+        c3 = 2.0 * im * (erg - im * q).^3 ./ q .+ 2 * (erg .- im * q).^2 .* b + q.^2 * a.^2 .+ 2 * im * q * a * m - LLM - 1 - (erg - im * q).^2 ./ q .+ 2 * q * b + 2 * im / b * ( (erg - im * q).^2 ./ q + 1.0) * (erg .- a * m / 2)
+        c4 = (erg .- im * q).^4 ./ q.^2 .+ 2 * im * erg * (erg .- im * q).^2 ./ q .- 2 * im ./ b .* (erg .- im * q).^2 ./ q .* (erg .- a * m ./ 2)
+       
+        function alphaN(nn)
+            return nn.^2 .+ (c0 .+ 1) * nn + c0
+        end
+        function betaN(nn)
+            return -2 * nn.^2 .+ (c1 .+ 2) * nn + c3
+        end
+        function gammaN(nn)
+            return nn.^2 .+ (c2 .- 3) * nn + c4
+        end
+        
+        temp = 1
+        for i in Ntot:-1:1
+            temp = gammaN(i) ./ (betaN(i) .- alphaN(i) .* temp)
+        end
+        recur = betaN(0) ./ alphaN(0) .- temp
+        
+        F[1] = real(recur)
+        F[2] = imag(recur)
+        
+        # print(x, "\t", F, "\n")
+    end
+        
+        
+    w0G = alph .* (1 .- alph.^2 ./ n.^2)
+    sol = nlsolve(wrapper!, [w0G, 0.1], autodiff = :forward, xtol=xtol, ftol=ftol, iterations=iter, show_trace=debug)
+    println(sol)
+    return sol.zero[2]
+       
+end
+
+
+
+function compute_gridded(mu, M, a, n, l, m; Ntot=2000, iter=50, xtol=1e-7, npts=30, amin=0.0, compute_neg=false)
     a_max = a * 1.1 # safety, just in case upward fluctuation
     if a_max > maxSpin
         a_max = maxSpin
     end
-    
     output = zeros(npts)
-    if amin < a_max
-        alist = LinRange(amin, a_max, npts);
-    
+    if !compute_neg
+        if amin < a_max
+            alist = LinRange(amin, a_max, npts);
+        
+            alph = GNew * M * mu
+
+            for i in 1:length(alist)
+                output[i] = find_im_part(mu, M, alist[i], n, l, m, Ntot_force=Ntot, iter=iter, xtol=xtol, for_s_rates=true) ./ (GNew * M)
+            end
+        else
+            alist = LinRange(a_max, amin, npts);
+        end
+    else
+        if amin > maxSpin
+            amin = maxSpin
+        end
+        alist = LinRange(0.3, amin, npts);
+        
         alph = GNew * M * mu
 
         for i in 1:length(alist)
             output[i] = find_im_part(mu, M, alist[i], n, l, m, Ntot_force=Ntot, iter=iter, xtol=xtol, for_s_rates=true) ./ (GNew * M)
         end
-    else
-        alist = LinRange(a_max, amin, npts);
     end
     return alist, output
 end
@@ -1200,7 +1288,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     if to_inf
         m = (m1 + m2 - m3)
         l = l1 + l2 - l3
-        rmax = Float64.(100 ./ alph.^2 .* (minN ./ 2.0) ) .* 10.0
+        rmax = Float64.(100 ./ alph.^2 .* (minN ./ 2.0) ) .* 100.0
     else
         rmax = Float64.(100 ./ alph.^2 .* (minN ./ 2.0) ) 
     end
