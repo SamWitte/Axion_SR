@@ -133,10 +133,16 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     if alph < 0.5
         amin_guess_211 = 8 * m * n.^2 .* alph .* (2 .* n.^2 .+ alph.^2) ./ (16 .* n.^4 .* alph.^2 .+ m.^2 .* (2 .* n.^2 .+ alph.^2).^2)
         alist, pts = compute_gridded(mu, M_BH, aBH, n, l, m; iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp, amin=(amin_guess_211 .* 0.99))
+
         cond = pts .> 0.0
-        itp_211U = LinearInterpolation(alist[cond], log10.(pts[cond]), extrapolation_bc=Interpolations.Line())
+        if sum(cond) == 0.0
+            itp_211U(atest) = -100.0
+        else
+            itp_211U = LinearInterpolation(alist[cond], log10.(pts[cond]), extrapolation_bc=Interpolations.Line())
+        end
+        
     else
-        itp_211U(atest) = -100
+        itp_211U(atest) = -100.0
         amin_guess_211 = 1.0
     end
     alist, pts = compute_gridded(mu, M_BH, aBH, n, l, m; iter=iter_slv, xtol=xtol_slv, npts=N_pts_interpL, compute_neg=true, amin=amin_guess_211)
@@ -144,9 +150,9 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     itp_211L = LinearInterpolation(alist[cond], log10.(-pts[cond]), extrapolation_bc=Interpolations.Line())
     function itp_211(aspin)
         if aspin .> amin_guess_211
-            return 10 .^itp_211U(aspin)
+            return 10.0 .^itp_211U(aspin)
         elseif aspin .< (amin_guess_211 .* 0.98)
-            return -10 .^itp_211L(aspin)
+            return -10.0 .^itp_211L(aspin)
         else
             return 0.0
         end
@@ -161,9 +167,14 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         amin_guess_322 = 8 * m * n.^2 .* alph .* (2 .* n.^2 .+ alph.^2) ./ (16 .* n.^4 .* alph.^2 .+ m.^2 .* (2 .* n.^2 .+ alph.^2).^2)
         alist, pts = compute_gridded(mu, M_BH, aBH, n, l, m; iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp, amin=(amin_guess_322 .* 0.99))
         cond = pts .> 0.0
-        itp_322U = LinearInterpolation(alist[cond], log10.(pts[cond]), extrapolation_bc=Interpolations.Line())
+        if sum(cond) == 0.0
+            itp_322U(atest) = -100.0
+        else
+            itp_322U = LinearInterpolation(alist[cond], log10.(pts[cond]), extrapolation_bc=Interpolations.Line())
+        end
+        
     else
-        itp_322U(atest) = -100
+        itp_322U(atest) = -100.0
         amin_guess_322 = 1.0
     end
     alist, pts = compute_gridded(mu, M_BH, aBH, n, l, m; iter=iter_slv, xtol=xtol_slv, npts=N_pts_interpL, compute_neg=true,  amin=amin_guess_322)
@@ -171,9 +182,9 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     itp_322L = LinearInterpolation(alist[cond], log10.(-pts[cond]), extrapolation_bc=Interpolations.Line())
     function itp_322(aspin)
         if aspin .> amin_guess_322
-            return 10 .^itp_322U(aspin)
+            return 10.0 .^itp_322U(aspin)
         elseif aspin .< (amin_guess_322 .* 0.98)
-            return -10 .^itp_322L(aspin)
+            return -10.0 .^itp_322L(aspin)
         else
             return 0.0 ## Need buffer region for numerical stability!
         end
@@ -189,9 +200,13 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             amin_guess_411 = 8 * m * n.^2 .* alph .* (2 .* n.^2 .+ alph.^2) ./ (16 .* n.^4 .* alph.^2 .+ m.^2 .* (2 .* n.^2 .+ alph.^2).^2)
             alist, pts = compute_gridded(mu, M_BH, aBH, n, l, m; iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp, amin=(amin_guess_411 .* 0.99))
             cond = pts .> 0.0
-            itp_411U = LinearInterpolation(alist[cond], log10.(pts[cond]), extrapolation_bc=Interpolations.Line())
+            if sum(cond) == 0.0
+                itp_411U(atest) = -100.0
+            else
+                itp_411U = LinearInterpolation(alist[cond], log10.(pts[cond]), extrapolation_bc=Interpolations.Line())
+            end
         else
-            itp_411U(atest) = -100
+            itp_411U(atest) = -100.0
             amin_guess_411 = 1.0
         end
         alist, pts = compute_gridded(mu, M_BH, aBH, n, l, m; iter=iter_slv, xtol=xtol_slv, npts=N_pts_interpL, compute_neg=true, amin=amin_guess_411)
@@ -199,9 +214,9 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         itp_411L = LinearInterpolation(alist[cond], log10.(-pts[cond]), extrapolation_bc=Interpolations.Line())
         function itp_411(aspin)
             if aspin .> amin_guess_411
-                return 10 .^itp_411U(aspin)
+                return 10.0 .^itp_411U(aspin)
             elseif aspin .< (amin_guess_411 .* 0.99)
-                return -10 .^itp_411L(aspin)
+                return -10.0 .^itp_411L(aspin)
             else
                 return 0.0 ## Need buffer region for numerical stability!
             end
@@ -216,9 +231,14 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             amin_guess_422 = 8 * m * n.^2 .* alph .* (2 .* n.^2 .+ alph.^2) ./ (16 .* n.^4 .* alph.^2 .+ m.^2 .* (2 .* n.^2 .+ alph.^2).^2)
             alist, pts = compute_gridded(mu, M_BH, aBH, n, l, m; iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp, amin=(amin_guess_422 .* 0.99))
             cond = pts .> 0.0
-            itp_422U = LinearInterpolation(alist[cond], log10.(pts[cond]), extrapolation_bc=Interpolations.Line())
+            if sum(cond) == 0.0
+                itp_422U(atest) = -100.0
+            else
+                itp_422U = LinearInterpolation(alist[cond], log10.(pts[cond]), extrapolation_bc=Interpolations.Line())
+            end
+            
         else
-            itp_422U(atest) = -100
+            itp_422U(atest) = -100.0
             amin_guess_422 = 1.0
         end
         alist, pts = compute_gridded(mu, M_BH, aBH, n, l, m; iter=iter_slv, xtol=xtol_slv, npts=N_pts_interpL, compute_neg=true, amin=amin_guess_422)
@@ -242,9 +262,14 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             amin_guess_433 = 8 * m * n.^2 .* alph .* (2 .* n.^2 .+ alph.^2) ./ (16 .* n.^4 .* alph.^2 .+ m.^2 .* (2 .* n.^2 .+ alph.^2).^2)
             alist, pts = compute_gridded(mu, M_BH, aBH, n, l, m; iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp, amin=(amin_guess_433 .* 0.99))
             cond = pts .> 0.0
-            itp_433U = LinearInterpolation(alist[cond], log10.(pts[cond]), extrapolation_bc=Interpolations.Line())
+            if sum(cond) == 0.0
+                itp_433U(atest) = -100.0
+            else
+                itp_433U = LinearInterpolation(alist[cond], log10.(pts[cond]), extrapolation_bc=Interpolations.Line())
+            end
+            
         else
-            itp_433U(atest) = -100
+            itp_433U(atest) = -100.0
             amin_guess_433 = 1.0
         end
         alist, pts = compute_gridded(mu, M_BH, aBH, n, l, m; iter=iter_slv, xtol=xtol_slv, npts=N_pts_interpL, compute_neg=true, amin=amin_guess_433)
@@ -271,9 +296,14 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
                 amin_guess_522 = 8 * m * n.^2 .* alph .* (2 .* n.^2 .+ alph.^2) ./ (16 .* n.^4 .* alph.^2 .+ m.^2 .* (2 .* n.^2 .+ alph.^2).^2)
                 alist, pts = compute_gridded(mu, M_BH, aBH, n, l, m; iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp, amin=(amin_guess_522 .* 0.99))
                 cond = pts .> 0.0
-                itp_522U = LinearInterpolation(alist[cond], log10.(pts[cond]), extrapolation_bc=Interpolations.Line())
+                if sum(cond) == 0.0
+                    itp_522U(atest) = -100.0
+                else
+                    itp_522U = LinearInterpolation(alist[cond], log10.(pts[cond]), extrapolation_bc=Interpolations.Line())
+                end
+                
             else
-                itp_522U(atest) = -100
+                itp_522U(atest) = -100.0
                 amin_guess_522 = 1.0
             end
             alist, pts = compute_gridded(mu, M_BH, aBH, n, l, m; iter=iter_slv, xtol=xtol_slv, npts=N_pts_interpL, compute_neg=true, amin=amin_guess_522)
@@ -298,9 +328,14 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
                 amin_guess_533 = 8 * m * n.^2 .* alph .* (2 .* n.^2 .+ alph.^2) ./ (16 .* n.^4 .* alph.^2 .+ m.^2 .* (2 .* n.^2 .+ alph.^2).^2)
                 alist, pts = compute_gridded(mu, M_BH, aBH, n, l, m; iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp, amin=(amin_guess_533 .* 0.99))
                 cond = pts .> 0.0
-                itp_533U = LinearInterpolation(alist[cond], log10.(pts[cond]), extrapolation_bc=Interpolations.Line())
+                if sum(cond) == 0.0
+                    itp_533U(atest) = -100.0
+                else
+                    itp_533U = LinearInterpolation(alist[cond], log10.(pts[cond]), extrapolation_bc=Interpolations.Line())
+                end
+                
             else
-                itp_533U(atest) = -100
+                itp_533U(atest) = -100.0
                 amin_guess_533 = 1.0
             end
             alist, pts = compute_gridded(mu, M_BH, aBH, n, l, m; iter=iter_slv, xtol=xtol_slv, npts=N_pts_interpL, compute_neg=true, amin=amin_guess_533)
@@ -324,9 +359,13 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
                 amin_guess_544 = 8 * m * n.^2 .* alph .* (2 .* n.^2 .+ alph.^2) ./ (16 .* n.^4 .* alph.^2 .+ m.^2 .* (2 .* n.^2 .+ alph.^2).^2)
                 alist, pts = compute_gridded(mu, M_BH, aBH, n, l, m; iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp, amin=(amin_guess_544 .* 0.99))
                 cond = pts .> 0.0
-                itp_544U = LinearInterpolation(alist[cond], log10.(pts[cond]), extrapolation_bc=Interpolations.Line())
+                if sum(cond) == 0.0
+                    itp_544U(atest) = -100.0
+                else
+                    itp_544U = LinearInterpolation(alist[cond], log10.(pts[cond]), extrapolation_bc=Interpolations.Line())
+                end
             else
-                itp_544U(atest) = -100
+                itp_544U(atest) = -100.0
                 amin_guess_544 = 1.0
             end
             alist, pts = compute_gridded(mu, M_BH, aBH, n, l, m; iter=iter_slv, xtol=xtol_slv, npts=N_pts_interpL, compute_neg=true, amin=amin_guess_544)
@@ -752,7 +791,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
                 end
             end
             
-        elseif (integrator.dt .<= 1e-10)
+        elseif (integrator.dt .<= 1e-13)
             print("time step too small!! \n")
             terminate!(integrator)
         end
