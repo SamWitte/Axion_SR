@@ -1081,8 +1081,12 @@ function compute_gridded(mu, M, a, n, l, m; Ntot=2000, iter=50, xtol=1e-7, npts=
     if a_max > maxSpin
         a_max = maxSpin
     end
+    
     output = zeros(npts)
     if !compute_neg
+        if amin == a_max
+            amin *= 0.99
+        end
         if amin < a_max
             alist = LinRange(amin, a_max, npts);
         
