@@ -287,7 +287,6 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             alist = [amin_guess_422, amin_guess_422 * 1.01]
             pts = [1e-100, 1e-100]
         end
-        println(alist, "\t", pts, "\n")
         itp_422U = LinearInterpolation(alist, log10.(pts), extrapolation_bc=Interpolations.Line())
         
         alist, pts = compute_gridded(mu, M_BH, aBH, n, l, m; iter=iter_slv, xtol=xtol_slv, npts=N_pts_interpL, compute_neg=true, amin=amin_guess_422)
