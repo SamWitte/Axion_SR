@@ -1102,7 +1102,7 @@ function compute_gridded(mu, M, a, n, l, m; Ntot=2000, iter=50, xtol=1e-7, npts=
         if amin > maxSpin
             amin = maxSpin
         end
-        alist = LinRange(0.3, amin, npts);
+        alist = LinRange(minimum([0.1 amin]), maximum([0.1 amin]), npts);
         
         alph = GNew * M * mu
 

@@ -2,7 +2,8 @@ using Random
 using Distributions
 import AffineInvariantMCMC
 using DelimitedFiles
-include("super_rad.jl")
+using Suppressor
+@suppress include("super_rad.jl")
 include("tde_input.jl")
 using Dates
 using MCMCDiagnosticTools
