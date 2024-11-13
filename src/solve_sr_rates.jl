@@ -575,9 +575,7 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
     rm = (1.0 .- sqrt.(1 - a.^2))
     rp = (1.0 .+ sqrt.(1 - a.^2))
     OmH = a  ./ (2 .* rp)
-    
 
-    
     
     sigm = 2 .* rp .* (erg .- OmH .* m) ./ (rp .- rm)
     chi = (alph.^2 .- 2 .* erg.^2) ./ q
@@ -1279,9 +1277,11 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     
     
     ### quick check if to inf to not!
-    erg1R, erg1I = find_im_part(mu, M, a, n1, l1, m1; Ntot_force=5000, for_s_rates=true, return_both=true)
-    erg2R, erg2I = find_im_part(mu, M, a, n2, l2, m2; Ntot_force=5000, for_s_rates=true, return_both=true)
-    erg3R, erg3I = find_im_part(mu, M, a, n3, l3, m3; Ntot_force=5000, for_s_rates=true, return_both=true)
+    erg1R, erg1I = find_im_part(mu, M, a, n1, l1, m1; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
+    erg2R, erg2I = find_im_part(mu, M, a, n2, l2, m2; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
+    erg3R, erg3I = find_im_part(mu, M, a, n3, l3, m3; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
+    
+    
     if (erg1R .+ erg2R .- erg3R) .> alph
         to_inf = true
     else
@@ -1297,8 +1297,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         rmax = Float64.(100 ./ alph.^2 .* (minN ./ 2.0) ) 
     end
     
-    
-    rmax = Float64.(100 ./ alph.^2 .* (minN ./ 2.0) )
+    # rmax = Float64.(100 ./ alph.^2 .* (minN ./ 2.0) )
     
     rlist = 10 .^range(log10(rp .* (1.0 .+ eps_fac)), log10.(rmax), rpts)
     
