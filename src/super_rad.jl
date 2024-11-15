@@ -33,7 +33,12 @@ function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_c
         end
     end
     print("Solving system... \n")
-    final_spin, final_BH = solve_system(massB, f_a, aBH, M_BH, tau_max, debug=debug, solve_322=solve_322, impose_low_cut=impose_low_cut, input_data=input_data, solve_n4=solve_n4, solve_n5=solve_n5, stop_on_a=stop_on_a, eq_threshold=eq_threshold, abstol=abstol, non_rel=non_rel, high_p=high_p, N_pts_interp=N_pts_interp, N_pts_interpL=N_pts_interpL)
+    if debug || (alph > 0.1)
+        final_spin, final_BH = solve_system(massB, f_a, aBH, M_BH, tau_max, debug=debug, solve_322=solve_322, impose_low_cut=impose_low_cut, input_data=input_data, solve_n4=solve_n4, solve_n5=solve_n5, stop_on_a=stop_on_a, eq_threshold=eq_threshold, abstol=abstol, non_rel=non_rel, high_p=high_p, N_pts_interp=N_pts_interp, N_pts_interpL=N_pts_interpL)
+    else
+        # n = 4,5 don't alter evo for small alpha. accelerate.
+        final_spin, final_BH = solve_system(massB, f_a, aBH, M_BH, tau_max, debug=debug, solve_322=solve_322, impose_low_cut=impose_low_cut, input_data=input_data, solve_n4=false, solve_n5=false, stop_on_a=stop_on_a, eq_threshold=eq_threshold, abstol=abstol, non_rel=non_rel, high_p=high_p, N_pts_interp=N_pts_interp, N_pts_interpL=N_pts_interpL)
+    end
     
     print("Spin diff.. \t ", aBH, "\t", final_spin, "\t", alph, "\n")
     print("Mass diff.. \t ", M_BH, "\t", final_BH, "\t", alph, "\n")
@@ -53,9 +58,13 @@ function isapproxsigfigs(a, b, precision)
     return round(a, sigdigits=precision) == round(b, sigdigits=precision)
 end
 
-function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solve_322=true, impose_low_cut=0.01, return_all_info=false, input_data="Masha", solve_n4=false, solve_n5=false, eq_threshold=1e-100, stop_on_a=0, abstol=1e-30, non_rel=true, max_m_2=false, high_p=false, N_pts_interp=10, N_pts_interpL=5)
-
-    default_reltol = 1e-3
+function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solve_322=true, impose_low_cut=0.01, return_all_info=false, input_data="Masha", solve_n4=false, solve_n5=false, eq_threshold=1e-100, stop_on_a=0, abstol=1e-30, non_rel=true, max_m_2=false, high_p=false, N_pts_interp=10, N_pts_interpL=5, trace_term=false, trace_idx=1)
+    
+    if non_rel
+        default_reltol = 1e-5
+    else
+        default_reltol = 1e-3
+    end
     if high_p
         reltol_Thres = 1e-3
     else
@@ -489,7 +498,25 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     
     rates = load_rate_coeffs(mu, M_BH, aBH, fa; non_rel=non_rel, input_data=input_data, solve_n4=solve_n4, solve_n5=solve_n5)
     
-        
+    
+    ### for testing
+    trace_terms_tot = 0
+    if trace_term
+        println("SR \t", SR_rates[trace_idx])
+        rate_keys = collect(keys(rates))
+        for i in 1:length(rate_keys)
+            idxV, sgn = key_to_indx(rate_keys[i]; solve_n4=true, solve_n5=true)
+            toV = sum(idxV .== trace_idx)
+            # testGW = occursin("GW", rate_keys[i])
+            testGW = false
+            if (toV >= 1)&&(!testGW)
+               print(rate_keys[i], "\t")
+               trace_terms_tot += 1
+            end
+        end
+    end
+    ###
+    
     turn_off = []
     for i in 1:idx_lvl
         append!(turn_off, false)
@@ -534,6 +561,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         
         SR_rates[1] = itp_211(u_real[spinI])
         SR_rates[2] = itp_322(u_real[spinI])
+
         
         if solve_n4
             SR_rates[3] = itp_411(u_real[spinI])
@@ -560,7 +588,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         du[massI] = 0.0
         for i in 1:idx_lvl
             du[i] = SR_rates[i] .* u_real[i] ./ mu
-            if (!max_m_2)||(i <= 2)
+            if (!max_m_2)||(i <= 3)
                 du[spinI] += - m_list[i] * SR_rates[i] .*  u_real[i] ./ mu
                 du[massI] += - SR_rates[i] .*  u_real[i] ./ mu
             end
@@ -946,7 +974,46 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         set_proposed_dt!(integrator, integrator.dt .* 0.3)
     end
     
-
+    
+    
+    output_trace = []
+    function sve_tr(u, t, integrator)
+        out_row = zeros(trace_terms_tot + 1)
+        out_row[1] = t
+        cnt = 2
+        for i in 1:length(rate_keys)
+            idxV, sgn = key_to_indx(rate_keys[i]; solve_n4=solve_n4, solve_n5=solve_n5)
+            # testGW = occursin("GW", rate_keys[i])
+            testGW = false
+            if (sum(idxV .== trace_idx) .> 0)&&!testGW
+                u_term_tot = 1.0
+                for j in 1:length(sgn)
+                    
+                    if (idxV[j] .<= idx_lvl)&&(idxV[j] .> 0)
+                        u_term_tot *= exp.(u[idxV[j]])
+                    end
+                   
+                end
+                
+                if (trace_idx == idxV[1])&&(idxV[1] == idxV[2])
+                    out_row[cnt] += 2 * rates[rate_keys[i]] * u_term_tot
+                else
+                    out_row[cnt] += rates[rate_keys[i]] * u_term_tot
+                end
+                cnt += 1
+            end
+        end
+        
+        if length(output_trace) == 0
+            output_trace = out_row'
+        else
+            output_trace = cat(output_trace, out_row', dims=1)
+        end
+        return false
+    end
+    function affect_tr!(integrator)
+        nothing;
+    end
     
     
     rP = 1.0 .+ sqrt.(1 - aBH.^2)
@@ -965,6 +1032,9 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     cback_osc = DiscreteCallback(check_oscillating, affect_oscillating!, save_positions=(false, true))
     cbackdt = DiscreteCallback(check_timescale, affect_timescale!, save_positions=(false, true))
     cbackspin = DiscreteCallback(check_spin, affect_spin!, save_positions=(false, true))
+    if trace_term
+        sve_trce = DiscreteCallback(sve_tr, affect_tr!, save_positions=(false, true))
+    end
     
     
     if solve_n4
@@ -972,6 +1042,9 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             # cbset = CallbackSet(cbackspin)
             # cbset = CallbackSet(cbackspin, cbackdt)
             cbset = CallbackSet(cbackspin, cbackdt, cback_station, cback_osc)
+            if trace_term
+                cbset = CallbackSet(cbackspin, cbackdt, cback_station, cback_osc, sve_trce)
+            end
         else
             cbset = CallbackSet(cbackspin, cbackdt, cback_station, cback_osc)
             # cbset = CallbackSet(cbackspin, cbackdt)
@@ -989,6 +1062,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
 #        if high_p
 #            cbset = CallbackSet(cbackspin, cbackdt)
 #        end
+        
         sol = solve(prob, Rosenbrock23(autodiff=false), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e6, dtmin=(dt_guess / 1e5), force_dtmin=true)
         # sol = solve(prob, TRBDF2(autodiff=false), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e6, dtmin=(dt_guess / 1e5), force_dtmin=true)
         # sol = solve(prob, QNDF(autodiff=false), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e6, dtmin=(dt_guess / 1e5), force_dtmin=true)
@@ -1014,7 +1088,10 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     end
     spinBH = [exp.(sol.u[i][spinI]) for i in 1:length(sol.u)]
     MassB = [exp.(sol.u[i][massI]) for i in 1:length(sol.u)]
-    
+
+    if trace_term
+        writedlm("test_store/Trace_term_$(trace_idx)_.dat", output_trace)
+    end
 
     if debug
         if !solve_n4
