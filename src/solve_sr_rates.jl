@@ -10,6 +10,7 @@ using DifferentialEquations
 using Interpolations
 using HypergeometricFunctions
 using SpinWeightedSpheroidalHarmonics
+using NPZ
 # using MCIntegration
 # using Dates
 # using LinearAlgebra
@@ -22,12 +23,12 @@ function ergL(n, l, m, massB, MBH, a; full=true)
     alph = GNew * MBH * massB
     if full
         if l > 0
-            return massB .* (1.0 .- alph.^2 ./ (2 .* n.^2) - alph.^4 ./ (8 * n.^4) + alph.^4 ./ n^4 .* (2 * l - 3 * n + 1) ./ (l + 0.5) + 2 * a * m * alph.^5 ./ n^3 ./ (l * (l + 0.5) * (l+1)))
+            return massB .* (1.0 .- alph.^2 ./ (2 .* n.^2) .- alph.^4 ./ (8 * n.^4) .+ alph.^4 ./ n^4 .* (2 .* l .- 3 .* n .+ 1) ./ (l .+ 0.5) .+ 2 .* a .* m .* alph.^5 ./ n^3 ./ (l .* (l .+ 0.5) .* (l .+ 1)))
         else
-            return massB .* (1.0 .- alph.^2 ./ (2 .* n.^2) - alph.^4 ./ (8 * n.^4) + alph.^4 ./ n^4 .* (2 * l - 3 * n + 1) ./ (l + 0.5))
+            return massB .* (1.0 .- alph.^2 ./ (2 .* n.^2) .- alph.^4 ./ (8 * n.^4) .+ alph.^4 ./ n^4 .* (2 .* l .- 3 .* n .+ 1) ./ (l .+ 0.5))
         end
     else
-        return massB .* (1.0 .- alph.^2 ./ (2 .* n.^2) - alph.^4 ./ (8 * n.^4))
+        return massB .* (1.0 .- alph.^2 ./ (2 .* n.^2) .- alph.^4 ./ (8 * n.^4))
         # return massB .* (1.0 .- alph.^2 ./ (2 .* n.^2))
     end
 end
@@ -796,7 +797,7 @@ function spheroidals(l, m, a, erg)
     return Zlm
 end
 
-function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=200, iter=10000, xtol=1e-20, ftol=1e-90, return_both=false, for_s_rates=false, QNM=false, QNM_E=1.0, erg_Guess=nothing, max_n_qnm=5)
+function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=200, iter=10000, xtol=1e-20, ftol=1e-90, return_both=false, for_s_rates=true, QNM=false, QNM_E=1.0, erg_Guess=nothing, max_n_qnm=5)
     
     OmegaH = a ./ (2 .* (GNew .* M) .* (1 .+ sqrt.(1 .- a.^2)))
     alph = mu * GNew * M
@@ -807,6 +808,10 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=200, iter=10000
 
         if (alph < 0.03)
             alph_ev = 0.03
+        elseif (alph < 0.16)&&(m==3)
+            alph_ev = 0.16
+        elseif (alph < 0.39)&&(m==4)
+            alph_ev = 0.39
         else
             alph_ev = alph
         end
@@ -1565,3 +1570,46 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     return out_gamma # unitless [gamma / mu]
 end
 
+
+function pre_computed_sr_rates(n, l, m, alph, M; n_high=20, n_low=20, delt_a=0.001)
+
+    zerolist= readdlm("rate_sve/Imag_zero_$(n)$(l)$(m).dat")
+    itp = LinearInterpolation(zerolist[:, 1], zerolist[:, 2], extrapolation_bc=Line())
+    a_mid = itp(alph)
+    run_high = true
+    run_low = true
+    if (a_mid + delt_a) .> maxSpin
+        run_high = false
+    elseif (a_mid - delt_a) .< minSpin
+        run_low = false
+    end
+
+    if run_high
+        a_list_high = LinRange(a_mid + delt_a, maxSpin, n_high)
+        file_in = npzread("rate_sve/Imag_erg_pos_$(n)$(l)$(m).npz")
+        alpha_load = unique(file_in[:,:,1])
+        a_load = unique(file_in[:,:,2])
+        file_in[file_in[:, :, 3] .<= 0.0, 3] .= 1e-100
+        itp = LinearInterpolation((alpha_load, a_load), log10.(file_in[:, :, 3] ./ (GNew * M)), extrapolation_bc=Line())
+        out_high = 10 .^itp(alph, a_list_high)
+    else
+        a_list_high = []
+        out_high = []
+    end
+
+    if run_low
+        a_list_low = LinRange(minSpin, a_mid - delt_a, n_low)
+        file_in = npzread("rate_sve/Imag_erg_neg_$(n)$(l)$(m).npz")
+        alpha_load = unique(file_in[:,:,1])
+        a_load = unique(file_in[:,:,2])
+        file_in[file_in[:, :, 3] .<= 0.0, 3] .= 1e-100
+        itp = LinearInterpolation((alpha_load, a_load), log10.(file_in[:, :, 3] ./ (GNew * M)), extrapolation_bc=Line())
+        out_low = 10 .^itp(alph, a_list_low)
+    else
+        a_list_low = []
+        out_low = []
+    end
+    
+    return a_mid, run_high, a_list_high, out_high, run_low, a_list_low, out_low
+
+end

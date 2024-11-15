@@ -1,5 +1,5 @@
 
-function load_rate_coeffs(mu, M, a, f_a; non_rel=true, input_data="Me", solve_n4=true, solve_n5=false)
+function load_rate_coeffs(mu, M, a, f_a; non_rel=true, input_data="Me", solve_n4=true, solve_n5=true, amin_211=nothing, amin_322=nothing, amin_433=nothing)
     alph = mu * GNew * M
     rP = 1 + sqrt.(1 - a^2)
     faFac = (M_pl ./ f_a)^4
@@ -20,51 +20,103 @@ function load_rate_coeffs(mu, M, a, f_a; non_rel=true, input_data="Me", solve_n4
         
       
     elseif non_rel
-        Drate["211_211^322^BH"] = 4.2e-7 .* alph^11 .* faFac * rP
-        Drate["322_322^211^Inf"] = 1.1e-8 * alph^8 .* faFac
-        Drate["211_211^GW"] = 1.0e-2 * alph^14
-        Drate["322_211^GW"] = 5.0e-6 * alph^10
-        Drate["211_211_211^Inf"] = 1.5e-8 * alph^21 .* faFac
+        include_m1 = true
+        include_m2 = true
+        include_m3 = true
+        if (alph < 0.2) && (a > 0.95)
+            nothing;
+        else
+            ### check if m=1 SR
+            if isnothing.(amin_211)
+                wI_test = find_im_part(mu, M, a, 2, 1, 1;  for_s_rates=true, QNM=false, Ntot_force=5000)
+                if wI_test < 0.0
+                    include_m1 = false
+                end
+            else
+                if a < amin_211
+                    include_m1 = false
+                end
+            end
+        
+            ### check if m=2 SR
+            if isnothing.(amin_322)
+                wI_test = find_im_part(mu, M, a, 3, 2, 2;  for_s_rates=true, QNM=false, Ntot_force=5000)
+                if wI_test < 0.0
+                    include_m2 = false
+                end
+            else
+                if a < amin_322
+                    include_m2 = false
+                end
+            end
+            
+            ### check if m=3 SR
+            if isnothing.(amin_433)
+                wI_test = find_im_part(mu, M, a, 4, 3, 3;  for_s_rates=true, QNM=false, Ntot_force=5000)
+                if wI_test < 0.0
+                    include_m3 = false
+                end
+            else
+                if a < amin_433
+                    include_m3 = false
+                end
+            end
+        end
+        
+        if include_m1
+            Drate["211_211^322^BH"] = 4.2e-7 .* alph^11 .* faFac * rP
+            Drate["322_322^211^Inf"] = 1.1e-8 * alph^8 .* faFac
+            Drate["211_211^GW"] = 1.0e-2 * alph^14
+            Drate["322_211^GW"] = 5.0e-6 * alph^10
+            Drate["211_211_211^Inf"] = 1.5e-8 * alph^21 .* faFac
+        end
         Drate["322_322^GW"] = 3.0e-8 * alph^18
             
         # n = 4
         if solve_n4
-            Drate["211_411^322^BH"] = 2.5e-8 * alph^11 * faFac * rP
-            Drate["411_411^322^BH"] = 1.7e-11 * alph^11 * faFac * rP ### Disagree
-            Drate["322_411^211^Inf"] = 3.7e-9 * alph^8 * faFac
-            Drate["211_211^422^BH"] = 1.5e-7 * alph^11 * faFac * rP
-            Drate["411_422^211^Inf"] = 2.2e-9 * alph^8 * faFac
-            Drate["411_411^422^BH"] = 2.2e-11 * alph^7 * faFac * rP
-            Drate["211_422^433^BH"] = 7.83e-11 * alph^7 * faFac * rP ### Disagree
-            Drate["422_322^211^Inf"] = 1.6e-8 * alph^8 * faFac
-            Drate["433_433^211^Inf"] = 9.2e-11 * alph^8 * faFac
-            Drate["322_433^211^Inf"] = 2.6e-9 * alph^8 * faFac
-            Drate["211_322^433^BH"] = 9.1e-8 * alph^11 * faFac * rP
-            Drate["322_411^433^BH"] = 3.8e-11 * alph^7 * faFac * rP
+            if include_m1
+                Drate["211_411^322^BH"] = 2.5e-8 * alph^11 * faFac * rP
+                Drate["322_411^211^Inf"] = 3.7e-9 * alph^8 * faFac
+                Drate["211_211^422^BH"] = 1.5e-7 * alph^11 * faFac * rP
+                Drate["411_422^211^Inf"] = 2.2e-9 * alph^8 * faFac
+                Drate["411_411^322^BH"] = 1.7e-11 * alph^11 * faFac * rP ### Disagree
+                Drate["411_411^422^BH"] = 2.2e-11 * alph^7 * faFac * rP
+                Drate["211_422^433^BH"] = 7.83e-11 * alph^7 * faFac * rP ### Disagree
+                Drate["422_322^211^Inf"] = 1.6e-8 * alph^8 * faFac
+                Drate["433_433^211^Inf"] = 9.2e-11 * alph^8 * faFac
+                Drate["322_433^211^Inf"] = 2.6e-9 * alph^8 * faFac
+                Drate["211_322^433^BH"] = 9.1e-8 * alph^11 * faFac * rP
+                Drate["322_411^433^BH"] = 3.8e-11 * alph^7 * faFac * rP
+            end
+           
                 
             if solve_n5
-                Drate["322_322^544^BH"] = 1.9e-9 * alph^11 * faFac * rP
-                Drate["322_411^533^BH"] = 2.0e-8 * alph^11 * faFac * rP
-                Drate["322_422^544^BH"] = 1.3e-11 * alph^11 * faFac * rP #
-                Drate["411_411^522^BH"] = 9.0e-11 * alph^11 * faFac * rP #
-                Drate["322_522^544^BH"] = 3.4e-12 * alph^7 * faFac * rP
-                Drate["422_422^544^BH"] = 2.3e-9 * alph^11 * faFac * rP #
-                Drate["422_522^544^BH"] = 3.7e-14 * alph^7 * faFac * rP
-                Drate["522_522^544^BH"] = 2.7e-13 * alph^7 * faFac * rP #
-                
-                Drate["422_544^322^Inf"] = 2.5e-11 * alph^8 * faFac
-                Drate["433_544^322^Inf"] = 7.8e-10 * alph^8 * faFac
-                Drate["422_533^322^Inf"] = 1.2e-9 * alph^8 * faFac
-                Drate["433_533^322^Inf"] = 2.8e-9 * alph^8 * faFac
-                Drate["433_522^322^Inf"] = 6.3e-10 * alph^8 * faFac
-                Drate["422_522^322^Inf"] = 1.6e-9 * alph^8 * faFac
-                
-                Drate["522_544^322^Inf"] = 2.2e-11 * alph^8 * faFac
-                Drate["533_544^322^Inf"] = 1.8e-10 * alph^8 * faFac
-                Drate["544_544^322^Inf"] = 4.3e-11 * alph^8 * faFac
-                Drate["522_533^322^Inf"] = 4.4e-10 * alph^8 * faFac
-                Drate["533_533^322^Inf"] = 3.1e-10 * alph^8 * faFac
-                Drate["522_522^322^Inf"] = 1.6e-10 * alph^8 * faFac
+                if include_m1
+                    Drate["322_411^533^BH"] = 2.0e-8 * alph^11 * faFac * rP
+                    Drate["411_411^522^BH"] = 9.0e-11 * alph^11 * faFac * rP #
+                end
+                if include_m2
+                    Drate["322_322^544^BH"] = 1.9e-9 * alph^11 * faFac * rP
+                    Drate["322_422^544^BH"] = 1.3e-11 * alph^11 * faFac * rP #
+                    Drate["322_522^544^BH"] = 3.4e-12 * alph^7 * faFac * rP
+                    Drate["422_422^544^BH"] = 2.3e-9 * alph^11 * faFac * rP #
+                    Drate["422_522^544^BH"] = 3.7e-14 * alph^7 * faFac * rP
+                    Drate["522_522^544^BH"] = 2.7e-13 * alph^7 * faFac * rP #
+                    
+                    Drate["422_544^322^Inf"] = 2.5e-11 * alph^8 * faFac
+                    Drate["433_544^322^Inf"] = 7.8e-10 * alph^8 * faFac
+                    Drate["422_533^322^Inf"] = 1.2e-9 * alph^8 * faFac
+                    Drate["433_533^322^Inf"] = 2.8e-9 * alph^8 * faFac
+                    Drate["433_522^322^Inf"] = 6.3e-10 * alph^8 * faFac
+                    Drate["422_522^322^Inf"] = 1.6e-9 * alph^8 * faFac
+                    
+                    Drate["522_544^322^Inf"] = 2.2e-11 * alph^8 * faFac
+                    Drate["533_544^322^Inf"] = 1.8e-10 * alph^8 * faFac
+                    Drate["544_544^322^Inf"] = 4.3e-11 * alph^8 * faFac
+                    Drate["522_533^322^Inf"] = 4.4e-10 * alph^8 * faFac
+                    Drate["533_533^322^Inf"] = 3.1e-10 * alph^8 * faFac
+                    Drate["522_522^322^Inf"] = 1.6e-10 * alph^8 * faFac
+                end
             end
         end
             
@@ -87,21 +139,39 @@ function load_rate_coeffs(mu, M, a, f_a; non_rel=true, input_data="Me", solve_n4
             nothing;
         else
             ### check if m=1 SR
-            wI_test = find_im_part(mu, M, a, 2, 1, 1;  for_s_rates=true, QNM=false, Ntot_force=5000)
-            if wI_test < 0.0
-                include_m1 = false
+            if isnothing.(amin_211)
+                wI_test = find_im_part(mu, M, a, 2, 1, 1;  for_s_rates=true, QNM=false, Ntot_force=5000)
+                if wI_test < 0.0
+                    include_m1 = false
+                end
+            else
+                if a < amin_211
+                    include_m1 = false
+                end
             end
         
             ### check if m=2 SR
-            wI_test = find_im_part(mu, M, a, 3, 2, 2;  for_s_rates=true, QNM=false, Ntot_force=5000)
-            if wI_test < 0.0
-                include_m2 = false
+            if isnothing.(amin_322)
+                wI_test = find_im_part(mu, M, a, 3, 2, 2;  for_s_rates=true, QNM=false, Ntot_force=5000)
+                if wI_test < 0.0
+                    include_m2 = false
+                end
+            else
+                if a < amin_322
+                    include_m2 = false
+                end
             end
             
             ### check if m=3 SR
-            wI_test = find_im_part(mu, M, a, 4, 3, 3;  for_s_rates=true, QNM=false, Ntot_force=5000)
-            if wI_test < 0.0
-                include_m3 = false
+            if isnothing.(amin_433)
+                wI_test = find_im_part(mu, M, a, 4, 3, 3;  for_s_rates=true, QNM=false, Ntot_force=5000)
+                if wI_test < 0.0
+                    include_m3 = false
+                end
+            else
+                if a < amin_433
+                    include_m3 = false
+                end
             end
         end
         
