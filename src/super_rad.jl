@@ -216,7 +216,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     end
     SR_rates[2] = itp_322(aBH)
   
-    
+    amin_guess_433 = nothing
     if solve_n4
         n = 4; l = 1; m = 1;
         amin_guess_411, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.01)
