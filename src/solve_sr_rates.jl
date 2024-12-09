@@ -1576,6 +1576,12 @@ function pre_computed_sr_rates(n, l, m, alph, M; n_high=20, n_low=20, delt_a=0.0
     zerolist= readdlm("rate_sve/Imag_zero_$(n)$(l)$(m).dat")
     itp = LinearInterpolation(zerolist[:, 1], zerolist[:, 2], extrapolation_bc=Line())
     a_mid = itp(alph)
+    if a_mid .< 0
+        a_mid = 0.01
+    elseif a_mid .> maxSpin
+        a_mid = maxSpin
+    end
+    
     run_high = true
     run_low = true
     if (a_mid + delt_a) .> maxSpin

@@ -9,7 +9,7 @@ include("solve_sr_rates.jl")
 include("load_rates.jl")
 using Printf
 
-function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_cut=100.0, debug=false, solve_322=true, solve_n4=false, solve_n5=false, impose_low_cut=0.01, input_data="Masha", stop_on_a=0, eq_threshold=1e-100, abstol=1e-30, non_rel=true, high_p=false, N_pts_interp=15, N_pts_interpL=10)
+function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_cut=100.0, debug=false, solve_322=true, solve_n4=false, solve_n5=false, impose_low_cut=0.01, input_data="Masha", stop_on_a=0, eq_threshold=1e-100, abstol=1e-30, non_rel=true, high_p=true, N_pts_interp=15, N_pts_interpL=10)
    
     alph = GNew .* M_BH .* massB #
     if debug
@@ -58,7 +58,7 @@ function isapproxsigfigs(a, b, precision)
     return round(a, sigdigits=precision) == round(b, sigdigits=precision)
 end
 
-function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solve_322=true, impose_low_cut=0.01, return_all_info=false, input_data="Masha", solve_n4=false, solve_n5=false, eq_threshold=1e-100, stop_on_a=0, abstol=1e-30, non_rel=true, max_m_2=false, high_p=false, N_pts_interp=10, N_pts_interpL=5, trace_term=false, trace_idx=1)
+function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solve_322=true, impose_low_cut=0.01, return_all_info=false, input_data="Masha", solve_n4=false, solve_n5=false, eq_threshold=1e-100, stop_on_a=0, abstol=1e-30, non_rel=true, max_m_2=false, high_p=true, N_pts_interp=10, N_pts_interpL=5, trace_term=false, trace_idx=1)
     if debug
         println("Entering...")
     end
@@ -974,7 +974,11 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     
     tlist = []
     for i in 1:idx_lvl
-        append!(tlist, (abs.(SR_rates[i]) ./ hbar .* 3.15e7).^(-1))
+        if SR_rates[i] .> 0
+            append!(tlist, (abs.(SR_rates[i]) ./ hbar .* 3.15e7).^(-1))
+        else
+            append!(tlist, 1e6)
+        end
     end
     dt_guess = minimum(tlist) ./ 5.0
 
