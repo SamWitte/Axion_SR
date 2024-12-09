@@ -139,7 +139,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     
     
     n = 2; l = 1; m = 1;
-    amin_guess_211, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.01)
+    amin_guess_211, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.001)
     if alph < 0.5
         # amin_guess_211 = 8 * m * n.^2 .* alph .* (2 .* n.^2 .+ alph.^2) ./ (16 .* n.^4 .* alph.^2 .+ m.^2 .* (2 .* n.^2 .+ alph.^2).^2)
         # alist, pts = compute_gridded(mu, M_BH, aBH, n, l, m; iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp, amin=(amin_guess_211 .* 0.99))
@@ -179,7 +179,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     
     
     n = 3; l = 2; m = 2;
-    amin_guess_322, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.01)
+    amin_guess_322, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.001)
     if alph < 1.1
         # amin_guess_322 = 8 * m * n.^2 .* alph .* (2 .* n.^2 .+ alph.^2) ./ (16 .* n.^4 .* alph.^2 .+ m.^2 .* (2 .* n.^2 .+ alph.^2).^2)
         # alist, pts = compute_gridded(mu, M_BH, aBH, n, l, m; iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp, amin=(amin_guess_322 .* 0.99))
@@ -219,7 +219,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     amin_guess_433 = nothing
     if solve_n4
         n = 4; l = 1; m = 1;
-        amin_guess_411, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.01)
+        amin_guess_411, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.001)
         if alph < 0.5
            
             if !run_high
@@ -257,7 +257,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     
         
         n = 4; l = 2; m = 2;
-        amin_guess_422, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.01)
+        amin_guess_422, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.001)
         if alph < 1.1
            
             if !run_high
@@ -293,7 +293,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         SR_rates[4] = itp_422(aBH)
         
         n = 4; l = 3; m = 3;
-        amin_guess_433, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.01)
+        amin_guess_433, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.001)
         if alph < 1.7
            
             if !run_high
@@ -333,7 +333,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         if solve_n5
 
             n = 5; l = 2; m = 2;
-            amin_guess_522, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.01)
+            amin_guess_522, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.001)
             if alph < 1.1
             
                 if !run_high
@@ -370,7 +370,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
           
         
             n = 5; l = 3; m = 3;
-            amin_guess_533, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.01)
+            amin_guess_533, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.001)
             if alph < 1.7
             
                 if !run_high
@@ -406,7 +406,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             SR_rates[7] = itp_533(aBH)
             
             n = 5; l = 4; m = 4
-            amin_guess_544, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.01)
+            amin_guess_544, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.001)
             if alph < 2.2
             
                 if !run_high
