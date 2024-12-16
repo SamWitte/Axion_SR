@@ -71,7 +71,7 @@ function main(;kpts=14, rpts=1000, rmaxT=100, Nang=200000, Npts_Bnd=2000)
     
     # alpha_list = 10 .^LinRange(log10(alpha_min), log10(alpha_max), alpha_pts)
     alpha_list = LinRange(alpha_min, alpha_max, alpha_pts)
-    alpha_list = [0.1]
+    # alpha_list = [0.1]
     # alpha_list = [0.45]
     output_sve = zeros(alpha_pts)
     
