@@ -99,6 +99,11 @@ function main(;kpts=14, rpts=1000, rmaxT=100, Nang=200000, Npts_Bnd=2000)
     
     for i in 1:alpha_pts
         mu = alpha_list[i] ./ (M * GNew)
+        if alpha_list[i] .< 0.1
+            h_mve = 0.1
+        else
+            h_mve = 1.0
+        end
         output_sve[i] = gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, Npts_Bnd=Npts_Bnd, debug=false, eps_fac=1e-3, Ntot_safe=Ntot_safe, m=0, l=0, Nang=Nang, NON_REL=NON_REL, h_mve=h_mve, to_inf=to_inf, rmaxT=rmaxT)
     
         print("alpha \t", alpha_list[i], "\t", output_sve[i], "\n")
