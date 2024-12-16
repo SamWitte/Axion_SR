@@ -3,6 +3,7 @@ using OrdinaryDiffEq
 using Statistics
 using Distributions
 using DelimitedFiles
+using Dates
 using Interpolations
 include("Constants.jl")
 include("solve_sr_rates.jl")
@@ -985,7 +986,29 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     if debug
         print("Time guess \t", dt_guess, "\n")
     end
+    
+    
+    max_real_time = 20.0 # Set the maximum allowed time for integration (in minutes)
+    max_real_time *= 60 # conver to seconds
+    start_time = Dates.now() # Initialize the start time
+    
+    # Define the callback function
+    function time_limit_callback(u, t, integrator)
+        elapsed_time = Dates.now() - start_time
+        if Dates.value(elapsed_time) > max_real_time * 1e3  # Convert seconds to milliseconds
+            println("Terminating integration due to time limit")
+            return true
+        else
+            return false
+        end
+    end
+    function affect_time!(integrator)
+        terminate!(integrator)
+    end
+    
 
+    # Set up the user_data with the start time
+    callbackTIME = DiscreteCallback(time_limit_callback, affect_time!, save_positions=(false, false))
     cback_station = DiscreteCallback(check_stationary, affect_stationary!, save_positions=(false, true))
     cback_osc = DiscreteCallback(check_oscillating, affect_oscillating!, save_positions=(false, true))
     cbackdt = DiscreteCallback(check_timescale, affect_timescale!, save_positions=(false, true))
@@ -999,16 +1022,16 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         if solve_n5
             # cbset = CallbackSet(cbackspin)
             # cbset = CallbackSet(cbackspin, cbackdt)
-            cbset = CallbackSet(cbackspin, cbackdt, cback_station, cback_osc)
+            cbset = CallbackSet(cbackspin, cbackdt, cback_station, cback_osc, callbackTIME)
             if trace_term
                 cbset = CallbackSet(cbackspin, cbackdt, cback_station, cback_osc, sve_trce)
             end
         else
-            cbset = CallbackSet(cbackspin, cbackdt, cback_station, cback_osc)
+            cbset = CallbackSet(cbackspin, cbackdt, cback_station, cback_osc, callbackTIME)
             # cbset = CallbackSet(cbackspin, cbackdt)
         end
     else
-        cbset = CallbackSet(cbackspin, cbackdt, cback_station)
+        cbset = CallbackSet(cbackspin, cbackdt, cback_station, callbackTIME)
     end
     # cbset = CallbackSet(cbackspin, cbackdt, cback_station)
     # cbset = CallbackSet(cbackspin, cbackdt, cback_osc)
