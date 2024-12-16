@@ -1265,7 +1265,7 @@ end
 
 
 
-function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, debug=false, Ntot_safe=5000,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=100000, eps_fac = 1e-10, m=0, l=0, NON_REL=false, h_mve=100, to_inf=false)
+function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, debug=false, Ntot_safe=5000,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=100000, eps_fac = 1e-10, m=0, l=0, NON_REL=false, h_mve=1, to_inf=false, rmaxT=100)
     
     rp = BigFloat(1.0 .+ sqrt.(1.0 .- a.^2))
     rmm = BigFloat(1.0 .- sqrt.(1.0 .- a.^2))
@@ -1297,7 +1297,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     if to_inf
         m = (m1 + m2 - m3)
         l = l1 + l2 - l3
-        rmax = Float64.(100 ./ alph.^2 .* (minN ./ 2.0) ) .* 100.0
+        rmax = Float64.(100 ./ alph.^2 .* (minN ./ 2.0) ) .* rmaxT
     else
         rmax = Float64.(100 ./ alph.^2 .* (minN ./ 2.0) ) 
     end

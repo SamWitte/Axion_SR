@@ -62,17 +62,17 @@ ftag = parsed_args["ftag"];
 
 print(S1, "\t", S2, "\t", S3, "\t", S4, "\n")
 
-function main(;kpts=14, rpts=50000, rmaxT=100, Nang=200000, Npts_Bnd=20000)
-    a = 0.9
+function main(;kpts=14, rpts=1000, rmaxT=100, Nang=200000, Npts_Bnd=2000)
+    a = 0.95
     M = 10.0
     Ntot_safe=5000
     NON_REL = false
-    h_mve = 10
+    h_mve = 1.0
     
     # alpha_list = 10 .^LinRange(log10(alpha_min), log10(alpha_max), alpha_pts)
     alpha_list = LinRange(alpha_min, alpha_max, alpha_pts)
-    # alpha_list = [0.1]
-    # alpha_list = [0.3]
+    alpha_list = [0.1]
+    # alpha_list = [0.45]
     output_sve = zeros(alpha_pts)
     
     State1 = [parse(Int, c) for c in S1]
@@ -99,7 +99,7 @@ function main(;kpts=14, rpts=50000, rmaxT=100, Nang=200000, Npts_Bnd=20000)
     
     for i in 1:alpha_pts
         mu = alpha_list[i] ./ (M * GNew)
-        output_sve[i] = gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, Npts_Bnd=Npts_Bnd, debug=false, eps_fac=1e-3, Ntot_safe=Ntot_safe, m=0, l=0, Nang=Nang, NON_REL=NON_REL, h_mve=h_mve, to_inf=to_inf)
+        output_sve[i] = gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, Npts_Bnd=Npts_Bnd, debug=false, eps_fac=1e-3, Ntot_safe=Ntot_safe, m=0, l=0, Nang=Nang, NON_REL=NON_REL, h_mve=h_mve, to_inf=to_inf, rmaxT=rmaxT)
     
         print("alpha \t", alpha_list[i], "\t", output_sve[i], "\n")
     end
