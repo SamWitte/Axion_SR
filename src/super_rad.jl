@@ -76,13 +76,13 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     
     if !solve_n4
         default_reltol = 1e-4
-        idx_lvl = 2 # number of states
+        idx_lvl = 3 # number of states
     else
 
         if !solve_n5
-            idx_lvl = 5
+            idx_lvl = 6
         else
-            idx_lvl = 8
+            idx_lvl = 10
         end
     end
     spinI = idx_lvl + 1
@@ -135,9 +135,9 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     iter_slv = 50
     
     SR_rates = zeros(idx_lvl)
-    m_list = [1 2 1 2 3 2 3 4] # [211, 322, 411, 422, 433, 522, 533, 544]
-    bn_list = [e2_maxBN e3_maxBN e4_maxBN e4_maxBN e4_maxBN e5_maxBN e5_maxBN e5_maxBN]
-    
+    m_list = [1 1 2 1 2 3 1 2 3 4] # [211, 311, 322, 411, 422, 433, 511, 522, 533, 544]
+    bn_list = [e2_maxBN e3_maxBN e3_maxBN e4_maxBN e4_maxBN e4_maxBN e5_maxBN e5_maxBN e5_maxBN e5_maxBN]
+    idx_fill = 1
     
     n = 2; l = 1; m = 1;
     amin_guess_211, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.001)
@@ -176,8 +176,48 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             return 0.0
         end
     end
-    SR_rates[1] = itp_211(aBH)
+    SR_rates[idx_fill] = itp_211(aBH)
+    idx_fill += 1
     
+    n = 3; l = 1; m = 1;
+    amin_guess_311, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.001)
+    if alph < 0.5
+        # amin_guess_211 = 8 * m * n.^2 .* alph .* (2 .* n.^2 .+ alph.^2) ./ (16 .* n.^4 .* alph.^2 .+ m.^2 .* (2 .* n.^2 .+ alph.^2).^2)
+        # alist, pts = compute_gridded(mu, M_BH, aBH, n, l, m; iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp, amin=(amin_guess_211 .* 0.99))
+
+        if !run_high
+            a_list_high = [amin_guess_311, amin_guess_311 * 1.01]
+            out_high = [1e-100, 1e-100]
+        elseif length(a_list_high) == 1.0
+            a_list_high = [alist[1], alist[1] * 1.01]
+            out_high = [out_high[1], out_high[1]]
+        end
+    else
+        amin_guess_311 = 1.0
+        a_list_high = [amin_guess_311, amin_guess_311 * 1.01]
+        out_high = [1e-100, 1e-100]
+    end
+    itp_311U = LinearInterpolation(a_list_high, log10.(out_high), extrapolation_bc=Interpolations.Line())
+    if !run_low
+        a_list_low = [amin_guess_311 .* 0.99, amin_guess_311]
+        out_low = [1e-100, 1e-100]
+    elseif length(a_list_low) == 1.0
+        a_list_low = [a_list_low[1] .* 0.99, a_list_low[1]]
+        out_low = [out_low[1], out_low[1]]
+    end
+    itp_311L = LinearInterpolation(a_list_low, log10.(out_low), extrapolation_bc=Interpolations.Line())
+  
+    function itp_311(aspin)
+        if aspin .> amin_guess_311
+            return 10.0 .^itp_311U(aspin)
+        elseif aspin .< (amin_guess_311 .* 0.98)
+            return -10.0 .^itp_311L(aspin)
+        else
+            return 0.0
+        end
+    end
+    SR_rates[idx_fill] = itp_311(aBH)
+    idx_fill += 1
     
     n = 3; l = 2; m = 2;
     amin_guess_322, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.001)
@@ -215,7 +255,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             return 0.0 ## Need buffer region for numerical stability!
         end
     end
-    SR_rates[2] = itp_322(aBH)
+    SR_rates[idx_fill] = itp_322(aBH)
+    idx_fill += 1
   
     amin_guess_433 = nothing
     if solve_n4
@@ -254,7 +295,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
                 return 0.0 ## Need buffer region for numerical stability!
             end
         end
-        SR_rates[3] = itp_411(aBH)
+        SR_rates[idx_fill] = itp_411(aBH)
+        idx_fill += 1
     
         
         n = 4; l = 2; m = 2;
@@ -291,7 +333,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
                 return 0.0 ## Need buffer region for numerical stability!
             end
         end
-        SR_rates[4] = itp_422(aBH)
+        SR_rates[idx_fill] = itp_422(aBH)
+        idx_fill += 1
         
         n = 4; l = 3; m = 3;
         amin_guess_433, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.001)
@@ -328,10 +371,47 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
                 return 0.0 ## Need buffer region for numerical stability!
             end
         end
-        SR_rates[5] = itp_433(aBH)
-        
+        SR_rates[idx_fill] = itp_433(aBH)
+        idx_fill += 1
         
         if solve_n5
+            n = 5; l = 1; m = 1;
+            amin_guess_511, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.001)
+            if alph < 0.5
+               
+                if !run_high
+                    a_list_high = [amin_guess_511, amin_guess_511 * 1.01]
+                    out_high = [1e-100, 1e-100]
+                elseif length(a_list_high) == 1.0
+                    a_list_high = [alist[1], alist[1] * 1.01]
+                    out_high = [out_high[1], out_high[1]]
+                end
+            else
+                amin_guess_511 = 1.0
+                a_list_high = [amin_guess_511, amin_guess_511 * 1.01]
+                out_high = [1e-100, 1e-100]
+            end
+            itp_511U = LinearInterpolation(a_list_high, log10.(out_high), extrapolation_bc=Interpolations.Line())
+            if !run_low
+                a_list_low = [amin_guess_511 .* 0.99, amin_guess_511]
+                out_low = [1e-100, 1e-100]
+            elseif length(a_list_low) == 1.0
+                a_list_low = [a_list_low[1] .* 0.99, a_list_low[1]]
+                out_low = [out_low[1], out_low[1]]
+            end
+            itp_511L = LinearInterpolation(a_list_low, log10.(out_low), extrapolation_bc=Interpolations.Line())
+            
+            function itp_511(aspin)
+                if aspin .> amin_guess_511
+                    return 10.0 .^itp_511U(aspin)
+                elseif aspin .< (amin_guess_511 .* 0.99)
+                    return -10.0 .^itp_511L(aspin)
+                else
+                    return 0.0 ## Need buffer region for numerical stability!
+                end
+            end
+            SR_rates[idx_fill] = itp_511(aBH)
+            idx_fill += 1
 
             n = 5; l = 2; m = 2;
             amin_guess_522, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.001)
@@ -367,8 +447,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
                     return 0.0 ## Need buffer region for numerical stability!
                 end
             end
-            SR_rates[6] = itp_522(aBH)
-          
+            SR_rates[idx_fill] = itp_522(aBH)
+            idx_fill += 1
         
             n = 5; l = 3; m = 3;
             amin_guess_533, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.001)
@@ -404,7 +484,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
                     return 0.0 ## Need buffer region for numerical stability!
                 end
             end
-            SR_rates[7] = itp_533(aBH)
+            SR_rates[idx_fill] = itp_533(aBH)
+            idx_fill += 1
             
             n = 5; l = 4; m = 4
             amin_guess_544, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.001)
@@ -440,8 +521,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
                     return 0.0 ## Need buffer region for numerical stability!
                 end
             end
-            SR_rates[8] = itp_544(aBH)
-
+            SR_rates[idx_fill] = itp_544(aBH)
+            idx_fill += 1
         end
     end
     

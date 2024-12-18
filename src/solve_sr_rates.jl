@@ -1306,7 +1306,8 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     
     rlist = 10 .^range(log10(rp .* (1.0 .+ eps_fac)), log10.(rmax), rpts)
     
-    if NON_REL
+    simplify_radial = check_slv_rad(alph, m1)
+    if NON_REL||simplify_radial
         rf_1 = radial_bound_NR(n1, l1, m1, mu, M, rlist)
         erg_1 = erg_1G * GNew * M
     else
@@ -1318,7 +1319,8 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         end
     end
     
-    if NON_REL
+    simplify_radial = check_slv_rad(alph, m2)
+    if NON_REL||simplify_radial
         rf_2 = radial_bound_NR(n2, l2, m2, mu, M, rlist)
         erg_2 = erg_2G * GNew * M
     else
@@ -1335,18 +1337,24 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         end
     end
     
-    if NON_REL
+    simplify_radial = check_slv_rad(alph, m3)
+    if NON_REL||simplify_radial
         rf_3 = radial_bound_NR(n3, l3, m3, mu, M, rlist)
         erg_3 = erg_3G * GNew * M
     else
         rl, r3, erg_3 = solve_radial(mu, M, a, n3, l3, m3; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe)
+        
         itp = LinearInterpolation(log10.(rl), r3, extrapolation_bc=Line())
         rf_3 = itp(log10.(rlist))
+
         if imag(erg_3) < 0
             return 0.0
         end
     end
     
+    writedlm("test_store/test1.dat", hcat(real(rlist), real(rf_1 .* conj.(rf_1))))
+    writedlm("test_store/test2.dat", hcat(real(rlist), real(rf_2 .* conj.(rf_2))))
+    writedlm("test_store/test3.dat", hcat(real(rlist), real(rf_3 .* conj.(rf_3))))
     erg = (erg_1 + erg_2 - erg_3) + 0 * im # leave the 0 im for NR case
     
     
@@ -1618,4 +1626,18 @@ function pre_computed_sr_rates(n, l, m, alph, M; n_high=20, n_low=20, delt_a=0.0
     
     return a_mid, run_high, a_list_high, out_high, run_low, a_list_low, out_low
 
+end
+
+function check_slv_rad(alph, m)
+    if (m == 1)&&(alph < 0.03)
+        return true
+    elseif (m == 2)&&(alph < 0.03)
+        return true
+    elseif (m==3)&&(alph < 0.16)
+        return true
+    elseif (m == 4)&&(alph < 0.40)
+        return true
+    else
+        return false
+    end
 end
