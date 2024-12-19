@@ -98,7 +98,7 @@ function main(;kpts=14, rpts=1000, rmaxT=100, Nang=200000, Npts_Bnd=2000)
     end
     
     fOUT = "rate_sve/"*S1*"_"*S2*"_"*S3*"_"*S4*ftag*".dat"
-    if !isfile("foo.txt")
+    if !isfile(fOUT)
         
         for i in 1:alpha_pts
             mu = alpha_list[i] ./ (M * GNew)

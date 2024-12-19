@@ -522,7 +522,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
                 end
             end
             SR_rates[idx_fill] = itp_544(aBH)
-            idx_fill += 1
+            
         end
     end
     
@@ -595,20 +595,23 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         
         OmegaH = u_real[spinI] ./ (2 .* (GNew .* u_real[massI]) .* (1 .+ sqrt.(1 .- u_real[spinI].^2)))
         
+        
         SR_rates[1] = itp_211(u_real[spinI])
-        SR_rates[2] = itp_322(u_real[spinI])
+        SR_rates[2] = itp_311(u_real[spinI])
+        SR_rates[3] = itp_322(u_real[spinI])
 
         
         if solve_n4
-            SR_rates[3] = itp_411(u_real[spinI])
-            SR_rates[4] = itp_422(u_real[spinI])
-            SR_rates[5] = itp_433(u_real[spinI])
+            SR_rates[4] = itp_411(u_real[spinI])
+            SR_rates[5] = itp_422(u_real[spinI])
+            SR_rates[6] = itp_433(u_real[spinI])
             
             
             if solve_n5
-                SR_rates[6] = itp_522(u_real[spinI])
-                SR_rates[7] = itp_533(u_real[spinI])
-                SR_rates[8] = itp_544(u_real[spinI])
+                SR_rates[7] = itp_511(u_real[spinI])
+                SR_rates[8] = itp_522(u_real[spinI])
+                SR_rates[9] = itp_533(u_real[spinI])
+                SR_rates[10] = itp_544(u_real[spinI])
 
             end
         end
@@ -624,7 +627,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         du[massI] = 0.0
         for i in 1:idx_lvl
             du[i] = SR_rates[i] .* u_real[i] ./ mu
-            if (!max_m_2)||(i <= 3)
+            if (!max_m_2)||((i <= 5)||(i == 7)||(i == 8))
                 du[spinI] += - m_list[i] * SR_rates[i] .*  u_real[i] ./ mu
                 du[massI] += - SR_rates[i] .*  u_real[i] ./ mu
             end
@@ -967,7 +970,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         if debug && (wait%1==0)
             if solve_n4
                 if !solve_n5
-                    @printf("Time and Vals: \t %.7f  %.3e  %.3e  %.3e  %.3e  %.3e  %.3e  %.3e \n", t, u_real[1], u_real[2], u_real[3], u_real[4], u_real[5], u_real[6], u_real[7])
+                    @printf("Time and Vals: \t %.7f  %.3e  %.3e  %.3e  %.3e  %.3e  %.3e  %.3e %.3e \n", t, u_real[1], u_real[2], u_real[3], u_real[4], u_real[5], u_real[6], u_real[7], u_real[8])
                     
                     # print(integrator.dt ./ t, "\n")
 #                    if (t > 4200)&&(integrator.opts.reltol[1] < 0.1)
@@ -976,13 +979,13 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
 #                        print(integrator.opts.abstol, "\n")
 #                    end
                 else
-                    @printf("Time and Vals: \t %.7f  %.3e  %.3e  %.3e  %.3e  %.3e  %.3e  %.3e  %.3e  %.3e  %.3e \n", t, u_real[1], u_real[2], u_real[3], u_real[4], u_real[5], u_real[6], u_real[7], u_real[8], u_real[9], u_real[10])
+                    @printf("Time and Vals: \t %.7f  %.3e  %.3e  %.3e  %.3e  %.3e  %.3e  %.3e  %.3e  %.3e  %.3e %.3e  %.3e \n", t, u_real[1], u_real[2], u_real[3], u_real[4], u_real[5], u_real[6], u_real[7], u_real[8], u_real[9], u_real[10], u_real[11], u_real[12])
                     # print(integrator.opts.abstol, "\t ",integrator.opts.reltol, "\n")
                 end
                 # du = get_du(integrator)
                 # print(integrator.dt, "\t", du, "\t", "\n\n")
             else
-                print(t, "\t", u_real[1], "\t", u_real[2], "\t", u_real[3], "\t", u_real[4], "\n")
+                print(t, "\t", u_real[1], "\t", u_real[2], "\t", u_real[3], "\t", u_real[4], "\t", u_real[5], "\n")
             
             end
         end
@@ -1070,7 +1073,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     
     
     max_real_time = 20.0 # Set the maximum allowed time for integration (in minutes)
-    max_real_time *= 60 # conver to seconds
+    max_real_time *= 60 # convert to seconds
     start_time = Dates.now() # Initialize the start time
     
     # Define the callback function
@@ -1137,15 +1140,17 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     
     
     state211 = [exp.(sol.u[i][1]) for i in 1:length(sol.u)]
-    state322 = [exp.(sol.u[i][2]) for i in 1:length(sol.u)]
+    state311 = [exp.(sol.u[i][2]) for i in 1:length(sol.u)]
+    state322 = [exp.(sol.u[i][3]) for i in 1:length(sol.u)]
     if solve_n4
-        state411 = [exp.(sol.u[i][3]) for i in 1:length(sol.u)]
-        state422 = [exp.(sol.u[i][4]) for i in 1:length(sol.u)]
-        state433 = [exp.(sol.u[i][5]) for i in 1:length(sol.u)]
+        state411 = [exp.(sol.u[i][4]) for i in 1:length(sol.u)]
+        state422 = [exp.(sol.u[i][5]) for i in 1:length(sol.u)]
+        state433 = [exp.(sol.u[i][6]) for i in 1:length(sol.u)]
         if solve_n5
-            state522 = [exp.(sol.u[i][6]) for i in 1:length(sol.u)]
-            state533 = [exp.(sol.u[i][7]) for i in 1:length(sol.u)]
-            state544 = [exp.(sol.u[i][8]) for i in 1:length(sol.u)]
+            state511 = [exp.(sol.u[i][7]) for i in 1:length(sol.u)]
+            state522 = [exp.(sol.u[i][8]) for i in 1:length(sol.u)]
+            state533 = [exp.(sol.u[i][9]) for i in 1:length(sol.u)]
+            state544 = [exp.(sol.u[i][10]) for i in 1:length(sol.u)]
         end
     end
     spinBH = [exp.(sol.u[i][spinI]) for i in 1:length(sol.u)]
@@ -1157,12 +1162,12 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
 
     if debug
         if !solve_n4
-            print("Initial \t", state211[1], "\t", state322[1], "\t", spinBH[1], "\t", MassB[1], "\n")
-            print("Final \t", state211[end], "\t", state322[end], "\t", spinBH[end], "\t", MassB[end], "\n")
+            print("Initial \t", state211[1], "\t", state311[1], "\t", state322[1],  "\t", spinBH[1], "\t", MassB[1], "\n")
+            print("Final \t", state211[end], "\t", state311[end], "\t", state322[end], "\t", spinBH[end], "\t", MassB[end], "\n")
         else
             if !solve_n5
-                print("Initial \t", state211[1], "\t", state322[1] , "\t",  state411[1] , "\t", state422[1] , "\t", state433[1] , "\t", spinBH[1], "\t", MassB[1], "\n")
-                print("Final \t", state211[end] , "\t", state322[end],"\t", state411[end],"\t", state422[end] , "\t",  state433[end] , "\t", spinBH[end], "\t", MassB[end], "\n")
+                print("Initial \t", state211[1], "\t", state311[1] , "\t", state322[1] , "\t",  state411[1] , "\t", state422[1] , "\t", state433[1] , "\t", spinBH[1], "\t", MassB[1], "\n")
+                print("Final \t", state211[end] , "\t", state311[end], "\t", state322[end],"\t", state411[end],"\t", state422[end] , "\t",  state433[end] , "\t", spinBH[end], "\t", MassB[end], "\n")
             else
                 print("Initial \t", state322[1], "\t", state422[1] , "\t", state433[1], "\t", state522[1], "\t", state533[1] , "\t", state544[1], "\t", spinBH[1], "\t", MassB[1], "\n")
                 print("Final \t", state322[end], "\t", state422[end] , "\t", state433[end], "\t", state522[end], "\t", state533[end] , "\t", state544[end], "\t", spinBH[end], "\t", MassB[end], "\n")
@@ -1172,12 +1177,12 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
 
     if return_all_info
         if !solve_n4
-            return sol.t, state211, state322, spinBH, MassB
+            return sol.t, state211, state311, state322, spinBH, MassB
         else
             if !solve_n5
-                return sol.t, state211, state322, state411, state422, state433, spinBH, MassB
+                return sol.t, state211, state311, state322, state411, state422, state433, spinBH, MassB
             else
-                return sol.t, state211, state322, state411, state422, state433, state522, state533, state544, spinBH, MassB
+                return sol.t, state211, state311, state322, state411, state422, state433, state511, state522, state533, state544, spinBH, MassB
             end
         end
     end
