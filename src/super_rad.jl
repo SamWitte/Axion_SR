@@ -85,6 +85,11 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             idx_lvl = 10
         end
     end
+    
+    ### only for testing...
+    default_reltol = 1e-5
+    reltol_Thres = 1e-4
+    
     spinI = idx_lvl + 1
     massI = spinI + 1
     
@@ -102,8 +107,9 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     append!(y0, M_BH)
     y0 = log.(y0)
     
-    append!(reltol, 1e-3)
-    append!(reltol, 1e-3)
+    def_spin_tol = 1e-4
+    append!(reltol, def_spin_tol)
+    append!(reltol, def_spin_tol)
     
     wait = 0 # tracker
     alph = GNew .* M_BH .* mu
@@ -138,9 +144,10 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     m_list = [1 1 2 1 2 3 1 2 3 4] # [211, 311, 322, 411, 422, 433, 511, 522, 533, 544]
     bn_list = [e2_maxBN e3_maxBN e3_maxBN e4_maxBN e4_maxBN e4_maxBN e5_maxBN e5_maxBN e5_maxBN e5_maxBN]
     idx_fill = 1
+    delt_a = 0.0001
     
     n = 2; l = 1; m = 1;
-    amin_guess_211, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.001)
+    amin_guess_211, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=delt_a)
     if alph < 0.5
         # amin_guess_211 = 8 * m * n.^2 .* alph .* (2 .* n.^2 .+ alph.^2) ./ (16 .* n.^4 .* alph.^2 .+ m.^2 .* (2 .* n.^2 .+ alph.^2).^2)
         # alist, pts = compute_gridded(mu, M_BH, aBH, n, l, m; iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp, amin=(amin_guess_211 .* 0.99))
@@ -166,11 +173,12 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         out_low = [out_low[1], out_low[1]]
     end
     itp_211L = LinearInterpolation(a_list_low, log10.(out_low), extrapolation_bc=Interpolations.Line())
-  
+    abndryU_211 = a_list_high[1]
+    abndryL_211 = a_list_low[end]
     function itp_211(aspin)
-        if aspin .> amin_guess_211
+        if aspin .>= abndryU_211
             return 10.0 .^itp_211U(aspin)
-        elseif aspin .< (amin_guess_211 .* 0.98)
+        elseif aspin .<= abndryL_211
             return -10.0 .^itp_211L(aspin)
         else
             return 0.0
@@ -180,7 +188,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     idx_fill += 1
     
     n = 3; l = 1; m = 1;
-    amin_guess_311, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.001)
+    amin_guess_311, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=delt_a)
     if alph < 0.5
         # amin_guess_211 = 8 * m * n.^2 .* alph .* (2 .* n.^2 .+ alph.^2) ./ (16 .* n.^4 .* alph.^2 .+ m.^2 .* (2 .* n.^2 .+ alph.^2).^2)
         # alist, pts = compute_gridded(mu, M_BH, aBH, n, l, m; iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp, amin=(amin_guess_211 .* 0.99))
@@ -206,11 +214,12 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         out_low = [out_low[1], out_low[1]]
     end
     itp_311L = LinearInterpolation(a_list_low, log10.(out_low), extrapolation_bc=Interpolations.Line())
-  
+    abndryU_311 = a_list_high[1]
+    abndryL_311 = a_list_low[end]
     function itp_311(aspin)
-        if aspin .> amin_guess_311
+        if aspin .>= abndryU_311
             return 10.0 .^itp_311U(aspin)
-        elseif aspin .< (amin_guess_311 .* 0.98)
+        elseif aspin .<= abndryL_311
             return -10.0 .^itp_311L(aspin)
         else
             return 0.0
@@ -220,7 +229,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     idx_fill += 1
     
     n = 3; l = 2; m = 2;
-    amin_guess_322, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.001)
+    amin_guess_322, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=1000, n_low=1000, delt_a=delt_a)
+    
     if alph < 1.1
         # amin_guess_322 = 8 * m * n.^2 .* alph .* (2 .* n.^2 .+ alph.^2) ./ (16 .* n.^4 .* alph.^2 .+ m.^2 .* (2 .* n.^2 .+ alph.^2).^2)
         # alist, pts = compute_gridded(mu, M_BH, aBH, n, l, m; iter=iter_slv, xtol=xtol_slv, npts=N_pts_interp, amin=(amin_guess_322 .* 0.99))
@@ -246,13 +256,16 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         out_low = [out_low[1], out_low[1]]
     end
     itp_322L = LinearInterpolation(a_list_low, log10.(out_low), extrapolation_bc=Interpolations.Line())
+    
+    abndryU_322 = a_list_high[1]
+    abndryL_322 = a_list_low[end]
     function itp_322(aspin)
-        if aspin .> amin_guess_322
+        if aspin .>= abndryU_322
             return 10.0 .^itp_322U(aspin)
-        elseif aspin .< (amin_guess_322 .* 0.98)
+        elseif aspin .<= abndryL_322
             return -10.0 .^itp_322L(aspin)
         else
-            return 0.0 ## Need buffer region for numerical stability!
+            return (-10.0 .^itp_322L(aspin) + 10.0 .^itp_322U(aspin)) ./ 2.0 ## Need buffer region for numerical stability!
         end
     end
     SR_rates[idx_fill] = itp_322(aBH)
@@ -261,7 +274,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     amin_guess_433 = nothing
     if solve_n4
         n = 4; l = 1; m = 1;
-        amin_guess_411, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.001)
+        amin_guess_411, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=delt_a)
         if alph < 0.5
            
             if !run_high
@@ -285,11 +298,12 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             out_low = [out_low[1], out_low[1]]
         end
         itp_411L = LinearInterpolation(a_list_low, log10.(out_low), extrapolation_bc=Interpolations.Line())
-        
+        abndryU_411 = a_list_high[1]
+        abndryL_411 = a_list_low[end]
         function itp_411(aspin)
-            if aspin .> amin_guess_411
+            if aspin .>= abndryU_411
                 return 10.0 .^itp_411U(aspin)
-            elseif aspin .< (amin_guess_411 .* 0.99)
+            elseif aspin .<= abndryL_411
                 return -10.0 .^itp_411L(aspin)
             else
                 return 0.0 ## Need buffer region for numerical stability!
@@ -300,7 +314,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     
         
         n = 4; l = 2; m = 2;
-        amin_guess_422, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.001)
+        amin_guess_422, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=delt_a)
         if alph < 1.1
            
             if !run_high
@@ -324,10 +338,12 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             out_low = [out_low[1], out_low[1]]
         end
         itp_422L = LinearInterpolation(a_list_low, log10.(out_low), extrapolation_bc=Interpolations.Line())
+        abndryU_422 = a_list_high[1]
+        abndryL_422 = a_list_low[end]
         function itp_422(aspin)
-            if aspin .> amin_guess_422
+            if aspin .>= abndryU_422
                 return 10 .^itp_422U(aspin)
-            elseif aspin .< (amin_guess_422 .* 0.99)
+            elseif aspin .<= abndryL_422
                 return -10 .^itp_422L(aspin)
             else
                 return 0.0 ## Need buffer region for numerical stability!
@@ -337,7 +353,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         idx_fill += 1
         
         n = 4; l = 3; m = 3;
-        amin_guess_433, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.001)
+        amin_guess_433, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=delt_a)
         if alph < 1.7
            
             if !run_high
@@ -361,11 +377,12 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             out_low = [out_low[1], out_low[1]]
         end
         itp_433L = LinearInterpolation(a_list_low, log10.(out_low), extrapolation_bc=Interpolations.Line())
-        
+        abndryU_433 = a_list_high[1]
+        abndryL_433 = a_list_low[end]
         function itp_433(aspin)
-            if aspin .> amin_guess_433
+            if aspin .>= abndryU_433
                 return 10 .^itp_433U(aspin)
-            elseif aspin .< (amin_guess_433 .* 0.99)
+            elseif aspin .<= abndryL_433
                 return -10 .^itp_433L(aspin)
             else
                 return 0.0 ## Need buffer region for numerical stability!
@@ -376,7 +393,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         
         if solve_n5
             n = 5; l = 1; m = 1;
-            amin_guess_511, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.001)
+            amin_guess_511, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=delt_a)
             if alph < 0.5
                
                 if !run_high
@@ -400,11 +417,12 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
                 out_low = [out_low[1], out_low[1]]
             end
             itp_511L = LinearInterpolation(a_list_low, log10.(out_low), extrapolation_bc=Interpolations.Line())
-            
+            abndryU_511 = a_list_high[1]
+            abndryL_511 = a_list_low[end]
             function itp_511(aspin)
-                if aspin .> amin_guess_511
+                if aspin .>= abndryU_511
                     return 10.0 .^itp_511U(aspin)
-                elseif aspin .< (amin_guess_511 .* 0.99)
+                elseif aspin .<= abndryL_511
                     return -10.0 .^itp_511L(aspin)
                 else
                     return 0.0 ## Need buffer region for numerical stability!
@@ -414,7 +432,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             idx_fill += 1
 
             n = 5; l = 2; m = 2;
-            amin_guess_522, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.001)
+            amin_guess_522, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=delt_a)
             if alph < 1.1
             
                 if !run_high
@@ -438,10 +456,12 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
                 out_low = [out_low[1], out_low[1]]
             end
             itp_522L = LinearInterpolation(a_list_low, log10.(out_low), extrapolation_bc=Interpolations.Line())
+            abndryU_522 = a_list_high[1]
+            abndryL_522 = a_list_low[end]
             function itp_522(aspin)
-                if aspin .> amin_guess_522
+                if aspin .>= abndryU_522
                     return 10 .^itp_522U(aspin)
-                elseif aspin .< (amin_guess_522 .* 0.99)
+                elseif aspin .<= abndryL_522
                     return -10 .^itp_522L(aspin)
                 else
                     return 0.0 ## Need buffer region for numerical stability!
@@ -451,7 +471,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             idx_fill += 1
         
             n = 5; l = 3; m = 3;
-            amin_guess_533, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.001)
+            amin_guess_533, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=delt_a)
             if alph < 1.7
             
                 if !run_high
@@ -475,10 +495,12 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
                 out_low = [out_low[1], out_low[1]]
             end
             itp_533L = LinearInterpolation(a_list_low, log10.(out_low), extrapolation_bc=Interpolations.Line())
+            abndryU_533 = a_list_high[1]
+            abndryL_533 = a_list_low[end]
             function itp_533(aspin)
-                if aspin .> amin_guess_533
+                if aspin .>= abndryU_533
                     return 10 .^itp_533U(aspin)
-                elseif aspin .< (amin_guess_533 .* 0.99)
+                elseif aspin .<= abndryL_533
                     return -10 .^itp_533L(aspin)
                 else
                     return 0.0 ## Need buffer region for numerical stability!
@@ -488,7 +510,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             idx_fill += 1
             
             n = 5; l = 4; m = 4
-            amin_guess_544, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=0.001)
+            amin_guess_544, run_high, a_list_high, out_high, run_low, a_list_low, out_low = pre_computed_sr_rates(n, l, m, alph, M_BH; n_high=100, n_low=100, delt_a=delt_a)
             if alph < 2.2
             
                 if !run_high
@@ -512,10 +534,12 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
                 out_low = [out_low[1], out_low[1]]
             end
             itp_544L = LinearInterpolation(a_list_low, log10.(out_low), extrapolation_bc=Interpolations.Line())
+            abndryU_544 = a_list_high[1]
+            abndryL_544 = a_list_low[end]
             function itp_544(aspin)
-                if aspin .> amin_guess_544
+                if aspin .>= abndryU_544
                     return 10 .^itp_544U(aspin)
-                elseif aspin .< (amin_guess_544 .* 0.99)
+                elseif aspin .<= abndryL_544
                     return -10 .^itp_544L(aspin)
                 else
                     return 0.0 ## Need buffer region for numerical stability!
@@ -531,8 +555,10 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
     end
     
     rates = load_rate_coeffs(mu, M_BH, aBH, fa; non_rel=non_rel, input_data=input_data, solve_n4=solve_n4, solve_n5=solve_n5, amin_211=amin_guess_211, amin_322=amin_guess_322, amin_433=amin_guess_433)
+    
     if debug
         println("Rates loaded...")
+        println(rates)
     end
     
     ### for testing
@@ -685,11 +711,14 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             if turn_off[i]
                 du[i] *= 0.0
             end
+            
         end
         
         if max_m_2
             du[massI] *= 0.0
         end
+        
+        
         
         return
     end
@@ -837,6 +866,12 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             test[i] = SR_rates[i] .* u_fake[i] ./ mu
         end
         
+        for i in 1:idx_lvl
+            if (u[i] .< log.(1e-70))&&(SR_rates[i] < 0)
+                turn_off[i] = true
+            end
+        end
+        
         
         for i in 1:length(rate_keys)
             idxV, sgn = key_to_indx(rate_keys[i]; solve_n4=solve_n4, solve_n5=solve_n5)
@@ -886,7 +921,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             end
         end
         
-        append!(tlist, 0.01 * 1.0 ./ du[spinI])
+        append!(tlist, def_spin_tol ./ du[spinI])
         tmin = minimum(abs.(tlist))
        
         # print("Tmin \t", integrator.dt, "\t", tlist, "\t", integrator.opts.reltol, "\t", integrator.opts.abstol, "\n")
@@ -919,11 +954,11 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             end
         end
             
-        append!(tlist, 0.01 * 1.0 ./ du[spinI])
+        append!(tlist, def_spin_tol ./ du[spinI])
         tmin = minimum(abs.(tlist))
         
         
-        if (integrator.dt ./ integrator.t < 1e-6)&&(wait % 100 == 0)&&(wait > 10000)
+        if (integrator.dt ./ integrator.t < 1e-6)&&(wait % 1000 == 0)&&(wait > 10000)
             for i in 1:idx_lvl
                 if reltol[i] < reltol_Thres
                     reltol[i] *= 1.2
@@ -941,7 +976,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
 
         if (integrator.dt ./ tmin .>= 1)
             set_proposed_dt!(integrator, tmin .* 0.1)
-        elseif (integrator.dt ./ tmin .<= 1e-3)&&(wait % 100 == 0)
+        elseif (integrator.dt ./ tmin .<= 1e-3)&&(wait % 1000 == 0)
             set_proposed_dt!(integrator, integrator.dt .* 1.03)
         elseif ((integrator.dt ./ tmin .<= 1e-3)||(integrator.dt ./ integrator.t .<= 1e-4))&&(wait % 50 == 0)&&(wait > 5000)
             # print(integrator.dt ./ tmin, "\t", wait, "\t", reltol, "\t", integrator.opts.abstol,  "\n")
@@ -971,7 +1006,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
             if solve_n4
                 if !solve_n5
                     @printf("Time and Vals: \t %.7f  %.3e  %.3e  %.3e  %.3e  %.3e  %.3e  %.3e %.3e \n", t, u_real[1], u_real[2], u_real[3], u_real[4], u_real[5], u_real[6], u_real[7], u_real[8])
-                    
+                    # println(integrator.opts.abstol, "\t", integrator.opts.reltol )
                     # print(integrator.dt ./ t, "\n")
 #                    if (t > 4200)&&(integrator.opts.reltol[1] < 0.1)
 #                        integrator.opts.reltol[1] *= 2.0
@@ -981,12 +1016,13 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
                 else
                     @printf("Time and Vals: \t %.7f  %.3e  %.3e  %.3e  %.3e  %.3e  %.3e  %.3e  %.3e  %.3e  %.3e %.3e  %.3e \n", t, u_real[1], u_real[2], u_real[3], u_real[4], u_real[5], u_real[6], u_real[7], u_real[8], u_real[9], u_real[10], u_real[11], u_real[12])
                     # print(integrator.opts.abstol, "\t ",integrator.opts.reltol, "\n")
+                    # println(SR_rates)
                 end
                 # du = get_du(integrator)
                 # print(integrator.dt, "\t", du, "\t", "\n\n")
             else
                 print(t, "\t", u_real[1], "\t", u_real[2], "\t", u_real[3], "\t", u_real[4], "\t", u_real[5], "\n")
-            
+                # println(integrator.opts.abstol, "\t", integrator.opts.reltol )
             end
         end
         if u_real[spinI] <= stop_on_a
@@ -1124,12 +1160,15 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, solv
         prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=reltol, abstol=1e-10)
         # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-5, abstol=1e-10)
         # sol = solve(prob, Vern6(), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e6, dtmin=(dt_guess / 1e5), force_dtmin=true)
-#        if high_p
-#            cbset = CallbackSet(cbackspin, cbackdt)
-#        end
+        if high_p
+            # cbset = CallbackSet(cbackspin, cbackdt)
+            # cbset = CallbackSet(cbackspin, cbackdt, cback_station, callbackTIME)
+            cbset = CallbackSet(cbackspin, cbackdt, callbackTIME)
+        end
         
-        sol = solve(prob, Rosenbrock23(autodiff=false), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e6, dtmin=(dt_guess / 1e5), force_dtmin=true)
-        # sol = solve(prob, TRBDF2(autodiff=false), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e6, dtmin=(dt_guess / 1e5), force_dtmin=true)
+        # sol = solve(prob, Rosenbrock23(autodiff=false), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e6, dtmin=(dt_guess / 1e5), force_dtmin=true)
+        sol = solve(prob, TRBDF2(autodiff=false), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e6)
+        # sol = solve(prob, Vern6(), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e6)
         # sol = solve(prob, QNDF(autodiff=false), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e6, dtmin=(dt_guess / 1e5), force_dtmin=true)
         # sol = solve(prob, Euler(), dt=dt_guess / 1e2, saveat=saveat, callback=cbset)
     else
