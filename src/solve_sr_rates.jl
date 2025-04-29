@@ -11,9 +11,8 @@ using Interpolations
 using HypergeometricFunctions
 using SpinWeightedSpheroidalHarmonics
 using NPZ
-# using MCIntegration
+using WignerSymbols
 # using Dates
-# using LinearAlgebra
 using Optim
 include("Constants.jl")
 
@@ -796,6 +795,7 @@ function spheroidals(l, m, a, erg)
     Zlm = spin_weighted_spheroidal_harmonic(0, l, m, a .* erg)
     return Zlm
 end
+
 
 function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=200, iter=10000, xtol=1e-20, ftol=1e-90, return_both=false, for_s_rates=true, QNM=false, QNM_E=1.0, erg_Guess=nothing, max_n_qnm=5)
     
