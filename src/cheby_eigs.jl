@@ -376,6 +376,8 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
     Nν_values, Bnum, BnumNorm, final_idx = run_nonlinear_inverse_iteration()
     erg_out = calc_ω(Nν_values[final_idx]) .* M
     
+
+    
     if debug
         println("Final ν value: ", erg_out)
     end
@@ -389,6 +391,7 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
         end
     end
 
+    
     
     x_values = Float64[]
     y_values = Complex[]
@@ -408,10 +411,10 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
         term1 = ((r_val - rplus)/(r_val - rminus))^(im * Pplus)
         term2 = (r_val - rminus)^(-1 + (alph^2 * M)/sqrt(alph^2 - ω^2) - 2 * M * sqrt(alph^2 - ω^2))
         term3 = exp(-sqrt(alph^2 - ω^2) * (r_val - rplus))
-        term4 = BnumNorm[final_idx][j + 1 * (Npoints + 1)]
+        term4 = BnumNorm[final_idx][j + l0 * (Npoints + 1)]
 
         result = term1 * term2 * term3 * term4
-
+        
         push!(x_values, r_val)
         push!(y_values, result)
     end
@@ -432,10 +435,10 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
     if !return_nu
         return real(erg_out), imag(erg_out), rlist, y_values # everything normalized by GM, radial WF may not resolve at large r
     else
-        return real(erg_out), imag(erg_out), rlistOut, yout2, Nν_values[final_idx]
+        return real(erg_out), imag(erg_out), rlist, y_values, Nν_values[final_idx]
     end
 end
 
 
 # test run of system
-# @time eigensys_Cheby(1, 0.95, 0.01 ./ GNew, 2, 1, 1, debug=true, return_wf=true, L=4, Npoints = 60, Iter = 20,  der_acc=1e-6, cvg_acc=1e-3, prec=100, Npts_r=50)
+# @time eigensys_Cheby(1, 0.95, 0.01 ./ GNew, 4, 3, 3, debug=true, return_wf=true, L=4, Npoints = 60, Iter = 20,  der_acc=1e-6, cvg_acc=1e-3, prec=100, Npts_r=50)

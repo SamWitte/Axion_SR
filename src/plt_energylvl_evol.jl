@@ -46,7 +46,8 @@ for i in 1:length(n_lvls)
         
         
         wR, wI, x_values, y_values, nu = eigensys_Cheby(M, a, alph[j] ./ (GNew .* M), n_lvls[i], l, m, debug=false, return_wf=true, Npoints=Npoints, Iter=Iter, cvg_acc=cvg_acc, Npts_r=Npts_r, return_nu=true, prec=prec)
-        wRIG, wIIG, rad_outT, routT = eigensys_Cheby(M, a, alph[j] ./ (GNew .* M), n_lvls[i], l, m, debug=false, return_wf=true, Npoints=130, Iter=1, cvg_acc=cvg_acc, Npts_r=Npts_r, nu_guess=nu, prec=prec)
+        rad_outT, routT = solve_radial(mu, M, a, n_lvls[i], l, m; rpts=Npts_Bnd, rmaxT=rmaxT, pre_compute_erg=(wR .+ im .* wI), Ntot_safe=Ntot_safe)
+        # wRIG, wIIG, rad_outT, routT = eigensys_Cheby(M, a, alph[j] ./ (GNew .* M), n_lvls[i], l, m, debug=false, return_wf=true, Npoints=130, Iter=1, cvg_acc=cvg_acc, Npts_r=Npts_r, nu_guess=nu, prec=prec)
         
         println("Cheb go \t ", wR, "\t", wI)
         append!(outPr_2, wR)
@@ -58,7 +59,7 @@ for i in 1:length(n_lvls)
             writedlm("test_store/RadTest_LowA_1_n_$(n_lvls[i])_l_$(l)_m_$(m)_.dat", hcat(rl, Float64.(abs.(r1))))
             writedlm("test_store/RadTest_LowA_2_n_$(n_lvls[i])_l_$(l)_m_$(m)_.dat", hcat(x_values, Float64.(abs.(y_values))))
             writedlm("test_store/RadTest_LowA_2v2_n_$(n_lvls[i])_l_$(l)_m_$(m)_.dat", hcat(rad_outT, Float64.(abs.(routT))))
-        elseif j == 8
+        elseif j == 5
             println("Sving WF....")
             writedlm("test_store/RadTest_HighA_1_n_$(n_lvls[i])_l_$(l)_m_$(m)_.dat", hcat(rl, Float64.(abs.(r1))))
             writedlm("test_store/RadTest_HighA_2_n_$(n_lvls[i])_l_$(l)_m_$(m)_.dat", hcat(x_values, Float64.(abs.(y_values))))
