@@ -520,9 +520,12 @@ function s_rate_inf(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3, lF_min; rpts=4
     
 end
 
-function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=500, xtol=1e-20, ftol=1e-90, sve=false, fnm="test_store/WF_", return_erg=false, Ntot_safe=5000, eps_r=1e-10, QNM=false, QNM_ergs=nothing)
+function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=500, xtol=1e-20, ftol=1e-90, sve=false, fnm="test_store/WF_", return_erg=false, Ntot_safe=5000, eps_r=1e-10, QNM=false, QNM_ergs=nothing, pre_compute_erg=nothing, prec=100)
     ### dolan 2007
     # everything normalized
+    
+    setprecision(BigFloat, prec)
+    
     alph = GNew .* M .* mu
     
     if m == 1
@@ -543,7 +546,12 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
         Ntot = Ntot_safe
     end
     if !QNM
-        wR, wI = find_im_part(mu, M, a, n, l, m; debug=debug, iter=iter, xtol=xtol, ftol=ftol, return_both=true, for_s_rates=true, QNM=false, Ntot_force=Ntot_safe)
+        if isnothing(pre_compute_erg)
+            wR, wI = find_im_part(mu, M, a, n, l, m; debug=debug, iter=iter, xtol=xtol, ftol=ftol, return_both=true, for_s_rates=true, QNM=false, Ntot_force=Ntot_safe)
+        else
+            wR = BigFloat(real(pre_compute_erg))
+            wI = BigFloat(imag(pre_compute_erg))
+        end
     else
         wR = real(QNM_ergs)
         wI = imag(QNM_ergs)
@@ -608,7 +616,11 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
     
     rlist = 10 .^(range(log10.(rp  .* (1.0 .+ eps_r)), log10.(rmax), rpts))
     if (wR == 0)&&(wI == 0)
-        return rlist, zeros(length(rlist))
+        if return_erg
+            return rlist, zeros(length(rlist)), wR .+ im .* wI
+        else
+            return rlist, zeros(length(rlist))
+        end
     end
     
     preF = (rlist .- rp).^(- im .* sigm) .* (rlist .- rm).^(im .* sigm .+ chi .- 1.0) .* exp.(q .* rlist)
@@ -799,19 +811,20 @@ end
 
 function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=200, iter=10000, xtol=1e-20, ftol=1e-90, return_both=false, for_s_rates=true, QNM=false, QNM_E=1.0, erg_Guess=nothing, max_n_qnm=5)
     
-    OmegaH = a ./ (2 .* (GNew .* M) .* (1 .+ sqrt.(1 .- a.^2)))
-    alph = mu * GNew * M
-
+    OmegaH = BigFloat(a ./ (2 .* (GNew .* M) .* (1 .+ sqrt.(1 .- a.^2))))
+    alph = BigFloat(mu * GNew * M)
+    a = BigFloat(a)
+    M = BigFloat(M)
     
     if (ergL(n, l, m, mu, M, a) < m .* OmegaH)||(for_s_rates==true)||QNM
         
 
         if (alph < 0.03)
-            alph_ev = 0.03
+            alph_ev = BigFloat(0.03)
         elseif (alph < 0.16)&&(m==3)
-            alph_ev = 0.16
+            alph_ev = BigFloat(0.16)
         elseif (alph < 0.39)&&(m==4)
-            alph_ev = 0.39
+            alph_ev = BigFloat(0.39)
         else
             alph_ev = alph
         end
@@ -1007,7 +1020,7 @@ end
 function find_im_zero(mu, M, n, l, m; debug=false, Ntot=3000, iter=1000, xtol=1e-6, ftol=1e-20)
     
     
-    alph = mu * GNew * M
+    alph = BigFloat(mu * GNew * M)
     QNM = false
         
     function wrapper!(F, x)

@@ -3,16 +3,20 @@ using SpecialFunctions
 using WignerSymbols
 using HypergeometricFunctions
 include("Constants.jl")
+# include("heunc.jl")
+include("solve_sr_rates.jl")
 
 
-function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=100, Iter=10, debug=false, return_wf=false, der_acc=1e-10, cvg_acc=1e-6)
+function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter=10, debug=false, return_wf=false, der_acc=1e-6, cvg_acc=1e-4, Npts_r=200, nu_guess=nothing, return_nu=false)
     # L field spherical harmonic truncation l-eigenstate
     # Npoints number of Chebyshev interpolation points
     # Iter number of iterations for the non-linear inversion
+    
     setprecision(BigFloat, prec)  # Higher than requested precision for calculations
     
-    a = atilde * M  # BH spin
-    alph = mu .* GNew
+    a = BigFloat(atilde) * M  # BH spin
+    alph = BigFloat(mu .* GNew)
+    M = BigFloat(M)
     n0 = n - l0 - 1 # field overtone number
    
     
@@ -67,8 +71,8 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=100, Ite
     end
 
     # Define Chebyshev interpolation points
-    ζ = [cos((π * (2*k + 1))/(2 * (Npoints + 1))) for k in 0:Npoints]  # Chebyshev nodes
-    w = [sin((2*π*k*(Npoints + 2) + π)/(2 * (Npoints + 1))) for k in 0:Npoints]  # Chebyshev weights
+    ζ = [cos((BigFloat(π) * (2*k + 1))/(2 * (Npoints + 1))) for k in 0:Npoints]  # Chebyshev nodes
+    w = [sin((2*BigFloat(π)*k*(Npoints + 2) + π)/(2 * (Npoints + 1))) for k in 0:Npoints]  # Chebyshev weights
 
     # Derivative matrices in polynomial base
     DerivP = zeros(BigFloat, Npoints+1, Npoints+1)
@@ -108,13 +112,30 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=100, Ite
             (factorial(big(l0))/(factorial(big(2*l0)) * factorial(big(2*l0 + 1))))^2 *
             prod(j^2 * (1 - a^2/M^2) + ((a*m)/M - 2*alph*rplus)^2 for j in 1:l0)
     end
+    
+    function calc_Nν_initial_2()
+        wI = sr_rates(n, l0, m, mu, M, a)
+        wR = GNew .* M .* ergL(n, l0, m, mu, M, a; full=false)
+        nuR = (alph .* M).^2 ./ sqrt.((alph .* M).^2 .- wR.^2)
+        nuI = nuR.^3 ./ (alph .* M)^3 .* (wI .* GNew .* M) .* sqrt.((nuR.^2 .- (alph .* M)^2) ./ nuR.^2)
+        return nuR .+ im * nuI
+    end
+    
 
     # Hydrogenic frequency parameter ν (initial value)
-    Nν = calc_Nν_initial()
+    if isnothing(nu_guess)
+        Nν = calc_Nν_initial_2()
+    else
+        Nν = BigFloat(real(nu_guess)) .+ BigFloat(imag(nu_guess))
+    end
 
     # Now we can define ω
     function calc_ω(ν_val)
         return alph * sqrt(1 - (alph^2*M^2)/ν_val^2)
+    end
+    
+    if debug
+        println("starting erg \t", calc_ω(Nν).* M)
     end
 
     # Define P and A values as functions of ν
@@ -183,6 +204,7 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=100, Ite
         return ((2*r*M*alph^2)/(l0 + n0 + 1))^l0 *
                exp(-((r*M*alph^2)/(l0 + n0 + 1))) *
                generalized_laguerre(n - l0 - 1, 2 * l0 + 1, (2*r*M*alph^2)/(l0 + n0 + 1))
+               
     end
 
     # Function to build equation coefficients
@@ -360,51 +382,60 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=100, Ite
     
     
     if !return_wf
-        return real(erg_out), imag(erg_out) # real(G * M * omega), imag(G * M * omega)
+        if !return_nu
+            return real(erg_out), imag(erg_out) # real(G * M * omega), imag(G * M * omega)
+        else
+            return real(erg_out), imag(erg_out), Nν_values[final_idx] # real(G * M * omega), imag(G * M * omega),
+        end
     end
 
+    
     x_values = Float64[]
     y_values = Complex[]
 
+##### this it original way
     for j in 1:Npoints
         # Calculate the current r value
         r_val = rmap(ζ[j])
-        
+
         # Calculate ω based on the final Nν value from iteration
         ω = alph * sqrt(1 - (alph^2 * M^2)/(Nν_values[final_idx])^2)
-        
+
         # Calculate Pplus for the current ν value
         Pplus = calc_Pplus(Nν_values[final_idx])
-        
+
         # Calculate the expression from the Mathematica code
         term1 = ((r_val - rplus)/(r_val - rminus))^(im * Pplus)
         term2 = (r_val - rminus)^(-1 + (alph^2 * M)/sqrt(alph^2 - ω^2) - 2 * M * sqrt(alph^2 - ω^2))
         term3 = exp(-sqrt(alph^2 - ω^2) * (r_val - rplus))
         term4 = BnumNorm[final_idx][j + 1 * (Npoints + 1)]
-        
+
         result = term1 * term2 * term3 * term4
-        
+
         push!(x_values, r_val)
         push!(y_values, result)
     end
-    x_values = reverse(x_values)
+    rlist = reverse(x_values) ./ M
     y_values = reverse(y_values)
     
     trapz(y,x) = @views sum(((y[1:end-1].+y[2:end])/2).*(x[2:end].-x[1:end-1]))
     # norm result
-    nm2 = trapz(y_values .* conj.(y_values) .* x_values.^2, x_values)
+    nm2 = trapz(y_values .* conj.(y_values) .* rlist.^2, rlist)
     y_values ./= sqrt.(nm2)
     
     if debug
-        println(x_values)
+        println(rlist)
         println(y_values)
-        println("Norm test \t", trapz(y_values .* conj.(y_values) .* x_values.^2, x_values))
+        println("Norm test \t", trapz(y_values .* conj.(y_values) .* rlist.^2, rlist))
     end
-    
-    return real(erg_out), imag(erg_out), x_values, y_values # everything normalized by GM
+ 
+    if !return_nu
+        return real(erg_out), imag(erg_out), rlist, y_values # everything normalized by GM, radial WF may not resolve at large r
+    else
+        return real(erg_out), imag(erg_out), rlistOut, yout2, Nν_values[final_idx]
+    end
 end
 
-# test run of system
-# eigensys_Cheby(22.0, 0.9, 1.82202e-13, 2, 1, 1, debug=true, return_wf=false, L=4, Npoints = 100, Iter = 20,  der_acc=1e-10, cvg_acc=1e-6, prec=200)
 
-# eigensys_Cheby(22.0, 0.9, 5e-14, 2, 1, 1, debug=true, return_wf=false, L=4, Npoints = 150, Iter = 20,  der_acc=1e-6, cvg_acc=1e-6, prec=100)
+# test run of system
+# @time eigensys_Cheby(1, 0.95, 0.01 ./ GNew, 2, 1, 1, debug=true, return_wf=true, L=4, Npoints = 60, Iter = 20,  der_acc=1e-6, cvg_acc=1e-3, prec=100, Npts_r=50)
