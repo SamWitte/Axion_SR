@@ -1,9 +1,6 @@
 using LinearAlgebra
-using SpecialFunctions
 using WignerSymbols
-using HypergeometricFunctions
 include("Constants.jl")
-
 include("solve_sr_rates.jl")
 
 
