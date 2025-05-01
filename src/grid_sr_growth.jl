@@ -1,5 +1,4 @@
 include("solve_sr_rates.jl")
-include("cheby_eigs.jl")
 using NPZ
 using ArgParse
 
