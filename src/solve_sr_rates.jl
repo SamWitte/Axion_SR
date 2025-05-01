@@ -11,8 +11,6 @@ using Interpolations
 using HypergeometricFunctions
 using SpinWeightedSpheroidalHarmonics
 using NPZ
-using WignerSymbols
-# using Dates
 using Optim
 include("Constants.jl")
 
