@@ -1285,9 +1285,9 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     alph = mu * GNew * M
     
     
-    erg_1G = ergL(n1, l1, m1, mu, M, a; full=false)
-    erg_2G = ergL(n2, l2, m2, mu, M, a; full=false)
-    erg_3G = ergL(n3, l3, m3, mu, M, a; full=false)
+    erg_1G = ergL(n1, l1, m1, mu, M, a; full=true)
+    erg_2G = ergL(n2, l2, m2, mu, M, a; full=true)
+    erg_3G = ergL(n3, l3, m3, mu, M, a; full=true)
     erg_pxy = erg_1G + erg_2G - erg_3G
     
     maxN = maximum([n1 n2 n3])
@@ -1295,12 +1295,12 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     
     
     ### quick check if to inf to not!
-    erg1R, erg1I = find_im_part(mu, M, a, n1, l1, m1; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
-    erg2R, erg2I = find_im_part(mu, M, a, n2, l2, m2; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
-    erg3R, erg3I = find_im_part(mu, M, a, n3, l3, m3; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
+    # erg1R, erg1I = find_im_part(mu, M, a, n1, l1, m1; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
+    # erg2R, erg2I = find_im_part(mu, M, a, n2, l2, m2; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
+    # erg3R, erg3I = find_im_part(mu, M, a, n3, l3, m3; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
     
     
-    if (erg1R .+ erg2R .- erg3R) .> alph
+    if erg_pxy .> alph
         to_inf = true
     else
         to_inf = false
