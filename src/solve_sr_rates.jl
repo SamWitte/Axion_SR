@@ -6,12 +6,12 @@ using Distributions
 using ForwardDiff: gradient, derivative, Dual, Partials, hessian
 using DelimitedFiles
 using NLsolve
-using DifferentialEquations
+# using DifferentialEquations
 using Interpolations
 using HypergeometricFunctions
 using SpinWeightedSpheroidalHarmonics
 using NPZ
-using Optim
+# using Optim
 include("Constants.jl")
 
 
