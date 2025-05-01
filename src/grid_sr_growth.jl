@@ -17,25 +17,18 @@ Npts_r = 1000
 prec=200
 
 
-solve_for_zeros = false
-solve_gridded = true
+solve_for_zeros = true
+solve_gridded = false
 
-if solve_for_zeros
-    aPts = 40
-    alpha_pts = 60
-    alphList = LinRange(log10.(0.03), log10.(2), alpha_pts)
-end
-if solve_gridded
-    aPts = 40
-    alpha_pts = 60
-    alphList = LinRange(log10.(0.03), log10.(1.5), alpha_pts)   
-end
-alist = LinRange(0.1, 0.998, aPts)
+aPts = 40
+alpha_pts = 60
+a_max = 0.998
+alist = LinRange(0.1, a_max, aPts)
 
 
 nmax = 6
 loop_list = []
-for n in 1:nmax, l in 1:(nmax - 1), m in 1:l
+for n in 1:nmax, l in 1:(n - 1), m in 1:l
     if run_leaver
         ft1 = "Imag_zero"
         ft2 = "Imag_erg_pos"
@@ -60,6 +53,9 @@ if solve_for_zeros
     for nlm in loop_list
         println(nlm)
         n = nlm[1]; l = nlm[2]; m = nlm[3];
+        
+        alpha_max = a_max .* m ./ (2 .* (1 .+ sqrt.(1 .- a_max.^2))) .* 1.3
+        alphList = LinRange(log10.(0.03), log10.(alpha_max), alpha_pts)
         if run_leaver
             file_out = "Imag_zero_$(n)$(l)$(m).dat"
         else
@@ -70,13 +66,13 @@ if solve_for_zeros
 
         for i in 1:alpha_pts
             a_min = 0.01
-            a_max = 0.998
             a_guess = 0.5
+            a_max_loop = a_max
     
             if run_leaver
                 testF = find_im_part(10 .^ alphList[i] ./ (GNew .* M), M, 0.998, n, l, m; Ntot_force=Ntot_safe, return_both=false, for_s_rates=true)
             else
-                wR, testF = eigensys_Cheby(M, 0.998, 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=Npoints, Iter=Iter, cvg_acc=cvg_acc)
+                wR, testF = eigensys_Cheby(M, 0.998, 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=Npoints, Iter=Iter, cvg_acc=cvg_acc, prec=prec)
             end
             if testF .< 0
                 continue
@@ -88,18 +84,18 @@ if solve_for_zeros
                 if run_leaver
                     testF = find_im_part(10 .^ alphList[i] ./ (GNew .* M), M, a_guess, n, l, m; Ntot_force=Ntot_safe, return_both=false, for_s_rates=true)
                 else
-                    wR, testF = eigensys_Cheby(M, a_guess, 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=Npoints, Iter=Iter, cvg_acc=cvg_acc)
+                    wR, testF = eigensys_Cheby(M, a_guess, 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=Npoints, Iter=Iter, cvg_acc=cvg_acc, prec=prec)
                 end
                 
                 if testF > 0
-                    a_max = a_guess
+                    a_max_loop = a_guess
                     a_guess = 0.5 .* (a_guess .+ a_min)
                 else
                     a_min = a_guess
                     a_guess = 0.5 .* (a_guess .+ a_max)
                 end
                 
-                if (a_max .- a_min) < 1e-4
+                if (a_max_loop .- a_min) < 1e-4
                     while_found = true
                 end
 
@@ -120,10 +116,13 @@ end
 
 if solve_gridded
     a_min = 0.01
-    a_max = 0.998
     for nlm in loop_list
         println(nlm)
         n = nlm[1]; l = nlm[2]; m = nlm[3];
+       
+        alpha_max = a_max .* m ./ (2 .* (1 .+ sqrt.(1 .- a_max.^2))) .* 1.3
+        alphList = LinRange(log10.(0.03), log10.(alpha_max), alpha_pts)
+        
         if run_leaver
             file_out = "Imag_erg_pos_$(n)$(l)$(m).npz"
             file_out2 = "Imag_erg_neg_$(n)$(l)$(m).npz"
@@ -152,7 +151,7 @@ if solve_gridded
                 if run_leaver
                     e_imgP = find_im_part(10 .^ alphList[i] ./ (GNew .* M), M, alistP[j], n, l, m; Ntot_force=Ntot_safe, return_both=false, for_s_rates=true)
                 else
-                    wR, e_imgP = eigensys_Cheby(M, alistP[j], 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=Npoints, Iter=Iter, cvg_acc=cvg_acc)
+                    wR, e_imgP = eigensys_Cheby(M, alistP[j], 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=Npoints, Iter=Iter, cvg_acc=cvg_acc, prec=prec)
                 end
                 
                 if e_imgP > 0
