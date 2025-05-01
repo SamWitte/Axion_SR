@@ -6,10 +6,7 @@ function parse_commandline()
     s = ArgParseSettings()
 
     @add_arg_table! s begin
-    
-        "--alpha_max"
-            arg_type = Float64
-            default = 1.2
+
             
         "--alpha_min"
             arg_type = Float64
@@ -39,6 +36,10 @@ function parse_commandline()
             arg_type = String
             default = "_"
             
+        "--run_leaver"
+            arg_type = Bool
+            default = false
+            
             
     end
     return parse_args(s)
@@ -47,7 +48,6 @@ end
 
 parsed_args = parse_commandline()
 
-alpha_max = parsed_args["alpha_max"];
 alpha_min = parsed_args["alpha_min"];
 alpha_pts = parsed_args["alpha_pts"];
 inf_nr=true
@@ -58,7 +58,7 @@ S3 = parsed_args["S3"]
 S4 = parsed_args["S4"]
 
 ftag = parsed_args["ftag"];
-
+run_leaver = parsed_args["run_leaver"];
 
 print(S1, "\t", S2, "\t", S3, "\t", S4, "\n")
 
@@ -68,6 +68,9 @@ function main(;kpts=14, rpts=1000, rmaxT=100, Nang=200000, Npts_Bnd=2000)
     Ntot_safe=5000
     NON_REL = false
     h_mve = 1.0
+    
+    min_m = minimum([parse(Int, S1[end]), parse(Int, S2[end]), parse(Int, S3[end])])
+    alpha_max = a .* min_m ./ (2 .* (1 .+ sqrt.(1 .- a.^2))) .* 1.05
     
     # alpha_list = 10 .^LinRange(log10(alpha_min), log10(alpha_max), alpha_pts)
     alpha_list = LinRange(alpha_min, alpha_max, alpha_pts)
@@ -107,7 +110,7 @@ function main(;kpts=14, rpts=1000, rmaxT=100, Nang=200000, Npts_Bnd=2000)
             else
                 h_mve = 1.0
             end
-            output_sve[i] = gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, Npts_Bnd=Npts_Bnd, debug=false, eps_fac=1e-3, Ntot_safe=Ntot_safe, m=0, l=0, Nang=Nang, NON_REL=NON_REL, h_mve=h_mve, to_inf=to_inf, rmaxT=rmaxT)
+            output_sve[i] = gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, Npts_Bnd=Npts_Bnd, debug=false, eps_fac=1e-3, Ntot_safe=Ntot_safe, m=0, l=0, Nang=Nang, NON_REL=NON_REL, h_mve=h_mve, to_inf=to_inf, rmaxT=rmaxT, run_leaver=run_leaver)
         
             print("alpha \t", alpha_list[i], "\t", output_sve[i], "\n")
         end
