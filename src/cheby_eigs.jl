@@ -3,11 +3,11 @@ using SpecialFunctions
 using WignerSymbols
 using HypergeometricFunctions
 include("Constants.jl")
-# include("heunc.jl")
+
 include("solve_sr_rates.jl")
 
 
-function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter=10, debug=false, return_wf=false, der_acc=1e-6, cvg_acc=1e-4, Npts_r=200, nu_guess=nothing, return_nu=false)
+function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter=10, debug=false, return_wf=false, der_acc=1e-6, cvg_acc=1e-4, Npts_r=1000, nu_guess=nothing, return_nu=false)
     # L field spherical harmonic truncation l-eigenstate
     # Npoints number of Chebyshev interpolation points
     # Iter number of iterations for the non-linear inversion
@@ -392,46 +392,41 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
     end
 
     
+
+##### this it original way ### don't use, too slow.
+#    x_values = Float64[]
+#    y_values = Complex[]
+#    for j in 1:Npoints
+#        # Calculate the current r value
+#        r_val = rmap(ζ[j])
+#
+#        # Calculate ω based on the final Nν value from iteration
+#        ω = alph * sqrt(1 - (alph^2 * M^2)/(Nν_values[final_idx])^2)
+#
+#        # Calculate Pplus for the current ν value
+#        Pplus = calc_Pplus(Nν_values[final_idx])
+#
+#        # Calculate the expression from the Mathematica code
+#        term1 = ((r_val - rplus)/(r_val - rminus))^(im * Pplus)
+#        term2 = (r_val - rminus)^(-1 + (alph^2 * M)/sqrt(alph^2 - ω^2) - 2 * M * sqrt(alph^2 - ω^2))
+#        term3 = exp(-sqrt(alph^2 - ω^2) * (r_val - rplus))
+#        term4 = BnumNorm[final_idx][j + l0 * (Npoints + 1)]
+#
+#        result = term1 * term2 * term3 * term4
+#
+#        push!(x_values, r_val)
+#        push!(y_values, result)
+#    end
+#    rlist = reverse(x_values) ./ M
+#    y_values = reverse(y_values)
+#    trapz(y,x) = @views sum(((y[1:end-1].+y[2:end])/2).*(x[2:end].-x[1:end-1]))
+#    # norm result
+#    nm2 = trapz(y_values .* conj.(y_values) .* rlist.^2, rlist)
+#    y_values ./= sqrt.(nm2)
+#
     
-    x_values = Float64[]
-    y_values = Complex[]
+    rlist, y_values = solve_radial(mu, M, atilde, n, l0, m; rpts=Npts_r, rmaxT=100, pre_compute_erg=erg_out, Ntot_safe=7000)
 
-##### this it original way
-    for j in 1:Npoints
-        # Calculate the current r value
-        r_val = rmap(ζ[j])
-
-        # Calculate ω based on the final Nν value from iteration
-        ω = alph * sqrt(1 - (alph^2 * M^2)/(Nν_values[final_idx])^2)
-
-        # Calculate Pplus for the current ν value
-        Pplus = calc_Pplus(Nν_values[final_idx])
-
-        # Calculate the expression from the Mathematica code
-        term1 = ((r_val - rplus)/(r_val - rminus))^(im * Pplus)
-        term2 = (r_val - rminus)^(-1 + (alph^2 * M)/sqrt(alph^2 - ω^2) - 2 * M * sqrt(alph^2 - ω^2))
-        term3 = exp(-sqrt(alph^2 - ω^2) * (r_val - rplus))
-        term4 = BnumNorm[final_idx][j + l0 * (Npoints + 1)]
-
-        result = term1 * term2 * term3 * term4
-        
-        push!(x_values, r_val)
-        push!(y_values, result)
-    end
-    rlist = reverse(x_values) ./ M
-    y_values = reverse(y_values)
-    
-    trapz(y,x) = @views sum(((y[1:end-1].+y[2:end])/2).*(x[2:end].-x[1:end-1]))
-    # norm result
-    nm2 = trapz(y_values .* conj.(y_values) .* rlist.^2, rlist)
-    y_values ./= sqrt.(nm2)
-    
-    if debug
-        println(rlist)
-        println(y_values)
-        println("Norm test \t", trapz(y_values .* conj.(y_values) .* rlist.^2, rlist))
-    end
- 
     if !return_nu
         return real(erg_out), imag(erg_out), rlist, y_values # everything normalized by GM, radial WF may not resolve at large r
     else
