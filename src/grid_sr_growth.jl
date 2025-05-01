@@ -53,9 +53,13 @@ function main_gg(run_leaver, solve_for_zeros, solve_gridded)
     alist = LinRange(0.1, a_max, aPts)
 
 
-    nmax = 6
+    nmax = 8
+    mmax = 5
     loop_list = []
     for n in 1:nmax, l in 1:(n - 1), m in 1:l
+        if m > mmax
+            continue
+        end
         if run_leaver
             ft1 = "Imag_zero"
             ft2 = "Imag_erg_pos"
