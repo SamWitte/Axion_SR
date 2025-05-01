@@ -21,6 +21,7 @@ function parse_commandline()
             default = false
             
     end
+    return parse_args(s)
 end
 
 
@@ -29,7 +30,6 @@ parsed_args = parse_commandline()
 run_leaver = parsed_args["run_leaver"];
 solve_for_zeros = parsed_args["solve_for_zeros"];
 solve_gridded = parsed_args["solve_gridded"];
-
 
 
 function main_gg(run_leaver, solve_for_zeros, solve_gridded)
