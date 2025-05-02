@@ -19,6 +19,10 @@ function parse_commandline()
             arg_type = Bool
             default = false
             
+        "--nlmIn"
+            arg_type = String
+            default = "000"
+            
     end
     return parse_args(s)
 end
@@ -29,7 +33,7 @@ parsed_args = parse_commandline()
 run_leaver = parsed_args["run_leaver"];
 solve_for_zeros = parsed_args["solve_for_zeros"];
 solve_gridded = parsed_args["solve_gridded"];
-
+nlmIn = parsed_args["nlmIn"]
 
 function main_gg(run_leaver, solve_for_zeros, solve_gridded)
 
@@ -75,7 +79,13 @@ function main_gg(run_leaver, solve_for_zeros, solve_gridded)
                 full_path = "rate_sve/" * file_out
                 
                 if !isfile(full_path)
-                    push!(loop_list, [n, l, m])
+                    if nlmIn == "000"
+                        push!(loop_list, [n, l, m])
+                    else
+                        if (suffix == ft2)&&(nlmIn == string(n)*string(l)*string(m))
+                            push!(loop_list, [n, l, m])
+                        end
+                    end
                     break  # no need to check other flags once added
                 end
             end
