@@ -44,6 +44,8 @@ function main_gg(run_leaver, solve_for_zeros, solve_gridded)
     cvg_acc = 1e-3
     Npts_r = 1000
     prec=200
+    
+    debug=true
 
 
     aPts = 40
@@ -66,10 +68,12 @@ function main_gg(run_leaver, solve_for_zeros, solve_gridded)
             ft1 = "Imag_zeroC"
             ft2 = "Imag_ergC_pos"
         end
+        
         for (flag, suffix) in ((solve_for_zeros, ft1), (solve_gridded, ft2))
             if flag
                 file_out = "$(suffix)_$(n)$(l)$(m).$(suffix == ft1 ? "dat" : "npz")"
                 full_path = "rate_sve/" * file_out
+                
                 if !isfile(full_path)
                     push!(loop_list, [n, l, m])
                     break  # no need to check other flags once added
@@ -91,10 +95,14 @@ function main_gg(run_leaver, solve_for_zeros, solve_gridded)
             else
                 file_out = "Imag_zeroC_$(n)$(l)$(m).dat"
             end
+           
             M=1;
             store_out = zeros(alpha_pts, 2)
 
             for i in 1:alpha_pts
+                if debug
+                    println("\n", "Alpha: ", 10 .^alphList[i])
+                end
                 a_min = 0.01
                 a_guess = 0.5
                 a_max_loop = a_max
@@ -111,18 +119,20 @@ function main_gg(run_leaver, solve_for_zeros, solve_gridded)
                 while_found = false
                 cnt = 0
                 while !while_found
+                    
                     if run_leaver
                         testF = find_im_part(10 .^ alphList[i] ./ (GNew .* M), M, a_guess, n, l, m; Ntot_force=Ntot_safe, return_both=false, for_s_rates=true)
                     else
                         wR, testF = eigensys_Cheby(M, a_guess, 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=Npoints, Iter=Iter, cvg_acc=cvg_acc, prec=prec)
                     end
-                    
+                
+                    # print(cnt, "\t", a_guess, "\t", testF, "\n")
                     if testF > 0
                         a_max_loop = a_guess
                         a_guess = 0.5 .* (a_guess .+ a_min)
                     else
                         a_min = a_guess
-                        a_guess = 0.5 .* (a_guess .+ a_max)
+                        a_guess = 0.5 .* (a_guess .+ a_max_loop)
                     end
                     
                     if (a_max_loop .- a_min) < 1e-4
