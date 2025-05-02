@@ -27,13 +27,13 @@ maxInt = Nmax - 1
 for n1 in n_levels:
     for n2 in n_levels:
         for n3 in n_levels:
-            for l1 in range(0, maxInt + 1):
-                for l2 in range(0, maxInt + 1):
-                    for l3 in range(0, maxInt + 1):
+            for l1 in range(1, n1):
+                for l2 in range(1, n2):
+                    for l3 in range(1, n3):
                         
-                        for m1 in range(1, maxInt + 1):
-                            for m2 in range(1, maxInt + 1):
-                                for m3 in range(1, maxInt + 1):
+                        for m1 in range(1, l1+1):
+                            for m2 in range(1, l2+1):
+                                for m3 in range(1, l3+1):
                                     if (m1>l1) or (m2>l2) or (m3>l3) or (l1 >= n1) or (l2 >= n2) or (l3 >= n3):
                                         continue
                                         
@@ -102,8 +102,8 @@ for n1 in n_levels:
                                                     final_keep_sve.append(tag1[1:4] + "    " + tag2[1:4] + "    " + tag3[1:4] + "    " + outtag)
 ### here is how we truncate n-expansion
 for n1 in n_levels:
-    for l1 in range(0, maxInt + 1):
-        for m1 in range(1, maxInt + 1):
+    for l1 in range(0, n1):
+        for m1 in range(1, l1 + 1):
             if (m1>l1) or (m2>l2) or (m3>l3) or (l1 >= n1) or (l2 >= n2) or (l3 >= n3):
                 continue
 

@@ -123,6 +123,7 @@ function main_gg(run_leaver, solve_for_zeros, solve_gridded)
                     wR, testF = eigensys_Cheby(M, 0.998, 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=Npoints, Iter=Iter, cvg_acc=cvg_acc, prec=prec)
                 end
                 if testF .< 0
+                    println("Stop running \t", testF)
                     continue
                 end
 
@@ -154,7 +155,7 @@ function main_gg(run_leaver, solve_for_zeros, solve_gridded)
                     end
                     cnt += 1
                 end
-                #println(10 .^ alphList[i], "\t", a_guess)
+                println(10 .^ alphList[i], "\t", a_guess)
                 store_out[i, :] = [10 .^ alphList[i] a_guess]
             end
             

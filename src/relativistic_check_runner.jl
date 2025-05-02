@@ -50,9 +50,11 @@ end
 parsed_args = parse_commandline()
 
 alphL = range(0.03, 1.0, 7);
-rpts=30000
+alphL = alphL[3:end]
+
+rpts=20000
 Npts_Bnd=4000
-Ntot_safe=50000
+Ntot_safe=5000
 
 n1=parsed_args["n1"];
 l1=parsed_args["l1"];
@@ -66,12 +68,13 @@ m3=parsed_args["m3"];
 
 a = 0.9
 M = 22.2
+rmaxT=70
 
 function runner()
     outArr = zeros(length(alphL), 3);
     for i in 1:length(alphL)
     	mu = alphL[i] ./ (GNew * M)
-        outstd, outNew = test_projection_scatter(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, rmaxT=70)
+        outstd, outNew = test_projection_scatter(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, rmaxT=rmaxT)
         # print(outstd, "\t", outNew)
         outArr[i, :] = [alphL[i] outstd outNew]
         print(outArr[i, :], "\n")

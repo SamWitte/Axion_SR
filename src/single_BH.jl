@@ -1,49 +1,50 @@
 using Random
 using Distributions
 using DelimitedFiles
-include("super_rad.jl")
+using Suppressor
+@suppress include("super_rad.jl")
 include("tde_input.jl")
 using Dates
 
-fout = "_v2_"
+fout = "_"
 sve = false
 
 
-f_a = 1e12
-m_a = 1e-12
-SpinBH = 0.998
-MassBH = 22.0
-tau_max = 4e6
+f_a = 1e15
+m_a = 1e-19
+SpinBH = 0.9
+MassBH = 4.0e8
+tau_max = 5.0e7 # 5.0e7, 4.8e6
 
 alpha_max_cut = 10.0
-impose_low_cut = 1e-3
+impose_low_cut = 1e-100
 return_all_info = true
-solve_322 = true
-# n_times = 1000000
-n_times = 10000
-input_data="Me"
+n_times = 100000
+# n_times = 10000
 eq_threshold=1e-100
 stop_on_a = 0.0
 abstol=1e-30
+N_pts_interp=200
+N_pts_interpL=200
 
-solve_n4 = false
-solve_n5 = false
+
+Nmax = 5
+cheby=true
 
 non_rel = false
-
-max_m_2 = false # only spin down m <= 2???
+high_p = true
 
 alph = GNew .* MassBH .* m_a
 maxa = 4 .* alph ./ (1 .+ 4 .* alph.^2)
-print(alph, "\t", maxa, "\n")
+
+
+print("Alpha and max a spin down \t", alph, "\t", maxa, "\n")
+println("fa ", f_a)
+println("non rel? ", non_rel)
+
 
 fname = "test_store/OutRun_"
-if solve_n4
-    fname *= "Lvln4_"
-    if solve_n5
-        fname *= "Lvln5_"
-    end
-end
+
 if non_rel
     fname *= "NonRel_"
 else
@@ -52,34 +53,27 @@ end
 fname *= "fa_$(f_a)_ma_$(m_a)_MBH_$(MassBH)_spin_$(SpinBH)"*fout*".dat"
 
 
-if !solve_n4
-    timeT, state211, state322, spin, massB = @time solve_system(m_a, f_a, SpinBH, MassBH, tau_max; impose_low_cut=impose_low_cut, return_all_info=return_all_info, solve_322=solve_322, n_times=n_times, input_data=input_data, eq_threshold=eq_threshold, stop_on_a=stop_on_a, debug=true, abstol=abstol, non_rel=non_rel, max_m_2=max_m_2)
-else
-    if !solve_n5
-        timeT, state211, state322, state411, state422, state433, spin, massB = @time solve_system(m_a, f_a, SpinBH, MassBH, tau_max; impose_low_cut=impose_low_cut, return_all_info=return_all_info, solve_322=solve_322, n_times=n_times, input_data=input_data, solve_n4=true, eq_threshold=eq_threshold, abstol=abstol, non_rel=non_rel, debug=true, max_m_2=max_m_2)
-    else
-        timeT, state211, state322, state411, state422, state433, state522, state533, state544, spin, massB = @time solve_system(m_a, f_a, SpinBH, MassBH, tau_max; impose_low_cut=impose_low_cut, return_all_info=return_all_info, solve_322=solve_322, n_times=n_times, input_data=input_data, solve_n4=true, solve_n5=true, eq_threshold=eq_threshold, abstol=abstol, non_rel=non_rel, debug=true, max_m_2=max_m_2)
-    end
-end
+timeT, StatesOut, idx_lvl, spin, massB = @time solve_system(m_a, f_a, SpinBH, MassBH, tau_max; impose_low_cut=impose_low_cut, return_all_info=return_all_info, n_times=n_times, eq_threshold=eq_threshold, abstol=abstol, non_rel=non_rel, debug=true, high_p=high_p, N_pts_interp=N_pts_interp, N_pts_interpL=N_pts_interpL, Nmax=Nmax, cheby=cheby)
+ 
 
 if sve
     if !solve_n4
-        outSve = zeros(length(timeT), 5)
+        outSve = zeros(length(timeT), 6)
         for i in 1:length(timeT)
-            outSve[i, :] = [timeT[i] state211[i] state322[i] spin[i] massB[i]]
+            outSve[i, :] = [timeT[i] state211[i] state311[i] state322[i] spin[i] massB[i]]
         end
         writedlm(fname, outSve)
     else
         if !solve_n5
-            outSve = zeros(length(timeT), 8)
+            outSve = zeros(length(timeT), 9)
             for i in 1:length(timeT)
-                outSve[i, :] = [timeT[i] state211[i] state322[i] state411[i] state422[i] state433[i] spin[i] massB[i]]
+                outSve[i, :] = [timeT[i] state211[i] state311[i] state322[i] state411[i] state422[i] state433[i] spin[i] massB[i]]
             end
             writedlm(fname, outSve)
         else
-            outSve = zeros(length(timeT), 11)
+            outSve = zeros(length(timeT), 13)
             for i in 1:length(timeT)
-                outSve[i, :] = [timeT[i] state211[i] state322[i] state411[i] state422[i] state433[i] state522[i] state533[i] state544[i] spin[i] massB[i]]
+                outSve[i, :] = [timeT[i] state211[i] state311[i] state322[i] state411[i] state422[i] state433[i] state511[i] state522[i] state533[i] state544[i] spin[i] massB[i]]
             end
             writedlm(fname, outSve)
         end
