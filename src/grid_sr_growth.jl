@@ -82,7 +82,7 @@ function main_gg(run_leaver, solve_for_zeros, solve_gridded)
                     if nlmIn == "000"
                         push!(loop_list, [n, l, m])
                     else
-                        if (suffix == ft2)&&(nlmIn == string(n)*string(l)*string(m))
+                        if (nlmIn == string(n)*string(l)*string(m))
                             push!(loop_list, [n, l, m])
                         end
                     end
