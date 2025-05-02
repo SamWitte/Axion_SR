@@ -117,11 +117,8 @@ function main_gg(run_leaver, solve_for_zeros, solve_gridded)
                 a_guess = 0.5
                 a_max_loop = a_max
         
-                if run_leaver
-                    testF = find_im_part(10 .^ alphList[i] ./ (GNew .* M), M, 0.998, n, l, m; Ntot_force=Ntot_safe, return_both=false, for_s_rates=true)
-                else
-                    wR, testF = eigensys_Cheby(M, 0.998, 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=Npoints, Iter=Iter, cvg_acc=cvg_acc, prec=prec)
-                end
+                testF = find_im_part(10 .^ alphList[i] ./ (GNew .* M), M, 0.998, n, l, m; Ntot_force=Ntot_safe, return_both=false, for_s_rates=true)
+              
                 if testF .< 0
                     println("Stop running \t", testF)
                     continue
@@ -134,7 +131,12 @@ function main_gg(run_leaver, solve_for_zeros, solve_gridded)
                     if run_leaver
                         testF = find_im_part(10 .^ alphList[i] ./ (GNew .* M), M, a_guess, n, l, m; Ntot_force=Ntot_safe, return_both=false, for_s_rates=true)
                     else
-                        wR, testF = eigensys_Cheby(M, a_guess, 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=Npoints, Iter=Iter, cvg_acc=cvg_acc, prec=prec)
+                        if a_guess > 0.95
+                            npts_use = 120
+                        else
+                            npts_use = Npoints
+                        end
+                        wR, testF = eigensys_Cheby(M, a_guess, 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=npts_use, Iter=Iter, cvg_acc=cvg_acc, prec=prec)
                     end
                 
                     # print(cnt, "\t", a_guess, "\t", testF, "\n")
