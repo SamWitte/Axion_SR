@@ -176,15 +176,17 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true)
         for i in 1:length(rate_list[:,1])
             nm_tag = string(rate_list[i, 1]) * "_" * string(rate_list[i, 2]) * "^" * string(rate_list[i, 3]) * "^" * string(rate_list[i, 4])
             fileT = dirN * string(rate_list[i, 1]) * "_" * string(rate_list[i, 2]) * "_" * string(rate_list[i, 3]) * "_" * string(rate_list[i, 4]) * ftag * ".dat"
-            data = open(readdlm, fileT)
-            data = data[data[:,2] .!= 0.0, :]
-            
-            itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
-            rate_out = 10 .^itp(log10.(alph)) .* faFac
-            if string(rate_list[i, 4]) == "BH"
-                rate_out *= rP_ratio
+            if isfile(fileT)
+                data = open(readdlm, fileT)
+                data = data[data[:,2] .!= 0.0, :]
+                
+                itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
+                rate_out = 10 .^itp(log10.(alph)) .* faFac
+                if string(rate_list[i, 4]) == "BH"
+                    rate_out *= rP_ratio
+                end
+                Drate[nm_tag] = rate_out
             end
-            Drate[nm_tag] = rate_out
         end
     end
 
@@ -244,21 +246,28 @@ function get_state_idx(str_nlm, Nmax)
     out_idx = -1
     
     for nn in 1:Nmax, l in 1:(nn - 1),  m in 1:l
+       
         if str_nlm == string(nn)*string(l)*string(m)
-            out_idx == cnt
+            out_idx = cnt
             found = true
             break
         end
         cnt += 1
     end
+            
+    
     if out_idx == -1
         for nn in 1:Nmax, l in 1:(nn - 1)
             m_new = (2 * l)
-            if str_nlm == string(m_new + 1)*string(m_new)*string(m_new)
-                out_idx == cnt
-                break
+            if m_new < Nmax
+                continue # already included
+            else
+                if str_nlm == string(m_new + 1)*string(m_new)*string(m_new)
+                    out_idx = cnt
+                    break
+                end
+                cnt += 1
             end
-            cnt += 1
         end
     end
     return out_idx

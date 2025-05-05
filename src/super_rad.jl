@@ -51,6 +51,8 @@ function isapproxsigfigs(a, b, precision)
 end
 
 function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impose_low_cut=0.01, return_all_info=false, eq_threshold=1e-100, stop_on_a=0, abstol=1e-30, non_rel=true, high_p=true, N_pts_interp=10, N_pts_interpL=5,  Nmax=3, cheby=false)
+
+    alph = GNew .* M_BH .* mu
     if debug
         println("Entering...")
     end
@@ -69,13 +71,14 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
         idx_lvl = 0
         m_list = []
         bn_list = []
+        modes = []
         
         e2_maxBN = 1024 * pi * (fa / M_pl).^2 ./ (9 * alph.^3)
 
         for nn in 1:Nmax, l in 1:(nn - 1),  m in 1:l
             idx_lvl += 1
             max_alph = aBH .* m ./ (2 .* (1 .+ sqrt.(1 .- aBH.^2))) .* 1.1
-            push!(modes, (n, l, m, max_alph))
+            push!(modes, (nn, l, m, max_alph))
             push!(m_list, m)
             push!(bn_list, e2_maxBN .* (nn ./ 2).^4)
         end
@@ -124,7 +127,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
     append!(reltol, def_spin_tol)
     
     wait = 0 # tracker
-    alph = GNew .* M_BH .* mu
+    
     
     Emax2 = 1.0
     OmegaH = aBH ./ (2 .* (GNew .* M_BH) .* (1 .+ sqrt.(1 .- aBH.^2)))
@@ -149,6 +152,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
     SR_rates, interp_funcs, interp_dict = compute_sr_rates(modes, M_BH, aBH, alph, cheby=cheby);
     
     if debug
+        println(idx_lvl)
+        println(modes)
         print("SR rates @ prod \t", SR_rates, "\n")
     end
     
@@ -249,9 +254,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
 
         # check bosenova and correct units
         for i in 1:idx_lvl
-            if (sign_flip[i] == true)
-                du[i] *= 0.0
-            elseif ((abs.(u[i] .- log.(bn_list[i])) < 1e-2)||(u[i] > log.(bn_list[i])))&&(du[i] > 0)
+      
+            if ((abs.(u[i] .- log.(bn_list[i])) < 1e-2)||(u[i] > log.(bn_list[i])))&&(du[i] > 0)
                 du[i] *= 0.0
             elseif (abs.(u[i] .- log.(e_init)) < 1e-2)&&(du[i] < 0)
                 du[i] *= 0.0
@@ -312,6 +316,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
         
         for i in 1:length(rate_keys)
             idxV, sgn = key_to_indx(rate_keys[i], Nmax)
+            
             u_term_tot = 1.0
             u_term_tot_fake = 1.0
             for j in 1:length(sgn)
@@ -335,16 +340,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
             end
         end
         
-        for i in 1:idx_lvl
-            if (sign(all_contribs[i]) == sign(test[i]))
-                sign_flip[i] = false
-                # reltol[i] = default_reltol
-            else
-                sign_flip[i] = true
-                # print(i, " SGN FLIP \t", sign_flip, "\n")
-                # reltol[i] = 1e-3
-            end
-        end
+
         
         integrator.opts.reltol =  reltol
         
@@ -353,7 +349,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
         for i in 1:idx_lvl
             condBN =  (abs.(u[i] .- log.(bn_list[i])) < 1e-2)
             
-            if (u[i] > log.(e_init)) && condBN && (sign_flip[i]==false) && (du[i] != 0.0)
+            if (u[i] > log.(e_init)) && condBN &&  (du[i] != 0.0)
                 append!(tlist, abs.(1.0 ./ du[i]))
             end
         end
@@ -380,7 +376,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
         for i in 1:idx_lvl
            
             condBN =  (abs.(integrator.u[i] .- log.(bn_list[i])) < 1e-2)
-            if (integrator.u[i] > log.(e_init)) && condBN && (sign_flip[i]==false)
+            if (integrator.u[i] > log.(e_init)) && condBN
                 append!(tlist, (1.0 ./ du[i]))
                 append!(indx_list, i)
             end
