@@ -152,7 +152,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
     SR_rates, interp_funcs, interp_dict = compute_sr_rates(modes, M_BH, aBH, alph, cheby=cheby);
     
     if debug
-        println(idx_lvl)
+        println("Number of states \t", idx_lvl)
         println(modes)
         print("SR rates @ prod \t", SR_rates, "\n")
     end
@@ -549,7 +549,7 @@ function compute_sr_rates(qtm_cfigs, M_BH, aBH, alph; delt_a=0.0001, cheby=false
     # Process each configuration
     for (idx, (n, l, m, alph_threshold)) in enumerate(qtm_cfigs)
         if m > 5  # file not computed!
-            LinearInterpolation([0.0, 1.0], [1e-100, 1e-100], extrapolation_bc=Interpolations.Line())
+            interp_func = LinearInterpolation([0.0, 1.0], [1e-100, 1e-100], extrapolation_bc=Interpolations.Line())
             push!(interp_functions, interp_func)
             SR_rates[idx] = interp_func(aBH)
             continue
