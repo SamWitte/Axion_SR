@@ -512,7 +512,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
     end
 
     if return_all_info
-        return sol.t, state_out, idx_lvl, spinBH, MassB
+        return sol.t, state_out, modes, spinBH, MassB
     end
     
     if (sol.t[end] != t_max)&&(spinBH[end] > stop_on_a)
