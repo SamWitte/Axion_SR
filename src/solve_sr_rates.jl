@@ -1772,7 +1772,7 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
     
     function calc_Nν_initial_2()
         wI = sr_rates(n, l0, m, mu, M, a)
-        wR = GNew .* M .* ergL(n, l0, m, mu, M, a; full=false)
+        wR = GNew .* M .* ergL(n, l0, m, mu, M, a; full=true)
         nuR = (alph .* M).^2 ./ sqrt.((alph .* M).^2 .- wR.^2)
         nuI = nuR.^3 ./ (alph .* M)^3 .* (wI .* GNew .* M) .* sqrt.((nuR.^2 .- (alph .* M)^2) ./ nuR.^2)
         return nuR .+ im * nuI
@@ -1782,6 +1782,7 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
     # Hydrogenic frequency parameter ν (initial value)
     if isnothing(nu_guess)
         Nν = calc_Nν_initial_2()
+        # Nν = calc_Nν_initial()
     else
         Nν = BigFloat(real(nu_guess)) .+ BigFloat(imag(nu_guess))
     end

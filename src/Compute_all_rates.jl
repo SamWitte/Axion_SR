@@ -69,6 +69,12 @@ function main(;kpts=14, rpts=1000, rmaxT=100, Nang=200000, Npts_Bnd=2000)
     NON_REL = false
     h_mve = 1.0
     
+    prec=200
+    cvg_acc=1e-3
+    NptsCh=60
+    iterC=20
+    
+    
     min_m = minimum([parse(Int, S1[end]), parse(Int, S2[end]), parse(Int, S3[end])])
     alpha_max = a .* min_m ./ (2 .* (1 .+ sqrt.(1 .- a.^2))) .* 1.05
     
@@ -110,7 +116,7 @@ function main(;kpts=14, rpts=1000, rmaxT=100, Nang=200000, Npts_Bnd=2000)
             else
                 h_mve = 1.0
             end
-            output_sve[i] = gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, Npts_Bnd=Npts_Bnd, debug=false, eps_fac=1e-3, Ntot_safe=Ntot_safe, m=0, l=0, Nang=Nang, NON_REL=NON_REL, h_mve=h_mve, to_inf=to_inf, rmaxT=rmaxT, run_leaver=run_leaver)
+            output_sve[i] = gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, Npts_Bnd=Npts_Bnd, debug=false, eps_fac=1e-3, Ntot_safe=Ntot_safe, m=0, l=0, Nang=Nang, NON_REL=NON_REL, h_mve=h_mve, to_inf=to_inf, rmaxT=rmaxT, run_leaver=run_leaver, NptsCh=NptsCh, cvg_acc=cvg_acc, prec=prec, iterC=iterC)
         
             print("alpha \t", alpha_list[i], "\t", output_sve[i], "\n")
         end
