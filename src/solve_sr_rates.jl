@@ -1679,10 +1679,10 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
     # Iter number of iterations for the non-linear inversion
     
     setprecision(BigFloat, prec)  # Higher than requested precision for calculations
-    
+    mu = BigFloat(mu)
+    M = BigFloat(M)
     a = BigFloat(atilde) * M  # BH spin
     alph = BigFloat(mu .* GNew)
-    M = BigFloat(M)
     n0 = n - l0 - 1 # field overtone number
    
     
@@ -1790,8 +1790,8 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
 
     # Hydrogenic frequency parameter ν (initial value)
     if isnothing(nu_guess)
-        Nν = calc_Nν_initial_2()
-        # Nν = calc_Nν_initial()
+        # Nν = calc_Nν_initial_2()
+        Nν = calc_Nν_initial()
     else
         Nν = BigFloat(real(nu_guess)) .+ BigFloat(imag(nu_guess))
     end
