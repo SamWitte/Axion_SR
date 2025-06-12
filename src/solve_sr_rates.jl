@@ -1333,6 +1333,9 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         itp = LinearInterpolation(log10.(rl), r1, extrapolation_bc=Line())
         rf_1 = itp(log10.(rlist))
         if imag(erg_1) < 0
+            if debug
+                println("ERG 1", wR, " ", wI)
+            end
             return 0.0
         end
     end
@@ -1356,6 +1359,9 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             itp = LinearInterpolation(log10.(rl), r2, extrapolation_bc=Line())
             rf_2 = itp(log10.(rlist))
             if imag(erg_2) < 0
+                if debug
+                    println("ERG 2", wR, " ", wI)
+                end
                 return 0.0
             end
         end
@@ -1377,6 +1383,9 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         rf_3 = itp(log10.(rlist))
 
         if imag(erg_3) < 0
+            if debug
+                println("ERG 3", wR, " ", wI)
+            end
             return 0.0
         end
     end
