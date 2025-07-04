@@ -1327,7 +1327,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         if run_leaver
             rl, r1, erg_1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe)
         else
-            wR, wI, rl, r1 = eigensys_Cheby(M, a, mu, n1, l1, m1, return_wf=true, Npoints=NptsCh, Iter=iterC, cvg_acc=cvg_acc, Npts_r=Npts_Bnd, return_nu=false, prec=prec)
+            wR, wI, rl, r1 = eigensys_Cheby(M, a, mu, n1, l1, m1, return_wf=true, Npoints=20, Iter=iterC, cvg_acc=cvg_acc, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=true)
             erg_1 = wR .+ im .* wI
         end
         itp = LinearInterpolation(log10.(rl), r1, extrapolation_bc=Line())
@@ -1352,7 +1352,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             if run_leaver
                 rl, r2, erg_2 = solve_radial(mu, M, a, n2, l2, m2; rpts=Npts_Bnd,  return_erg=true, Ntot_safe=Ntot_safe)
             else
-                wR, wI, rl, r2 = eigensys_Cheby(M, a, mu, n2, l2, m2, return_wf=true, Npoints=NptsCh, Iter=iterC, cvg_acc=cvg_acc, Npts_r=Npts_Bnd, return_nu=false, prec=prec)
+                wR, wI, rl, r2 = eigensys_Cheby(M, a, mu, n2, l2, m2, return_wf=true, Npoints=20, Iter=iterC, cvg_acc=cvg_acc, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=true)
                 erg_2 = wR .+ im .* wI
             end
             
@@ -1375,7 +1375,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         if run_leaver
             rl, r3, erg_3 = solve_radial(mu, M, a, n3, l3, m3; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe)
         else
-            wR, wI, rl, r3 = eigensys_Cheby(M, a, mu, n3, l3, m3, return_wf=true, Npoints=NptsCh, Iter=iterC, cvg_acc=cvg_acc, Npts_r=Npts_Bnd, return_nu=false, prec=prec)
+            wR, wI, rl, r3 = eigensys_Cheby(M, a, mu, n3, l3, m3, return_wf=true, Npoints=20, Iter=iterC, cvg_acc=cvg_acc, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=true)
             erg_3 = wR .+ im .* wI
         end
         
@@ -1673,7 +1673,7 @@ function check_slv_rad(alph, m)
 end
 
 
-function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter=10, debug=false, return_wf=false, der_acc=1e-6, cvg_acc=1e-4, Npts_r=1000, nu_guess=nothing, return_nu=false)
+function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter=10, debug=false, return_wf=false, der_acc=1e-6, cvg_acc=1e-4, Npts_r=1000, nu_guess=nothing, return_nu=false, sfty_run=false)
     # L field spherical harmonic truncation l-eigenstate
     # Npoints number of Chebyshev interpolation points
     # Iter number of iterations for the non-linear inversion
@@ -1779,18 +1779,9 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
             prod(j^2 * (1 - a^2/M^2) + ((a*m)/M - 2*alph*rplus)^2 for j in 1:l0)
     end
     
-    function calc_Nν_initial_2()
-        wI = sr_rates(n, l0, m, mu, M, a)
-        wR = GNew .* M .* ergL(n, l0, m, mu, M, a; full=true)
-        nuR = (alph .* M).^2 ./ sqrt.((alph .* M).^2 .- wR.^2)
-        nuI = nuR.^3 ./ (alph .* M)^3 .* (wI .* GNew .* M) .* sqrt.((nuR.^2 .- (alph .* M)^2) ./ nuR.^2)
-        return nuR .+ im * nuI
-    end
-    
 
     # Hydrogenic frequency parameter ν (initial value)
     if isnothing(nu_guess)
-        # Nν = calc_Nν_initial_2()
         Nν = calc_Nν_initial()
     else
         Nν = BigFloat(real(nu_guess)) .+ BigFloat(imag(nu_guess))
@@ -2047,6 +2038,30 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
     
     if debug
         println("Final ν value: ", erg_out)
+    end
+    
+    if sfty_run
+        sfty = false
+        Npoints += 10
+        while !sfty
+            eR, eI = eigensys_Cheby(M, atilde, mu, n, l0, m; prec=prec, L=L, Npoints=Npoints, Iter=Iter, debug=debug, return_wf=false, der_acc=der_acc, cvg_acc=cvg_acc, Npts_r=Npts_r, nu_guess=nu_guess, return_nu=false, sfty_run=false)
+            imdiff = abs.(log10.(abs.(eI)) .- log10.(abs.(imag(erg_out)))) ./ abs.(log10.(abs.(eI)))
+            if debug
+                println(Npoints, "\t", eI, "\t", imag(erg_out))
+            end
+            if imdiff .<= 0.1
+                erg_out = eR + im * eI
+                sfty = true
+            else
+                erg_out = eR + im * eI
+            end
+            Npoints += 10
+            if Npoints > 150
+                println("Npoints exceeded 150.... ")
+                erg_out = eR + im * eI
+                sfty = true
+            end
+        end
     end
     
     

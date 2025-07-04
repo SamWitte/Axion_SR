@@ -136,7 +136,7 @@ function main_gg(run_leaver, solve_for_zeros, solve_gridded)
                         else
                             npts_use = Npoints
                         end
-                        wR, testF = eigensys_Cheby(M, a_guess, 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=npts_use, Iter=Iter, cvg_acc=cvg_acc, prec=prec)
+                        wR, testF = eigensys_Cheby(M, a_guess, 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=20, Iter=Iter, cvg_acc=cvg_acc, prec=prec, sfty_run=true)
                     end
                 
                     # print(cnt, "\t", a_guess, "\t", testF, "\n")
@@ -204,7 +204,7 @@ function main_gg(run_leaver, solve_for_zeros, solve_gridded)
                     if run_leaver
                         e_imgP = find_im_part(10 .^ alphList[i] ./ (GNew .* M), M, alistP[j], n, l, m; Ntot_force=Ntot_safe, return_both=false, for_s_rates=true)
                     else
-                        wR, e_imgP = eigensys_Cheby(M, alistP[j], 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=Npoints, Iter=Iter, cvg_acc=cvg_acc, prec=prec)
+                        wR, e_imgP = eigensys_Cheby(M, alistP[j], 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=20, Iter=Iter, cvg_acc=cvg_acc, prec=prec, sfty_run=true)
                     end
                     
                     if e_imgP > 0
