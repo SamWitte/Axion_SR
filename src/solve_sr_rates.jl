@@ -1780,12 +1780,7 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
     end
     
 
-    # Hydrogenic frequency parameter ν (initial value)
-    if isnothing(nu_guess)
-        Nν = calc_Nν_initial()
-    else
-        Nν = BigFloat(real(nu_guess)) .+ im * BigFloat(imag(nu_guess))
-    end
+
 
     # Now we can define ω
     function calc_ω(ν_val)
@@ -1793,6 +1788,15 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
     end
     function calc_ω_inv(ω)
         return sqrt.(((1 - (ω ./ alph).^2 ) ./ (alph^2*M^2) ).^-1)
+    end
+    
+    # Hydrogenic frequency parameter ν (initial value)
+    if isnothing(nu_guess)
+        # Nν = calc_Nν_initial()
+        eR, eI = find_im_part(alph ./ (GNew .* M), M, atilde, n, l, m; Ntot_force=4000, return_both=true)
+        Nν = calc_ω_inv(eR + im .* eI)
+    else
+        Nν = calc_ω_inv(BigFloat(real(nu_guess)) .+ im * BigFloat(imag(nu_guess)))
     end
     
     if debug
@@ -2047,7 +2051,7 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
         sfty = false
         Npoints += 10
         while !sfty
-            eR, eI = eigensys_Cheby(M, atilde, mu, n, l0, m; prec=prec, L=L, Npoints=Npoints, Iter=Iter, debug=debug, return_wf=false, der_acc=der_acc, cvg_acc=cvg_acc, Npts_r=Npts_r, nu_guess=calc_ω_inv(erg_out ./ M), return_nu=false, sfty_run=false)
+            eR, eI = eigensys_Cheby(M, atilde, mu, n, l0, m; prec=prec, L=L, Npoints=Npoints, Iter=Iter, debug=debug, return_wf=false, der_acc=der_acc, cvg_acc=cvg_acc, Npts_r=Npts_r, nu_guess=(erg_out ./ M), return_nu=false, sfty_run=false)
             imdiff = abs.(log10.(abs.(eI)) .- log10.(abs.(imag(erg_out)))) ./ minimum([abs.(log10.(abs.(eI))),abs.(log10.(abs.(imag(erg_out))))])
             if debug
                 println(Npoints, "\t", eI, "\t", imag(erg_out))
