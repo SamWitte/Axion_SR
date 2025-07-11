@@ -1784,12 +1784,15 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
     if isnothing(nu_guess)
         Nν = calc_Nν_initial()
     else
-        Nν = BigFloat(real(nu_guess)) .+ BigFloat(imag(nu_guess))
+        Nν = BigFloat(real(nu_guess)) .+ im * BigFloat(imag(nu_guess))
     end
 
     # Now we can define ω
     function calc_ω(ν_val)
         return alph * sqrt(1 - (alph^2*M^2)/ν_val^2)
+    end
+    function calc_ω_inv(ω)
+        return sqrt.(((1 - (ω ./ alph).^2 ) ./ (alph^2*M^2) ).^-1)
     end
     
     if debug
@@ -2044,8 +2047,8 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
         sfty = false
         Npoints += 10
         while !sfty
-            eR, eI = eigensys_Cheby(M, atilde, mu, n, l0, m; prec=prec, L=L, Npoints=Npoints, Iter=Iter, debug=debug, return_wf=false, der_acc=der_acc, cvg_acc=cvg_acc, Npts_r=Npts_r, nu_guess=nu_guess, return_nu=false, sfty_run=false)
-            imdiff = abs.(log10.(abs.(eI)) .- log10.(abs.(imag(erg_out)))) ./ abs.(log10.(abs.(eI)))
+            eR, eI = eigensys_Cheby(M, atilde, mu, n, l0, m; prec=prec, L=L, Npoints=Npoints, Iter=Iter, debug=debug, return_wf=false, der_acc=der_acc, cvg_acc=cvg_acc, Npts_r=Npts_r, nu_guess=calc_ω_inv(erg_out ./ M), return_nu=false, sfty_run=false)
+            imdiff = abs.(log10.(abs.(eI)) .- log10.(abs.(imag(erg_out)))) ./ minimum([abs.(log10.(abs.(eI))),abs.(log10.(abs.(imag(erg_out))))])
             if debug
                 println(Npoints, "\t", eI, "\t", imag(erg_out))
             end
