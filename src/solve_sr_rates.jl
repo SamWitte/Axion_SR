@@ -1793,7 +1793,7 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
     # Hydrogenic frequency parameter ν (initial value)
     if isnothing(nu_guess)
         # Nν = calc_Nν_initial()
-        eR, eI = find_im_part(alph ./ (GNew .* M), M, atilde, n, l, m; Ntot_force=4000, return_both=true)
+        eR, eI = find_im_part(alph ./ (GNew .* M), M, atilde, n, l0, m; Ntot_force=4000, return_both=true)
         Nν = calc_ω_inv(eR + im .* eI)
     else
         Nν = calc_ω_inv(BigFloat(real(nu_guess)) .+ im * BigFloat(imag(nu_guess)))
