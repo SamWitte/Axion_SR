@@ -78,7 +78,7 @@ Nmax = parsed_args["Nmax"]
 cheby = parsed_args["cheby"]
 tau_max = parsed_args["tau_max_override"]
 Nsamples = parsed_args["Nsamples"]
-Nwalkers = parsed_args["Nwalkers"]
+numsamples_perwalker = parsed_args["numsamples_perwalker"]
 
 delt_M = parsed_args["delt_M"]
 
