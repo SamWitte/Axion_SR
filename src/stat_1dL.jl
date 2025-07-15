@@ -10,7 +10,7 @@ using MCMCDiagnosticTools
 using Dates
 using KernelDensity
 
-function profileL_func_minimize(data, mass_ax, Fname, Nsamples; fa_min=1e11, fa_max=1e18, tau_max=1e4, non_rel=true, Nmax=3, cheby=false, delt_M=0.05, numsamples_perwalker=2000, burnin=500)
+function profileL_func_minimize(data, mass_ax, Fname, Nsamples; fa_min=1e11, fa_max=1e18, tau_max=1e4, non_rel=true, Nmax=3, cheby=false, delt_M=0.05, thinning=1, numsamples_perwalker=2000, burnin=500)
     
     ## data format: [M_1, M_2, chi_1, chi_2] samples
     
@@ -25,7 +25,7 @@ function profileL_func_minimize(data, mass_ax, Fname, Nsamples; fa_min=1e11, fa_
         Turing.@addlogprob! llhood(θ)      # Custom log-likelihood
     end
     
-    chain = sample(scalar_model(), MH(), MCMCThreads(), numsamples_perwalker)
+    chain = sample(scalar_model(), MH(), MCMCThreads(), numsamples_perwalker, Threads.nthreads())
     println(chain)
     println(describe(chain))
     
