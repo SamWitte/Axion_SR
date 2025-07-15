@@ -26,15 +26,15 @@ function profileL_func_minimize(data, mass_ax, Fname, Nsamples; fa_min=1e11, fa_
     end
     
     chain = sample(scalar_model(), MH(), MCMCThreads(), numsamples_perwalker, Threads.nthreads())
-    println(chain)
-    println(describe(chain))
+    # println(chain)
+    # println(describe(chain))
     
     posterior_samples = chain[burnin+1:end, :, :]
     
     samples = Array(chain)
     
-    println(samples)
-    println(size(samples))
+    # println(samples)
+    # println(size(samples))
 
     writedlm("output_mcmc/"*Fname*"_mcmc.dat", samples)
     
