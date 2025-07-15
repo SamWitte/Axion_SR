@@ -79,7 +79,7 @@ cheby = parsed_args["cheby"]
 tau_max = parsed_args["tau_max_override"]
 Nsamples = parsed_args["Nsamples"]
 numsamples_perwalker = parsed_args["numsamples_perwalker"]
-
+burnin = parsed_args["burnin"]
 delt_M = parsed_args["delt_M"]
 
 print("Deets...\n\n")
