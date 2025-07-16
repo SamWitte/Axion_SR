@@ -10,12 +10,12 @@ using MCMCDiagnosticTools
 using Dates
 using KernelDensity
 
-function profileL_func_minimize(data, mass_ax, Fname, Nsamples; fa_min=1e11, fa_max=1e18, tau_max=1e4, non_rel=true, Nmax=3, cheby=false, delt_M=0.05, thinning=1, numsamples_perwalker=2000, burnin=500)
+function profileL_func_minimize(data, mass_ax, Fname, Nsamples; fa_min=1e11, fa_max=1e18, tau_max=1e4, non_rel=true, Nmax=3, cheby=false, delt_M=0.05, thinning=1, numsamples_perwalker=2000, burnin=500, use_kde=true)
     
     ## data format: [M_1, M_2, chi_1, chi_2] samples
     
     function llhood(x)
-        ff = log_probability(x, data, mass_ax, fa_min=fa_min, fa_max=fa_max, tau_max=tau_max, non_rel=non_rel, Nmax=Nmax, cheby=cheby, Nsamples=Nsamples)
+        ff = log_probability(x, data, mass_ax, fa_min=fa_min, fa_max=fa_max, tau_max=tau_max, non_rel=non_rel, Nmax=Nmax, cheby=cheby, Nsamples=Nsamples, use_kde=use_kde)
         println(x, "\t", ff, "\n")
         return ff
     end
@@ -42,9 +42,9 @@ end
     
     
 
-function log_probability(theta, data, mass_ax; fa_min=1e11, fa_max=1e20, tau_max=5e7, non_rel=false, Nmax=3, cheby=false, delt_M=0.05, Nsamples=3)
+function log_probability(theta, data, mass_ax; fa_min=1e11, fa_max=1e20, tau_max=5e7, non_rel=false, Nmax=3, cheby=false, delt_M=0.05, Nsamples=3, use_kde=true)
     
-    return log_likelihood(theta, data, mass_ax, tau_max=tau_max, non_rel=non_rel, Nmax=Nmax, cheby=cheby, delt_M=delt_M, Nsamples=Nsamples)
+    return log_likelihood(theta, data, mass_ax, tau_max=tau_max, non_rel=non_rel, Nmax=Nmax, cheby=cheby, delt_M=delt_M, Nsamples=Nsamples, use_kde=use_kde)
 end
 
 function sample_spin(SpinBH_c, Spin_errD)
@@ -70,7 +70,7 @@ function sample_spin(SpinBH_c, Spin_errD)
     return SpinBH
 end
 
-function log_likelihood(theta, data, mass_ax; tau_max=1e4, non_rel=true, debug=false, Nmax=3, cheby=false, Nsamples=3, delt_M=0.05)
+function log_likelihood(theta, data, mass_ax; tau_max=1e4, non_rel=true, debug=false, Nmax=3, cheby=false, Nsamples=3, delt_M=0.05, use_kde=true)
     
     log_f = theta
     sum_loglike = 0.0
@@ -79,13 +79,22 @@ function log_likelihood(theta, data, mass_ax; tau_max=1e4, non_rel=true, debug=f
     
     sampled_data = data[idx_hold, :]
     
-    
+    ## note to self: check if strong correlations in mass/spin, could be something to think about putting Mf on cut
     for i in 1:Nsamples
         M1 = sampled_data[i, 1]
         M2 = sampled_data[i, 2]
         
-        kde_data = data[(data[:, 1] .>= M1 .* (1.0 .- delt_M)) .& (data[:, 1] .<= M1 .* (1.0 .+ delt_M)) .& (data[:, 2] .>= M2 .* (1.0 .- delt_M)) .& (data[:, 2] .<= M2 .* (1.0 .+ delt_M)), :]
+        delt_M_use = delt_M
+        kde_data = []
+        N_min_kde = 50
+        if length(data[:,1]) <= N_min_kde
+            N_min_kde = length(data[:,1]) ./ 2
+        end
         
+        while length(kde_data) < N_min_kde
+            kde_data = data[(data[:, 1] .>= M1 .* (1.0 .- delt_M_use)) .& (data[:, 1] .<= M1 .* (1.0 .+ delt_M_use)) .& (data[:, 2] .>= M2 .* (1.0 .- delt_M_use)) .& (data[:, 2] .<= M2 .* (1.0 .+ delt_M_use)), :]
+            delt_M_use *= 1.1
+        end
         
         spin1_c = mean(kde_data[:, 3])
         spin2_c = mean(kde_data[:, 4])
@@ -104,10 +113,13 @@ function log_likelihood(theta, data, mass_ax; tau_max=1e4, non_rel=true, debug=f
         println("Init / Final BH 1: ", M1, " ", s1, " ", final_mass_1, " ", final_spin_1)
         println("Init / Final BH 2: ", M2, " ", s2, " ", final_mass_2, " ", final_spin_2)
         
-        # Perform 2D kernel density estimation
-        kdespins = kde((kde_data[:,3], kde_data[:, 4]))
-        
-        likelihood = pdf(kdespins, final_spin_1, final_spin_2)
+        if use_kde
+            # Perform 2D kernel density estimation
+            kdespins = kde((kde_data[:,3], kde_data[:, 4]))
+            likelihood = pdf(kdespins, final_spin_1, final_spin_2)
+        else
+            likelihood = exp.(-(final_spin_1 .- spin1_c).^2 ./ (2 .* spin1_d.^2)) .* exp.(-(final_spin_2 .- spin2_c).^2 ./ (2 .* spin2_d.^2))
+        end
         if likelihood .> 0.0
             sum_loglike += log.(likelihood)
         else

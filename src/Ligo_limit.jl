@@ -3,7 +3,7 @@ using DelimitedFiles
 using ArgParse
 using KernelDensity, StatsBase
 using QuadGK
-
+using Interpolations
 
 function parse_commandline()
     s = ArgParseSettings()
@@ -28,11 +28,12 @@ function parse_commandline()
 
         "--tau_max_override"
             arg_type = Float64
-            default = 5.0e6
+            default = 4.5e7
             
         "--delt_M"
             arg_type = Float64
             default = 0.05
+            
             
         "--Ftag"
             arg_type = String
@@ -60,7 +61,15 @@ function parse_commandline()
             
         "--targetP"
             arg_type = Float64
-            default 0.95
+            default = 0.95
+            
+        "--use_kde"
+            arg_type = Bool
+            default = true
+            
+        "--kde_test"
+            arg_type = Bool
+            default = false
 
     end
 
@@ -86,6 +95,8 @@ Nwalkers = parsed_args["Nwalkers"]
 delt_M = parsed_args["delt_M"]
 
 targetP = parsed_args["targetP"]
+kde_test = parsed_args["kde_test"]
+use_kde = parsed_args["use_kde"]
 
 
 Fname = "LIGO_"*dataname*"_TauMax_"*string(round(tau_max, sigdigits=2))
@@ -100,47 +111,61 @@ if non_rel
 else
     Fname *= "_FullRel_"
 end
+if use_kde
+    Fname *= "_KDE_"
+else
+    Fname *= "_GA_"
+end
 
-fileList = Glob.GlobMatch("output_mcmc/"*Fname*"_mcmc.dat")
+fileList = Glob.glob("output_mcmc/"*Fname*"_mcmc.dat")
 
 
 output_lim = zeros(length(fileList), 2)
 for i in 1:length(fileList)
     # grab mass
     pattern = r"M_ax_(-?\d+(\.\d+)?([eE][+-]?\d+)?)"
-    max = match(pattern, str)
+    max = match(pattern, fileList[i])
     value_str = max.captures[1]
     value = parse(Float64, value_str)
     
     # get limit
-    input_data = readdlm(fileList[i])
+    input_data = vec(readdlm(fileList[i]))
     
     # Compute KDE
     kd = kde(input_data)
+    # Create linear interpolation from the KDE
+    itp = interpolate(kd.density, BSpline(Linear()))
+    x_itp = range(first(kd.x), last(kd.x), length=length(kd.x))
+    f_interp = extrapolate(scale(itp, x_itp), Flat())  # safely extrapolate beyond bounds
 
     # kd.x = points where density is evaluated
     # kd.density = density values
-    function kde_cdf(kd_in, x)
-        integral, _ = quadgk(t -> interp1d(kd_in.x, kd_in.density, t), minimum(kd_in.x), x)
+    function kde_cdf(x)
+        integral, _ = quadgk(t -> f_interp(t), minimum(kd.x), x)
         return integral
+    end
+    
+    if kde_test
+        faL = LinRange(log10.(fa_min), log10.(fa_max), 50)
+        writedlm("output_mcmc/KDE_"*string(i)*".dat", cat(faL, f_interp(faL), dims=2))
     end
     
     f_low = log10.(fa_min)
     f_high = log10.(fa_max)
-    f_test = mean(f_low, f_high)
+    f_test = mean([f_low, f_high])
     found_it = false
     npt=0
     while !found_it
-        cdfV = kde_cdf(kd, f_test)
+        cdfV = kde_cdf(f_test)
         if abs.(cdfV - targetP) < 0.001
             found_it = true
         else
             if cdfV > targetP
                 f_high = f_test
-                f_test = mean(f_low, f_high)
+                f_test = mean([f_low, f_high])
             else
                 f_low = f_test
-                f_test = mean(f_low, f_high)
+                f_test = mean([f_low, f_high])
             end
             npt += 1
             
@@ -165,6 +190,11 @@ if non_rel
     Fname *= "_NonRel_"
 else
     Fname *= "_FullRel_"
+end
+if use_kde
+    Fname *= "_KDE_"
+else
+    Fname *= "_GA_"
 end
 
 

@@ -58,6 +58,10 @@ function parse_commandline()
         "--burnin"
             arg_type = Int
             default = 500
+            
+        "--use_kde"
+            arg_type = Bool
+            default = true
 
     end
 
@@ -81,6 +85,7 @@ Nsamples = parsed_args["Nsamples"]
 numsamples_perwalker = parsed_args["numsamples_perwalker"]
 burnin = parsed_args["burnin"]
 delt_M = parsed_args["delt_M"]
+use_kde = parsed_args["use_kde"]
 
 print("Deets...\n\n")
 println("Datafile: ", dataname)
@@ -89,6 +94,7 @@ println("Nmax: ", Nmax)
 println("Use Cheby (if not, Leaver): ", cheby)
 println("Nonrel? : ", non_rel)
 println("Tau max : ", tau_max)
+println("Use KDE : ", use_kde)
 
 println("Ax mass : ", ax_mass)
 println("Fa min : ", fa_min)
@@ -113,10 +119,16 @@ if non_rel
 else
     Fname *= "_FullRel_"
 end
+
+if use_kde
+    Fname *= "_KDE_"
+else
+    Fname *= "_GA_"
+end
  
 
 time0=Dates.now()
-@inbounds @fastmath profileL_func_minimize(data, ax_mass, Fname, Nsamples, fa_min=fa_min, fa_max=fa_max, tau_max=tau_max, non_rel=non_rel, Nmax=Nmax, cheby=cheby, numsamples_perwalker=numsamples_perwalker, delt_M=delt_M, burnin=burnin)
+@inbounds @fastmath profileL_func_minimize(data, ax_mass, Fname, Nsamples, fa_min=fa_min, fa_max=fa_max, tau_max=tau_max, non_rel=non_rel, Nmax=Nmax, cheby=cheby, numsamples_perwalker=numsamples_perwalker, delt_M=delt_M, burnin=burnin, use_kde=use_kde)
 
 time1=Dates.now()
 print("\n\n Run time: ", time1-time0, "\n")
