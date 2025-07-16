@@ -21,7 +21,7 @@ function ergL(n, l, m, massB, MBH, a; full=true)
     # Key to next level
     alph = GNew * MBH * massB
     if full
-        if l > 0
+        if (l > 0)
             return massB .* (1.0 .- alph.^2 ./ (2 .* n.^2) .- alph.^4 ./ (8 * n.^4) .+ alph.^4 ./ n^4 .* (2 .* l .- 3 .* n .+ 1) ./ (l .+ 0.5) .+ 2 .* a .* m .* alph.^5 ./ n^3 ./ (l .* (l .+ 0.5) .* (l .+ 1)))
         else
             return massB .* (1.0 .- alph.^2 ./ (2 .* n.^2) .- alph.^4 ./ (8 * n.^4) .+ alph.^4 ./ n^4 .* (2 .* l .- 3 .* n .+ 1) ./ (l .+ 0.5))
@@ -1288,7 +1288,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     erg_1G = ergL(n1, l1, m1, mu, M, a; full=true)
     erg_2G = ergL(n2, l2, m2, mu, M, a; full=true)
     erg_3G = ergL(n3, l3, m3, mu, M, a; full=true)
-    erg_pxy = erg_1G + erg_2G - erg_3G
+    erg_pxy = (erg_1G + erg_2G - erg_3G) .* GNew .* M
     
     maxN = maximum([n1 n2 n3])
     minN = maximum([n1 n2 n3])
@@ -1327,7 +1327,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         if run_leaver
             rl, r1, erg_1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe)
         else
-            wR, wI, rl, r1 = eigensys_Cheby(M, a, mu, n1, l1, m1, return_wf=true, Npoints=20, Iter=iterC, cvg_acc=cvg_acc, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=true)
+            wR, wI, rl, r1 = eigensys_Cheby(M, a, mu, n1, l1, m1, return_wf=true, Npoints=NptsCh, Iter=iterC, cvg_acc=cvg_acc, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=true)
             erg_1 = wR .+ im .* wI
         end
         itp = LinearInterpolation(log10.(rl), r1, extrapolation_bc=Line())
@@ -1352,7 +1352,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             if run_leaver
                 rl, r2, erg_2 = solve_radial(mu, M, a, n2, l2, m2; rpts=Npts_Bnd,  return_erg=true, Ntot_safe=Ntot_safe)
             else
-                wR, wI, rl, r2 = eigensys_Cheby(M, a, mu, n2, l2, m2, return_wf=true, Npoints=20, Iter=iterC, cvg_acc=cvg_acc, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=true)
+                wR, wI, rl, r2 = eigensys_Cheby(M, a, mu, n2, l2, m2, return_wf=true, Npoints=NptsCh, Iter=iterC, cvg_acc=cvg_acc, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=true)
                 erg_2 = wR .+ im .* wI
             end
             
@@ -1375,7 +1375,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         if run_leaver
             rl, r3, erg_3 = solve_radial(mu, M, a, n3, l3, m3; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe)
         else
-            wR, wI, rl, r3 = eigensys_Cheby(M, a, mu, n3, l3, m3, return_wf=true, Npoints=20, Iter=iterC, cvg_acc=cvg_acc, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=true)
+            wR, wI, rl, r3 = eigensys_Cheby(M, a, mu, n3, l3, m3, return_wf=true, Npoints=NptsCh, Iter=iterC, cvg_acc=cvg_acc, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=true)
             erg_3 = wR .+ im .* wI
         end
         
