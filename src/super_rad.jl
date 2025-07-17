@@ -10,11 +10,12 @@ include("solve_sr_rates.jl")
 include("load_rates.jl")
 using Printf
 
-function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_cut=100.0, debug=false, impose_low_cut=0.01, stop_on_a=0, eq_threshold=1e-100, abstol=1e-30, non_rel=true, high_p=true, N_pts_interp=15, N_pts_interpL=10, Nmax=3, cheby=false)
+function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_cut=100.0, debug=false, impose_low_cut=0.01, stop_on_a=0, eq_threshold=1e-100, abstol=1e-30, non_rel=true, high_p=true, N_pts_interp=100, N_pts_interpL=100, Nmax=3, cheby=false)
    
     alph = GNew .* M_BH .* massB #
     if debug
         print("Alpha \t", alph, "\n")
+        print("Solving system... \n")
     end
     
     if alph .> alpha_max_cut
@@ -26,14 +27,12 @@ function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_c
         return aBH, M_BH
     end
     
-
-    print("Solving system... \n")
-
     final_spin, final_BH = solve_system(massB, f_a, aBH, M_BH, tau_max, debug=debug, impose_low_cut=impose_low_cut, stop_on_a=stop_on_a, eq_threshold=eq_threshold, abstol=abstol, non_rel=non_rel, high_p=high_p, N_pts_interp=N_pts_interp, N_pts_interpL=N_pts_interpL, Nmax=Nmax, cheby=cheby)
 
-    
-    print("Spin diff.. \t ", aBH, "\t", final_spin, "\t", alph, "\n")
-    print("Mass diff.. \t ", M_BH, "\t", final_BH, "\t", alph, "\n")
+    if debug
+        print("Spin diff.. \t ", aBH, "\t", final_spin, "\t", alph, "\n")
+        print("Mass diff.. \t ", M_BH, "\t", final_BH, "\t", alph, "\n")
+    end
     return final_spin, final_BH
     
 end
