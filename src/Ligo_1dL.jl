@@ -100,6 +100,8 @@ println("Ax mass : ", ax_mass)
 println("Fa min : ", fa_min)
 println("Fa max : ", fa_max)
 
+#### if file exists, don't run! ...
+dont_over_run = true
 
 
 
@@ -125,11 +127,15 @@ if use_kde
 else
     Fname *= "_GA_"
 end
- 
 
-time0=Dates.now()
-@inbounds @fastmath profileL_func_minimize(data, ax_mass, Fname, Nsamples, fa_min=fa_min, fa_max=fa_max, tau_max=tau_max, non_rel=non_rel, Nmax=Nmax, cheby=cheby, numsamples_perwalker=numsamples_perwalker, delt_M=delt_M, burnin=burnin, use_kde=use_kde)
 
-time1=Dates.now()
-print("\n\n Run time: ", time1-time0, "\n")
+check_exists = "output_mcmc/"*Fname*"_mcmc.dat"
+if dont_over_run and isfile(check_exists)
+    continue
+else
+    time0=Dates.now()
+    @inbounds @fastmath profileL_func_minimize(data, ax_mass, Fname, Nsamples, fa_min=fa_min, fa_max=fa_max, tau_max=tau_max, non_rel=non_rel, Nmax=Nmax, cheby=cheby, numsamples_perwalker=numsamples_perwalker, delt_M=delt_M, burnin=burnin, use_kde=use_kde)
 
+    time1=Dates.now()
+    print("\n\n Run time: ", time1-time0, "\n")
+end
