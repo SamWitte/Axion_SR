@@ -130,7 +130,7 @@ end
 
 
 check_exists = "output_mcmc/"*Fname*"_mcmc.dat"
-if dont_over_run and isfile(check_exists)
+if dont_over_run && isfile(check_exists)
     continue
 else
     time0=Dates.now()
