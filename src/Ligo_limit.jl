@@ -197,5 +197,5 @@ else
     Fname *= "_GA_"
 end
 
-sorted_out = vcat(sort(collect(eachrow(output_lim)), by = x -> x[1])...)
+sorted_out = sort(collect(eachrow(output_lim)), by = x -> x[1])
 writedlm("output_mcmc/Lim_"*Fname*".dat", sorted_out)
