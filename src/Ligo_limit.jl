@@ -197,5 +197,6 @@ else
     Fname *= "_GA_"
 end
 
-
-writedlm("output_mcmc/Lim_"*Fname*".dat", output_lim)
+sorted_out = sort(eachrow(output_lim), by = x -> x[1]) |> collect
+sorted_out = vcat(sorted_out...)  # convert back to a Matrix
+writedlm("output_mcmc/Lim_"*Fname*".dat", sorted_out)
