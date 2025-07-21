@@ -10,7 +10,7 @@ using MCMCDiagnosticTools
 using Dates
 using KernelDensity
 
-function profileL_func_minimize(data, mass_ax, Fname, Nsamples; fa_min=1e11, fa_max=1e18, tau_max=1e4, non_rel=true, Nmax=3, cheby=false, delt_M=0.05, thinning=1, numsamples_perwalker=2000, burnin=500, use_kde=true)
+function profileL_func_minimize(data, mass_ax, Fname, Nsamples; fa_min=1e11, fa_max=1e18, tau_max=1e4, non_rel=true, Nmax=3, cheby=false, delt_M=0.05, thinning=1, numsamples_perwalker=2000, burnin=500, use_kde=true, over_run=true)
     
     ## data format: [M_1, M_2, chi_1, chi_2] samples
     
@@ -33,10 +33,14 @@ function profileL_func_minimize(data, mass_ax, Fname, Nsamples; fa_min=1e11, fa_
     
     samples = Array(chain)
     
-    # println(samples)
-    # println(size(samples))
-
-    writedlm("output_mcmc/"*Fname*"_mcmc.dat", samples)
+    fout = "output_mcmc/"*Fname*"_mcmc.dat"
+    if isfile(fout) && over_run
+        fin = readdlm(fout)
+        fnew = cat(fin, samples, dims=1)
+        writedlm(fout, fnew)
+    else
+        writedlm(fout, samples)
+    end
     
 end
     
