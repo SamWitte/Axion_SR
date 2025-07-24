@@ -49,7 +49,7 @@ function isapproxsigfigs(a, b, precision)
     return round(a, sigdigits=precision) == round(b, sigdigits=precision)
 end
 
-function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impose_low_cut=0.01, return_all_info=false, eq_threshold=1e-100, stop_on_a=0, abstol=1e-30, non_rel=true, high_p=true, N_pts_interp=10, N_pts_interpL=5,  Nmax=3, cheby=false)
+function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impose_low_cut=0.01, return_all_info=false, eq_threshold=1e-100, stop_on_a=0, abstol=1e-30, non_rel=true, high_p=true, N_pts_interp=200, N_pts_interpL=200,  Nmax=3, cheby=false)
 
     alph = GNew .* M_BH .* mu
     if debug
@@ -121,7 +121,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
     append!(y0, M_BH)
     y0 = log.(y0)
     
-    def_spin_tol = 1e-5
+    def_spin_tol = 1e-3
     append!(reltol, def_spin_tol)
     append!(reltol, def_spin_tol)
     
@@ -288,7 +288,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
         
         u_real = exp.(u)
         rate_keys = collect(keys(rates))
-
+        
         all_contribs = zeros(idx_lvl)
         test = zeros(idx_lvl)
         u_fake = u_real * 1.1 # was 2!
@@ -312,6 +312,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
             turn_off_M = true
         end
         
+        # println(integrator.t, "\t", 10 .^integrator.u[1], "\t", 10 .^integrator.u[4], "\t", 10 .^integrator.u[end-1])
         
         for i in 1:length(rate_keys)
             idxV, sgn = key_to_indx(rate_keys[i], Nmax)
@@ -399,7 +400,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
             end
         end
         
-       
+        
 
         if (integrator.dt ./ tmin .>= 1)
             set_proposed_dt!(integrator, tmin .* 0.1)
