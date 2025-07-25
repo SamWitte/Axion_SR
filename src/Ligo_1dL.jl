@@ -128,11 +128,17 @@ else
     Fname *= "_GA_"
 end
 
+if Nmax==3
+    high_p=true
+else
+    high_p=false
+end
+
 
 check_exists = "output_mcmc/"*Fname*"_mcmc.dat"
 if (!dont_over_run || !isfile(check_exists))
     time0=Dates.now()
-    @inbounds @fastmath profileL_func_minimize(data, ax_mass, Fname, Nsamples, fa_min=fa_min, fa_max=fa_max, tau_max=tau_max, non_rel=non_rel, Nmax=Nmax, cheby=cheby, numsamples_perwalker=numsamples_perwalker, delt_M=delt_M, burnin=burnin, use_kde=use_kde, over_run=true)
+    @inbounds @fastmath profileL_func_minimize(data, ax_mass, Fname, Nsamples, fa_min=fa_min, fa_max=fa_max, tau_max=tau_max, non_rel=non_rel, Nmax=Nmax, cheby=cheby, numsamples_perwalker=numsamples_perwalker, delt_M=delt_M, burnin=burnin, use_kde=use_kde, over_run=true, high_p=high_p)
 
     time1=Dates.now()
     print("\n\n Run time: ", time1-time0, "\n")
