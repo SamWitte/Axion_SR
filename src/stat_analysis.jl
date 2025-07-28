@@ -30,7 +30,9 @@ function log_probability(theta, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high; 
         return -Inf
     end
 
-    return lp + log_likelihood(theta, data, tau_max=tau_max, alpha_max_cut=alpha_max_cut, use_input_table=use_input_table,  impose_low_cut=impose_low_cut, max_mass_matrix=max_mass_matrix, stop_on_a=stop_on_a, eq_threshold=eq_threshold, abstol=abstol, non_rel=non_rel, Nmax=Nmax, cheby=cheby)
+    temp =  lp + log_likelihood(theta, data, tau_max=tau_max, alpha_max_cut=alpha_max_cut, use_input_table=use_input_table,  impose_low_cut=impose_low_cut, max_mass_matrix=max_mass_matrix, stop_on_a=stop_on_a, eq_threshold=eq_threshold, abstol=abstol, non_rel=non_rel, Nmax=Nmax, cheby=cheby)
+    
+    return temp
 end
 
 function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_table=true, impose_low_cut=1e-100, max_mass_matrix=nothing, stop_on_a=0.0, eq_threshold=1e-100, abstol=1e-30, non_rel=true, debug=false, Nmax=3, cheby=false)
@@ -123,11 +125,7 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
                 sum_loglike += -0.5 * (SpinBH_c[i] - final_spin).^2 / SpinBH_errD[i].^2
             end
             
-#            if final_mass > MassBH_c[i]
-#                sum_loglike += -0.5 * (MassBH_c[i] - final_mass).^2 / MassBH_errU[i].^2
-#            else
-#                sum_loglike += -0.5 * (MassBH_c[i] - final_mass).^2 / MassBH_errD[i].^2
-#            end
+            
             
         end
     else

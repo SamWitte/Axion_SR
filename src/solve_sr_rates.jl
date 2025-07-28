@@ -1626,6 +1626,7 @@ function pre_computed_sr_rates(n, l, m, alph, M; n_high=20, n_low=20, delt_a=0.0
         else
             file_in = npzread("rate_sve/Imag_ergC_pos_$(n)$(l)$(m).npz")
         end
+        file_in[:, :, 3] .*= 2.0
         alpha_load = unique(file_in[:,:,1])
         a_load = unique(file_in[:,:,2])
         file_in[file_in[:, :, 3] .<= 0.0, 3] .= 1e-100
@@ -1643,7 +1644,7 @@ function pre_computed_sr_rates(n, l, m, alph, M; n_high=20, n_low=20, delt_a=0.0
         else
             file_in = npzread("rate_sve/Imag_ergC_neg_$(n)$(l)$(m).npz")
         end
-        
+        file_in[:, :, 3] .*= 2.0
         alpha_load = unique(file_in[:,:,1])
         a_load = unique(file_in[:,:,2])
         file_in[file_in[:, :, 3] .<= 0.0, 3] .= 1e-100
@@ -1784,7 +1785,7 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
 
     # Now we can define ω
     function calc_ω(ν_val)
-        return alph * sqrt(1 - (alph^2*M^2)/ν_val^2)
+        return alph .* sqrt.(1 .- (alph .^2 .* M.^2) ./ ν_val.^2)
     end
     function calc_ω_inv(ω)
         return sqrt.(((1 - (ω ./ alph).^2 ) ./ (alph^2*M^2) ).^-1)
@@ -1796,7 +1797,17 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
         eR, eI = find_im_part(alph ./ (GNew .* M), M, atilde, n, l0, m; Ntot_force=4000, return_both=true)
         Nν = calc_ω_inv(eR + im .* eI)
     else
-        Nν = calc_ω_inv(BigFloat(real(nu_guess)) .+ im * BigFloat(imag(nu_guess)))
+        erg_in = BigFloat(real(nu_guess)) .+ im * BigFloat(imag(nu_guess))
+        Nν = calc_ω_inv(erg_in)
+        
+    end
+    
+    
+    function R(r, ν_val)
+        # Hydrogenic radial wave function
+        return ((2*r*M*alph^2)/(l0 + n0 + 1))^l0 *
+                exp(-((r*M*alph^2)/(l0 + n0 + 1))) *
+                generalized_laguerre(n - l0 - 1, 2 * l0 + 1, (2*r*M*alph^2)/(l0 + n0 + 1))
     end
     
     if debug
@@ -1864,13 +1875,7 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
                 r^2*(2 - 3*ν_val + ν_val^2) + rplus^2*(2 - 3*ν_val + ν_val^2)))
     end
 
-    # Hydrogenic radial wave function
-    function R(r, ν_val)
-        return ((2*r*M*alph^2)/(l0 + n0 + 1))^l0 *
-               exp(-((r*M*alph^2)/(l0 + n0 + 1))) *
-               generalized_laguerre(n - l0 - 1, 2 * l0 + 1, (2*r*M*alph^2)/(l0 + n0 + 1))
-               
-    end
+
 
     # Function to build equation coefficients
     function build_coefficients(ν_val)
@@ -1992,7 +1997,9 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
         BnumNorm = Vector{Vector{Complex{BigFloat}}}(undef, Iter+1)
         
         # Initial guess
+        
         Bnum[1] = build_initial_vector()
+        
         BnumNorm[1] = Bnum[1] / sqrt(dot(conj(Bnum[1]), Bnum[1]))
         
         # Normalization vector
@@ -2002,6 +2009,7 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
         final_idx = 1
         i = 1
         while i < (Iter + 1)
+
             A_i = build_matrix(Nν_values[i])
             b_i = build_derivative_matrix(Nν_values[i]) * BnumNorm[i]
             
@@ -2011,6 +2019,7 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
             # Update eigenvalue estimate
             Nν_values[i+1] = Nν_values[i] - dot(conj(VEC), BnumNorm[i]) / dot(conj(VEC), Bnum[i+1])
             
+
             # Normalize solution vector
             BnumNorm[i+1] = Bnum[i+1] / sqrt(dot(conj(Bnum[i+1]), Bnum[i+1]))
             
@@ -2023,6 +2032,7 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
                 erg_test = calc_ω(Nν_values[i+1])
                 test_convR = abs.(real.(erg_test .- erg_test_init) ./ real.(erg_test_init))
                 test_convI = abs.(imag.(erg_test .- erg_test_init) ./ imag.(erg_test_init))
+                # println(test_convR, "\t", test_convI)
                 if (test_convR < cvg_acc)&&(test_convI < cvg_acc)
                     final_idx = i
                     i = Iter + 1
@@ -2053,10 +2063,11 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
         while !sfty
             eR, eI = eigensys_Cheby(M, atilde, mu, n, l0, m; prec=prec, L=L, Npoints=Npoints, Iter=Iter, debug=debug, return_wf=false, der_acc=der_acc, cvg_acc=cvg_acc, Npts_r=Npts_r, nu_guess=(erg_out ./ M), return_nu=false, sfty_run=false)
             imdiff = abs.(log10.(abs.(eI)) .- log10.(abs.(imag(erg_out)))) ./ minimum([abs.(log10.(abs.(eI))),abs.(log10.(abs.(imag(erg_out))))])
+            realdiff = abs.(log10.(abs.(eR)) .- log10.(abs.(real(erg_out)))) ./ minimum([abs.(log10.(abs.(eR))),abs.(log10.(abs.(real(erg_out))))])
             if debug
                 println(Npoints, "\t", eI, "\t", imag(erg_out))
             end
-            if imdiff .<= 0.1
+            if (imdiff .<= 0.1)&&(realdiff .<= 1e-3)
                 erg_out = eR + im * eI
                 sfty = true
             else
@@ -2125,4 +2136,7 @@ end
 
 
 # test run of system
-# @time eigensys_Cheby(1, 0.95, 0.01 ./ GNew, 4, 3, 3, debug=true, return_wf=true, L=4, Npoints = 60, Iter = 20,  der_acc=1e-6, cvg_acc=1e-3, prec=100, Npts_r=50)
+# @time wR, wI, rl, r3 = eigensys_Cheby(1, 0.998, 1.0 ./ GNew, 8, 4, 4, debug=true, return_wf=true, L=6, Npoints = 50, Iter = 50,  der_acc=1e-8, cvg_acc=1e-5, prec=200, Npts_r=4000, sfty_run=true)
+# println(wI)
+# println(cat(rl, r3, dims=1))
+# writedlm("test.dat", cat(real.(rl), real.(abs.(r3 .* conj(r3))), dims=2))
