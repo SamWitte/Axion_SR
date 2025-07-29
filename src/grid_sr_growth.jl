@@ -43,11 +43,11 @@ function main_gg(run_leaver, solve_for_zeros, solve_gridded)
     ftol=1e-50
     iter=50
 
-    Npoints = 60
-    Iter = 20
-    cvg_acc = 1e-3
+    Npoints = 70
+    Iter = 50
+    cvg_acc = 1e-4
     Npts_r = 1000
-    prec=200
+    prec=300
     
     debug=true
 
@@ -136,7 +136,7 @@ function main_gg(run_leaver, solve_for_zeros, solve_gridded)
                         else
                             npts_use = Npoints
                         end
-                        wR, testF = eigensys_Cheby(M, a_guess, 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=20, Iter=Iter, cvg_acc=cvg_acc, prec=prec, sfty_run=true)
+                        wR, testF = eigensys_Cheby(M, a_guess, 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=Npoints, Iter=Iter, cvg_acc=cvg_acc, prec=prec, sfty_run=true)
                     end
                 
                     # print(cnt, "\t", a_guess, "\t", testF, "\n")
@@ -198,13 +198,22 @@ function main_gg(run_leaver, solve_for_zeros, solve_gridded)
 
             
             alistP = LinRange(a_min, a_max, aPts)
+            
             for i in 1:alpha_pts
                 a_mid = itp(10 .^ alphList[i])
-                for j in 1:aPts
+                erg_store = nothing
+                for j in 1:length(alistP)
                     if run_leaver
                         e_imgP = find_im_part(10 .^ alphList[i] ./ (GNew .* M), M, alistP[j], n, l, m; Ntot_force=Ntot_safe, return_both=false, for_s_rates=true)
                     else
-                        wR, e_imgP = eigensys_Cheby(M, alistP[j], 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=20, Iter=Iter, cvg_acc=cvg_acc, prec=prec, sfty_run=true)
+                        if j == 1
+                            wR, e_imgP = eigensys_Cheby(M, alistP[j], 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=Npoints, Iter=Iter, cvg_acc=cvg_acc, prec=prec, sfty_run=true)
+                            erg_store = wR + im .* e_imgP
+                        else
+                            
+                            wR, e_imgP = eigensys_Cheby(M, alistP[j], 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=Npoints, Iter=Iter, cvg_acc=cvg_acc, prec=prec, sfty_run=true, nu_guess=erg_store)
+                            erg_store = wR + im .* e_imgP
+                        end
                     end
                     
                     if e_imgP > 0
@@ -214,8 +223,9 @@ function main_gg(run_leaver, solve_for_zeros, solve_gridded)
                         store_M[i, j, :] = [10 .^ alphList[i] alistP[j] -e_imgP[1]]
                         store_P[i, j, :] = [10 .^ alphList[i] alistP[j] 1e-100]
                     end
-                
+                    println("Here \t", 10 .^ alphList[i], "\t", alistP[j], "\t", e_imgP[1])
                 end
+                    
             end
             
             npzwrite("rate_sve/"*file_out, store_P)

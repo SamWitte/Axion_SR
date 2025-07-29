@@ -1673,6 +1673,37 @@ function check_slv_rad(alph, m)
     end
 end
 
+function precomputed_spin1(alph, a, M)
+    rp = 1 .+ sqrt.(1 .- a.^2)
+    Alist = [0.142 -1.17 3.024 -3.234 1.244; -1.298 6.601 -15.21 14.47 -5.070; 0.726 -8.516 15.43 -11.15 3.277]
+    Blist = [-27.76 114.9 -311.1 177.2; -14.05 20.78 -36.84 58.37; 14.78 -4.574 -248.5 108.1]
+    Clist = [48.86 -8.430 45.66 -132.8 52.48; -31.20 32.52 -73.50 161.0 -91.27; 189.1 -85.32 388.6 -1057 566.1]
+    alphaL = []
+    betaL = []
+
+    for i in 1:3
+        temp = 0.0
+        for j in 1:length(Alist[i,:])
+            temp += Alist[i,j] .* (1-a.^2).^((j-1)/2)
+        end
+        push!(alphaL, temp)
+        
+        temp = 0.0
+        for j in 1:length(Clist[i,:])
+            if j > 1
+                temp += Blist[i,j-1] .* (1-a.^2).^((j-1)/2)
+            end
+            temp += Clist[i,j] .* a.^(j .- 1)
+        end
+        push!(betaL, temp)
+    end
+    
+    wR = alph .* (1 .+ alphaL[1] .* alph .+ alphaL[2] .* alph.^2 .+ alphaL[3] .* alph.^3)
+    wI = betaL[1] .*  alph .^ 7 .* (1 .+ betaL[2] .* alph .+ betaL[3] .* alph.^2 ) .* (a .- wR .* rp)
+    
+    return wR ./ (GNew .* M), wI ./ (GNew .* M)
+end
+
 
 function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter=10, debug=false, return_wf=false, der_acc=1e-6, cvg_acc=1e-4, Npts_r=1000, nu_guess=nothing, return_nu=false, sfty_run=false)
     # L field spherical harmonic truncation l-eigenstate
@@ -1793,9 +1824,12 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
     
     # Hydrogenic frequency parameter ν (initial value)
     if isnothing(nu_guess)
-        # Nν = calc_Nν_initial()
-        eR, eI = find_im_part(alph ./ (GNew .* M), M, atilde, n, l0, m; Ntot_force=4000, return_both=true)
-        Nν = calc_ω_inv(eR + im .* eI)
+        if (alph < 0.05)&&(atilde < 0.9)
+            Nν = calc_Nν_initial()
+        else
+            eR, eI = find_im_part(alph ./ (GNew .* M), M, atilde, n, l0, m; Ntot_force=10000, return_both=true)
+            Nν = calc_ω_inv(eR + im .* eI)
+        end
     else
         erg_in = BigFloat(real(nu_guess)) .+ im * BigFloat(imag(nu_guess))
         Nν = calc_ω_inv(erg_in)
@@ -2074,8 +2108,8 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
                 erg_out = eR + im * eI
             end
             Npoints += 10
-            if Npoints > 150
-                println("Npoints exceeded 150.... ")
+            if Npoints > 190
+                println("Npoints exceeded 190.... ")
                 erg_out = eR + im * eI
                 sfty = true
             end

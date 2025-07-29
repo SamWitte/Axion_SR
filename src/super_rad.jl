@@ -10,7 +10,7 @@ include("solve_sr_rates.jl")
 include("load_rates.jl")
 using Printf
 
-function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_cut=100.0, debug=false, impose_low_cut=0.01, stop_on_a=0, eq_threshold=1e-100, abstol=1e-30, non_rel=true, high_p=true, N_pts_interp=100, N_pts_interpL=100, Nmax=3, cheby=false)
+function super_rad_check(M_BH, aBH, massB, f_a; tau_max=1e4, alpha_max_cut=100.0, debug=false, impose_low_cut=0.01, stop_on_a=0, eq_threshold=1e-100, abstol=1e-30, non_rel=true, high_p=true, N_pts_interp=100, N_pts_interpL=100, Nmax=3, cheby=false, spinone=false)
    
     alph = GNew .* M_BH .* massB #
     if debug
@@ -27,7 +27,11 @@ function super_rad_check(M_BH, aBH, massB, f_a; spin=0, tau_max=1e4, alpha_max_c
         return aBH, M_BH
     end
     
-    final_spin, final_BH = solve_system(massB, f_a, aBH, M_BH, tau_max, debug=debug, impose_low_cut=impose_low_cut, stop_on_a=stop_on_a, eq_threshold=eq_threshold, abstol=abstol, non_rel=non_rel, high_p=high_p, N_pts_interp=N_pts_interp, N_pts_interpL=N_pts_interpL, Nmax=Nmax, cheby=cheby)
+    if !spinone
+        final_spin, final_BH = solve_system(massB, f_a, aBH, M_BH, tau_max, debug=debug, impose_low_cut=impose_low_cut, stop_on_a=stop_on_a, eq_threshold=eq_threshold, abstol=abstol, non_rel=non_rel, high_p=high_p, N_pts_interp=N_pts_interp, N_pts_interpL=N_pts_interpL, Nmax=Nmax, cheby=cheby)
+    else
+        final_spin, final_BH = solve_system_spinone(massB, aBH, M_BH, tau_max)
+    end
 
     if debug
         print("Spin diff.. \t ", aBH, "\t", final_spin, "\t", alph, "\n")
@@ -101,7 +105,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
     end
 
     ### only for testing...
-    # default_reltol = 1e-7
+    default_reltol = 1e-7
     # reltol_Thres = 1e-7
 
     spinI = idx_lvl + 1
@@ -312,7 +316,9 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
             turn_off_M = true
         end
         
-        # println(integrator.t, "\t", 10 .^integrator.u[1], "\t", 10 .^integrator.u[4], "\t", 10 .^integrator.u[end-1])
+        if debug
+            println(integrator.t, "\t", exp.(integrator.u[1]), "\t", exp.(integrator.u[4]), "\t", exp.(integrator.u[spinI]))
+        end
         
         for i in 1:length(rate_keys)
             idxV, sgn = key_to_indx(rate_keys[i], Nmax)
@@ -537,6 +543,211 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
  
 end
 
+function solve_system_spinone(mu, aBH, M_BH, tau_max; n_times=10000, debug=false, return_all_info=false)
+    alph = GNew .* M_BH .* mu
+   
+    default_reltol = 1e-3
+    
+    reltol_Thres = 1e-3
+    
+    
+    
+    idx_lvl = 1
+    m_list = [1]
+
+    ### only for testing...
+    # default_reltol = 1e-7
+    # reltol_Thres = 1e-7
+
+    spinI = idx_lvl + 1
+    massI = spinI + 1
+    
+    
+    e_init = 1.0 ./ (GNew .* M_BH.^2 .* M_to_eV) # unitless
+    
+    
+    y0 = []
+    reltol = []
+    for i in 1:idx_lvl
+        append!(y0, e_init)
+        append!(reltol, default_reltol)
+    end
+    append!(y0, aBH)
+    append!(y0, M_BH)
+    y0 = log.(y0)
+    
+    def_spin_tol = 1e-3
+    append!(reltol, def_spin_tol)
+    append!(reltol, def_spin_tol)
+    
+    wait = 0 # tracker
+    
+    
+    Mvars = [mu, aBH, M_BH]
+    tspan = (0.0, tau_max)
+    saveat = (tspan[2] .- tspan[1]) ./ n_times
+    
+    wR, wI = precomputed_spin1(alph, aBH, M_BH)
+    SR_rates = [2 .* wI]
+    if SR_rates[1] < 1e-100
+        SR_rates[1] = 1e-100
+    end
+    # println(SR_rates)
+    xtol_slv = 1e-15
+    iter_slv = 50
+    
+    turn_off = []
+    turn_off_M = false
+    for i in 1:idx_lvl
+        append!(turn_off, false)
+    end
+
+    #### DEFINING FUNCTION FOR EVOLUTION ######
+    function RHS_ax!(du, u, Mvars, t)
+    
+        #
+        # mu [mass eV]
+        u_real = exp.(u)
+        # println(t, "\t", u_real)
+        mu, aBH_i, M_BH_i  = Mvars
+        if u_real[spinI] > 0.998
+            u_real[spinI] = 0.998
+        end
+        
+        for i in 1:idx_lvl
+            if u_real[i] < e_init
+                u_real[i] = e_init
+                u[i] = log.(e_init)
+            end
+        end
+        
+        alph = GNew .* u_real[massI] .* mu
+        OmegaH = u_real[spinI] ./ (2 .* (GNew .* u_real[massI]) .* (1 .+ sqrt.(1 .- u_real[spinI].^2)))
+        wR, wI = precomputed_spin1(alph, u_real[spinI], u_real[massI])
+        if wR .> OmegaH
+            du .*= 0.0
+            return
+        end
+        SR_rates = [2 .* wI]
+        
+        if u_real[1] .>= u_real[spinI]
+            u[1] = log10.(u_real[spinI])
+            u_real[1] = u_real[spinI]
+            SR_rates = [0.0]
+        end
+        
+    
+        # SR terms
+        du[spinI] = 0.0
+        du[massI] = 0.0
+        for i in 1:idx_lvl
+            du[i] = SR_rates[i] .* u_real[i] ./ mu
+            du[spinI] += - m_list[i] * SR_rates[i] .*  u_real[i] ./ mu
+            du[massI] += - SR_rates[i] .*  u_real[i] ./ mu
+            du[i] *= mu ./ hbar .* 3.15e7
+        end
+        
+        
+                
+        
+        du[spinI] *= mu ./ hbar .* 3.15e7
+        du[massI] *= (mu .*  u_real[massI]) .* (mu .* GNew .*  u_real[massI]) ./ hbar .* 3.15e7
+
+        du ./= u_real
+        for i in 1:idx_lvl
+            if turn_off[i]
+                du[i] *= 0.0
+            end
+            
+        end
+        
+        return
+    end
+    
+ 
+    
+    
+    # if running stat analysis, can truncate evolution when spin is small
+    function check_spin(u, t, integrator)
+        wait += 1
+        u_real = exp.(u)
+
+       
+        if u_real[spinI] .> (aBH .+ 0.01)
+            return true
+        elseif u_real[spinI] .<= 0.0
+            return true
+        else
+            return false
+        end
+    end
+    function affect_spin!(integrator)
+        u_real = exp.(integrator.u)
+        
+        if u_real[spinI] .> aBH
+            integrator.u[spinI] = log.(aBH)
+        elseif u_real[spinI] .< 0.0
+            integrator.u[spinI] = -10.0
+        end
+        set_proposed_dt!(integrator, integrator.dt .* 0.3)
+    end
+    
+
+    dt_guess = (maximum(SR_rates) ./ hbar .* 3.15e7).^(-1) ./ 5.0
+
+    if debug
+        print("Time guess \t", dt_guess, "\n")
+    end
+    
+    
+    max_real_time = 20.0 # Set the maximum allowed time for integration (in minutes)
+    max_real_time *= 60 # convert to seconds
+    start_time = Dates.now() # Initialize the start time
+    
+    
+
+    # Set up the user_data with the start time
+    cbackspin = DiscreteCallback(check_spin, affect_spin!, save_positions=(false, true))
+ 
+    
+    
+    cbset = CallbackSet(cbackspin)
+    prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-7, abstol=1e-10)
+    sol = solve(prob, TRBDF2(autodiff=false), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e6)
+   
+    state_out = []
+    for j in 1:idx_lvl
+        push!(state_out, [exp.(sol.u[i][j]) for i in 1:length(sol.u)])
+    end
+    
+    spinBH = [exp.(sol.u[i][spinI]) for i in 1:length(sol.u)]
+    MassB = [exp.(sol.u[i][massI]) for i in 1:length(sol.u)]
+
+
+    if return_all_info
+        return sol.t, state_out, modes, spinBH, MassB
+    end
+    
+    if (sol.t[end] != tau_max)
+        print("Fail? Final time only \t", sol.t[end], "\n")
+        return 0.0, MassB[end]
+    end
+    if isnan(spinBH[end])
+        spinBH = spinBH[.!isnan.(spinBH)]
+    end
+    if isinf(spinBH[end])
+        spinBH = spinBH[.!isinf.(spinBH)]
+    end
+    
+    if isnan(MassB[end])
+        MassB = MassB[.!isnan.(MassB)]
+    end
+    if isinf(MassB[end])
+        MassB = MassB[.!isinf.(MassB)]
+    end
+    
+    return spinBH[end], MassB[end]
+end
 
 function compute_sr_rates(qtm_cfigs, M_BH, aBH, alph; delt_a=0.0001, cheby=false)
     # Define the quantum numbers to iterate over

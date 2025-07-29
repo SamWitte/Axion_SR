@@ -62,6 +62,10 @@ function parse_commandline()
         "--use_kde"
             arg_type = Bool
             default = true
+            
+        "--spinone"
+            arg_type = Bool
+            default = false
 
     end
 
@@ -74,6 +78,8 @@ dataname = parsed_args["dataname"];
 ax_mass = parsed_args["ax_mass"];
 fa_min = parsed_args["fa_min"];
 fa_max = parsed_args["fa_max"];
+
+spinone = parsed_args["spinone"];
 
 Ftag = parsed_args["Ftag"];
 
@@ -101,7 +107,7 @@ println("Fa min : ", fa_min)
 println("Fa max : ", fa_max)
 
 #### if file exists, don't run! ...
-dont_over_run = true
+dont_over_run = false
 
 
 
@@ -109,17 +115,22 @@ dont_over_run = true
 
 data = open(readdlm, "BH_data/"*dataname*".dat")
    
+   
 Fname = "LIGO_"*dataname*"_TauMax_"*string(round(tau_max, sigdigits=2))
 Fname *= "_M_ax_"*string(round(ax_mass, sigdigits=4))
-Fname *= "_Nmax_$(Nmax)_"
-if cheby
-    Fname *= "_cheby_"
-end
- 
-if non_rel
-    Fname *= "_NonRel_"
+if spinone
+    Fname *= "_SPINONE_"
 else
-    Fname *= "_FullRel_"
+    Fname *= "_Nmax_$(Nmax)_"
+    if cheby
+        Fname *= "_cheby_"
+    end
+     
+    if non_rel
+        Fname *= "_NonRel_"
+    else
+        Fname *= "_FullRel_"
+    end
 end
 
 if use_kde
@@ -138,8 +149,11 @@ end
 check_exists = "output_mcmc/"*Fname*"_mcmc.dat"
 if (!dont_over_run || !isfile(check_exists))
     time0=Dates.now()
-    @inbounds @fastmath profileL_func_minimize(data, ax_mass, Fname, Nsamples, fa_min=fa_min, fa_max=fa_max, tau_max=tau_max, non_rel=non_rel, Nmax=Nmax, cheby=cheby, numsamples_perwalker=numsamples_perwalker, delt_M=delt_M, burnin=burnin, use_kde=use_kde, over_run=true, high_p=high_p)
-
+    if !spinone
+        @inbounds @fastmath profileL_func_minimize(data, ax_mass, Fname, Nsamples, fa_min=fa_min, fa_max=fa_max, tau_max=tau_max, non_rel=non_rel, Nmax=Nmax, cheby=cheby, numsamples_perwalker=numsamples_perwalker, delt_M=delt_M, burnin=burnin, use_kde=use_kde, over_run=true, high_p=high_p)
+    else
+        @inbounds @fastmath profileL_func_minimize_spinone(data, Fname, Nsamples, tau_max=tau_max, numsamples_perwalker=numsamples_perwalker, delt_M=delt_M, burnin=burnin, use_kde=use_kde, over_run=true)
+    end
     time1=Dates.now()
     print("\n\n Run time: ", time1-time0, "\n")
 end
