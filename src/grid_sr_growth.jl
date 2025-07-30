@@ -199,6 +199,7 @@ function main_gg(run_leaver, solve_for_zeros, solve_gridded)
 
             
             alistP = a_max .- atemp
+            alistP = reverse(alistP)
             
             for i in 1:alpha_pts
                 a_mid = itp(10 .^ alphList[i])
