@@ -198,8 +198,10 @@ function main_gg(run_leaver, solve_for_zeros, solve_gridded)
             itp = LinearInterpolation(zerolist[:, 1], zerolist[:, 2], extrapolation_bc=Line())
 
             
-            alistP = a_max .- atemp
-            alistP = reverse(alistP)
+            # alistP = a_max .- atemp
+            # alistP = reverse(alistP)
+            alistP = LinRange(0.01, a_max, aPts)
+            a_diff = alistP[2] .- alistP[1]
             
             for i in 1:alpha_pts
                 a_mid = itp(10 .^ alphList[i])
@@ -214,7 +216,7 @@ function main_gg(run_leaver, solve_for_zeros, solve_gridded)
                         else
                             
                             wR, e_imgP = eigensys_Cheby(M, alistP[j], 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=Npoints, Iter=Iter, cvg_acc=cvg_acc, prec=prec, sfty_run=true, nu_guess=erg_store)
-                            erg_store = wR + im .* e_imgP
+                            erg_store = wR + im .* e_imgP .* (1.0 .+ a_diff)
                         end
                     end
                     
