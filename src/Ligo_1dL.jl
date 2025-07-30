@@ -66,6 +66,10 @@ function parse_commandline()
         "--spinone"
             arg_type = Bool
             default = false
+            
+        "--one_BH"
+            arg_type = Bool
+            default = false
 
     end
 
@@ -92,6 +96,7 @@ numsamples_perwalker = parsed_args["numsamples_perwalker"]
 burnin = parsed_args["burnin"]
 delt_M = parsed_args["delt_M"]
 use_kde = parsed_args["use_kde"]
+one_BH = parsed_args["one_BH"]
 
 print("Deets...\n\n")
 println("Datafile: ", dataname)
@@ -105,6 +110,7 @@ println("Use KDE : ", use_kde)
 println("Ax mass : ", ax_mass)
 println("Fa min : ", fa_min)
 println("Fa max : ", fa_max)
+println("One BH : ", one_BH)
 
 #### if file exists, don't run! ...
 dont_over_run = false
@@ -131,6 +137,9 @@ else
     else
         Fname *= "_FullRel_"
     end
+    if one_BH
+        Fname *= "_OneBH_"
+    end
 end
 
 if use_kde
@@ -142,7 +151,7 @@ end
 if Nmax==3
     high_p=true
 else
-    high_p=false
+    high_p=true
 end
 
 
@@ -150,7 +159,7 @@ check_exists = "output_mcmc/"*Fname*"_mcmc.dat"
 if (!dont_over_run || !isfile(check_exists))
     time0=Dates.now()
     if !spinone
-        @inbounds @fastmath profileL_func_minimize(data, ax_mass, Fname, Nsamples, fa_min=fa_min, fa_max=fa_max, tau_max=tau_max, non_rel=non_rel, Nmax=Nmax, cheby=cheby, numsamples_perwalker=numsamples_perwalker, delt_M=delt_M, burnin=burnin, use_kde=use_kde, over_run=true, high_p=high_p)
+        @inbounds @fastmath profileL_func_minimize(data, ax_mass, Fname, Nsamples, fa_min=fa_min, fa_max=fa_max, tau_max=tau_max, non_rel=non_rel, Nmax=Nmax, cheby=cheby, numsamples_perwalker=numsamples_perwalker, delt_M=delt_M, burnin=burnin, use_kde=use_kde, over_run=true, high_p=high_p, one_BH=one_BH)
     else
         @inbounds @fastmath profileL_func_minimize_spinone(data, Fname, Nsamples, tau_max=tau_max, numsamples_perwalker=numsamples_perwalker, delt_M=delt_M, burnin=burnin, use_kde=use_kde, over_run=true)
     end

@@ -10,12 +10,12 @@ using MCMCDiagnosticTools
 using Dates
 using KernelDensity
 
-function profileL_func_minimize(data, mass_ax, Fname, Nsamples; fa_min=1e11, fa_max=1e18, tau_max=1e4, non_rel=true, Nmax=3, cheby=false, delt_M=0.05, thinning=1, numsamples_perwalker=2000, burnin=500, use_kde=true, over_run=true, high_p=true)
+function profileL_func_minimize(data, mass_ax, Fname, Nsamples; fa_min=1e11, fa_max=1e18, tau_max=1e4, non_rel=true, Nmax=3, cheby=false, delt_M=0.05, thinning=1, numsamples_perwalker=2000, burnin=500, use_kde=true, over_run=true, high_p=true, one_BH=false)
     
     ## data format: [M_1, M_2, chi_1, chi_2] samples
     
     function llhood(x)
-        ff = log_probability(x, data, mass_ax, fa_min=fa_min, fa_max=fa_max, tau_max=tau_max, non_rel=non_rel, Nmax=Nmax, cheby=cheby, Nsamples=Nsamples, use_kde=use_kde, high_p=high_p)
+        ff = log_probability(x, data, mass_ax, fa_min=fa_min, fa_max=fa_max, tau_max=tau_max, non_rel=non_rel, Nmax=Nmax, cheby=cheby, Nsamples=Nsamples, use_kde=use_kde, high_p=high_p, one_BH=one_BH)
         println(x, "\t", ff, "\n")
         return ff
     end
@@ -46,9 +46,9 @@ end
     
     
 
-function log_probability(theta, data, mass_ax; fa_min=1e11, fa_max=1e20, tau_max=5e7, non_rel=false, Nmax=3, cheby=false, delt_M=0.05, Nsamples=3, use_kde=true, high_p=true)
+function log_probability(theta, data, mass_ax; fa_min=1e11, fa_max=1e20, tau_max=5e7, non_rel=false, Nmax=3, cheby=false, delt_M=0.05, Nsamples=3, use_kde=true, high_p=true, one_BH=false)
     
-    return log_likelihood(theta, data, mass_ax, tau_max=tau_max, non_rel=non_rel, Nmax=Nmax, cheby=cheby, delt_M=delt_M, Nsamples=Nsamples, use_kde=use_kde, high_p=high_p)
+    return log_likelihood(theta, data, mass_ax, tau_max=tau_max, non_rel=non_rel, Nmax=Nmax, cheby=cheby, delt_M=delt_M, Nsamples=Nsamples, use_kde=use_kde, high_p=high_p, one_BH=one_BH)
 end
 
 function sample_spin(SpinBH_c, Spin_errD)
@@ -74,7 +74,7 @@ function sample_spin(SpinBH_c, Spin_errD)
     return SpinBH
 end
 
-function log_likelihood(theta, data, mass_ax; tau_max=1e4, non_rel=true, debug=false, Nmax=3, cheby=false, Nsamples=3, delt_M=0.05, use_kde=true, high_p=true)
+function log_likelihood(theta, data, mass_ax; tau_max=1e4, non_rel=true, debug=false, Nmax=3, cheby=false, Nsamples=3, delt_M=0.05, use_kde=true, high_p=true, one_BH=false)
     
     log_f = theta
     sum_loglike = 0.0
@@ -112,17 +112,22 @@ function log_likelihood(theta, data, mass_ax; tau_max=1e4, non_rel=true, debug=f
         
         println("fa \t", 10 .^log_f[1])
         final_spin_1, final_mass_1 = super_rad_check(M1, s1, mass_ax, 10 .^log_f[1], tau_max=tau_max, non_rel=non_rel, Nmax=Nmax, cheby=cheby, high_p=high_p)
-        final_spin_2, final_mass_2 = super_rad_check(M2, s2, mass_ax, 10 .^log_f[1], tau_max=tau_max, non_rel=non_rel, Nmax=Nmax, cheby=cheby, high_p=high_p)
-        
         println("Init / Final BH 1: ", M1, " ", s1, " ", final_mass_1, " ", final_spin_1)
-        println("Init / Final BH 2: ", M2, " ", s2, " ", final_mass_2, " ", final_spin_2)
+        if !one_BH
+            final_spin_2, final_mass_2 = super_rad_check(M2, s2, mass_ax, 10 .^log_f[1], tau_max=tau_max, non_rel=non_rel, Nmax=Nmax, cheby=cheby, high_p=high_p)
+            println("Init / Final BH 2: ", M2, " ", s2, " ", final_mass_2, " ", final_spin_2)
+        end
+        
         
         if use_kde
             # Perform 2D kernel density estimation
             kdespins = kde((kde_data[:,3], kde_data[:, 4]))
             likelihood = pdf(kdespins, final_spin_1, final_spin_2)
         else
-            likelihood = exp.(-(final_spin_1 .- spin1_c).^2 ./ (2 .* spin1_d.^2)) .* exp.(-(final_spin_2 .- spin2_c).^2 ./ (2 .* spin2_d.^2))
+            likelihood = exp.(-(final_spin_1 .- spin1_c).^2 ./ (2 .* spin1_d.^2))
+            if !one_BH
+                likelihood .*= exp.(-(final_spin_2 .- spin2_c).^2 ./ (2 .* spin2_d.^2))
+            end
         end
         if likelihood .> 0.0
             sum_loglike += log.(likelihood)

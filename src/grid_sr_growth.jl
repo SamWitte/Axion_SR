@@ -55,7 +55,8 @@ function main_gg(run_leaver, solve_for_zeros, solve_gridded)
     aPts = 40
     alpha_pts = 60
     a_max = 0.998
-    alist = LinRange(0.1, a_max, aPts)
+    atemp = 10 .^LinRange(-3, log10.(0.99), aPts)
+    
 
 
     nmax = 8
@@ -197,7 +198,7 @@ function main_gg(run_leaver, solve_for_zeros, solve_gridded)
             itp = LinearInterpolation(zerolist[:, 1], zerolist[:, 2], extrapolation_bc=Line())
 
             
-            alistP = LinRange(a_min, a_max, aPts)
+            alistP = a_max .- atemp
             
             for i in 1:alpha_pts
                 a_mid = itp(10 .^ alphList[i])
