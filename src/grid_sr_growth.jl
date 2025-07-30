@@ -43,7 +43,7 @@ function main_gg(run_leaver, solve_for_zeros, solve_gridded)
     ftol=1e-50
     iter=50
 
-    Npoints = 70
+    Npoints = 90
     Iter = 50
     cvg_acc = 1e-4
     Npts_r = 1000
@@ -52,8 +52,8 @@ function main_gg(run_leaver, solve_for_zeros, solve_gridded)
     debug=true
 
 
-    aPts = 40
-    alpha_pts = 60
+    aPts = 30
+    alpha_pts = 40
     a_max = 0.998
     atemp = 10 .^LinRange(-3, log10.(0.99), aPts)
     
@@ -207,15 +207,20 @@ function main_gg(run_leaver, solve_for_zeros, solve_gridded)
                 a_mid = itp(10 .^ alphList[i])
                 erg_store = nothing
                 for j in 1:length(alistP)
+                    if a_guess > 0.95
+                        npts_use = 120
+                    else
+                        npts_use = Npoints
+                    end
                     if run_leaver
                         e_imgP = find_im_part(10 .^ alphList[i] ./ (GNew .* M), M, alistP[j], n, l, m; Ntot_force=Ntot_safe, return_both=false, for_s_rates=true)
                     else
                         if j == 1
-                            wR, e_imgP = eigensys_Cheby(M, alistP[j], 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=Npoints, Iter=Iter, cvg_acc=cvg_acc, prec=prec, sfty_run=true)
+                            wR, e_imgP = eigensys_Cheby(M, alistP[j], 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=npts_use, Iter=Iter, cvg_acc=cvg_acc, prec=prec, sfty_run=true)
                             erg_store = wR + im .* e_imgP
                         else
                             
-                            wR, e_imgP = eigensys_Cheby(M, alistP[j], 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=Npoints, Iter=Iter, cvg_acc=cvg_acc, prec=prec, sfty_run=true, nu_guess=erg_store)
+                            wR, e_imgP = eigensys_Cheby(M, alistP[j], 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=npts_use, Iter=Iter, cvg_acc=cvg_acc, prec=prec, sfty_run=true, nu_guess=erg_store)
                             erg_store = wR + im .* e_imgP .* (1.0 .+ a_diff)
                         end
                     end
