@@ -207,7 +207,7 @@ function main_gg(run_leaver, solve_for_zeros, solve_gridded)
                 a_mid = itp(10 .^ alphList[i])
                 erg_store = nothing
                 for j in 1:length(alistP)
-                    if a_guess > 0.95
+                    if alistP[j] > 0.925
                         npts_use = 120
                     else
                         npts_use = Npoints
