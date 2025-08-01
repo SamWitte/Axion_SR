@@ -6,15 +6,14 @@ using Distributions
 using ForwardDiff: gradient, derivative, Dual, Partials, hessian
 using DelimitedFiles
 using NLsolve
-# using DifferentialEquations
 using Interpolations
 using HypergeometricFunctions
 using SpinWeightedSpheroidalHarmonics
 using NPZ
-# using Optim
 using LinearAlgebra
 using WignerSymbols
 include("Constants.jl")
+using MathLink
 
 
 function ergL(n, l, m, massB, MBH, a; full=true)
@@ -139,7 +138,7 @@ function freq_shifts(mu, M, a, n1, l1, m1, n2, l2, m2;  rpts=500, rmaxT=100, Nan
     function func_ang(x)
         return real(Z1.(x[1], x[2]) .* Z2.(x[1], x[2]) .* conj(Z1.(x[1], x[2])) .* conj(Z2.(x[1], x[2])))
     end
-    trapz(y,x) = @views sum(((y[1:end-1].+y[2:end])/2).*(x[2:end].-x[1:end-1]))
+    
     
     thetaV = acos.(1.0 .- 2.0 .* rand(Nang))
     phiV =  2.0 * pi .* rand(Nang)
@@ -229,7 +228,6 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=10, rpts=
     Z3 = spheroidals(l3, m3, a, erg_3 ./ (GNew .* M))
     
     
-    trapz(y,x) = @views sum(((y[1:end-1].+y[2:end])/2).*(x[2:end].-x[1:end-1]))
         
 
     # compute bound contribution
@@ -404,7 +402,6 @@ function s_rate_inf(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3, lF_min; rpts=4
     # returns scattering re-normalized \gamma (basically just radial integral ratio)
     
 
-    trapz(y,x) = @views sum(((y[1:end-1].+y[2:end])/2).*(x[2:end].-x[1:end-1]))
     
     rp = (1.0 .+ sqrt.(1 - a.^2))
     alph = mu .* GNew .* M
@@ -640,9 +637,7 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
         Rout .+= preF .* bk[i] .* nfactor.^(i-1)
     end
     
-    # Normalize integration
-    trapz(y,x) = @views sum(((y[1:end-1].+y[2:end])/2).*(x[2:end].-x[1:end-1]))
-    
+   
     
     if QNM
         # nm = 1.0
@@ -748,8 +743,6 @@ function radial_inf(erg, mu, M, a, l, m; rpts=1000, rmax_val=1e4, debug=false, i
     
     rGuess = radial_inf_NR(k, l, mu, M, r)
     
-    # normalize solution!
-    trapz(y,x) = @views sum(((y[1:end-1].+y[2:end])/2).*(x[2:end].-x[1:end-1]))
   
     r_in = real(rGuess)
     
@@ -1190,8 +1183,6 @@ function test_projection_scatter(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; r
         end
         
 
-        #### TESTING
-        trapz(y,x) = @views sum(((y[1:end-1].+y[2:end])/2).*(x[2:end].-x[1:end-1]))
         # erg = ergL(i, 0, 0, mu, M, a) .* GNew .* M
         erg = erg_pxy
         
@@ -1408,7 +1399,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         return real(Z1.(x[1], x[2]) .* Z2.(x[1], x[2]) .* conj(Z3.(x[1], x[2])) .* conj(Z4.(x[1], x[2])))
     end
     function func_ang_2(x)
-        return real(Z1.(x[1], x[2]) .* Z2.(x[1], x[2]) .* conj(Z3.(x[1], x[2])) .* conj(Z4.(x[1], x[2]))) .* a.^2 .* cos.(x[1]).^2
+        return real(Z1.(x[1], x[2]) .* Z2.(x[1], x[2]) .* conj(Z3.(x[1], x[2])) .* conj(Z4.(x[1], x[2]))) .* cos.(x[1]).^2
     end
     CG = 0.0
     CG_2 = 0.0
@@ -1530,8 +1521,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     
     outWF .*= 1.0 ./ sqrt.(itp_rrstar.(rvals).^2 .+ a.^2)
     outWF_fw .*= 1.0 ./ sqrt.(itp_rrstar.(rvals).^2 .+ a.^2)
-    
-    trapz(y,x) = @views sum(((y[1:end-1].+y[2:end])/2).*(x[2:end].-x[1:end-1]))
+
     
     midP = Int(round(length(rvals) - 10))
     wronk  = (outWF_fw[midP] .* (outWF[midP+1] .- outWF[midP-1]) .-  outWF[midP] .* (outWF_fw[midP+1] .- outWF_fw[midP-1]) )./ (itp_rrstar.(rvals[midP+1]) .- itp_rrstar.(rvals[midP-1]))
@@ -1710,6 +1700,7 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
     # Npoints number of Chebyshev interpolation points
     # Iter number of iterations for the non-linear inversion
     
+    
     setprecision(BigFloat, prec)  # Higher than requested precision for calculations
     mu = BigFloat(mu)
     M = BigFloat(M)
@@ -1717,6 +1708,7 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
     alph = BigFloat(mu .* GNew)
     n0 = n - l0 - 1 # field overtone number
    
+    
     
     # Define auxiliary quantities
     rminus = M - sqrt(M^2 - a^2)
@@ -1733,7 +1725,7 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
     end
 
     function rmap(ζ)
-        return (-rminus + 4*rplus + rminus*ζ^2)/(-1 + ζ)^2
+        return (-rminus .+ 4 .* rplus .+ rminus .* ζ.^2) ./ (-1 .+ ζ).^2
     end
 
     # Black hole function
@@ -1824,7 +1816,7 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
     
     # Hydrogenic frequency parameter ν (initial value)
     if isnothing(nu_guess)
-        if (alph < 0.05)&&(atilde < 0.9)
+        if (atilde < 0.3)
             Nν = calc_Nν_initial()
         else
             eR, eI = find_im_part(alph ./ (GNew .* M), M, atilde, n, l0, m; Ntot_force=10000, return_both=true)
@@ -2057,9 +2049,9 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
             # Normalize solution vector
             BnumNorm[i+1] = Bnum[i+1] / sqrt(dot(conj(Bnum[i+1]), Bnum[i+1]))
             
-            if debug
-                println("Iteration $i: ν = $(Nν_values[i+1])")
-            end
+#            if debug
+#                println("Iteration $i: ν = $(Nν_values[i+1])")
+#            end
             
             if i > 1
                 erg_test_init = calc_ω(Nν_values[i])
@@ -2124,43 +2116,98 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
             return real(erg_out), imag(erg_out), Nν_values[final_idx] # real(G * M * omega), imag(G * M * omega),
         end
     end
-
     
-
-##### this it original way ### don't use, too slow.
-#    x_values = Float64[]
-#    y_values = Complex[]
-#    for j in 1:Npoints
-#        # Calculate the current r value
-#        r_val = rmap(ζ[j])
-#
-#        # Calculate ω based on the final Nν value from iteration
-#        ω = alph * sqrt(1 - (alph^2 * M^2)/(Nν_values[final_idx])^2)
-#
-#        # Calculate Pplus for the current ν value
-#        Pplus = calc_Pplus(Nν_values[final_idx])
-#
-#        # Calculate the expression from the Mathematica code
-#        term1 = ((r_val - rplus)/(r_val - rminus))^(im * Pplus)
-#        term2 = (r_val - rminus)^(-1 + (alph^2 * M)/sqrt(alph^2 - ω^2) - 2 * M * sqrt(alph^2 - ω^2))
-#        term3 = exp(-sqrt(alph^2 - ω^2) * (r_val - rplus))
-#        term4 = BnumNorm[final_idx][j + l0 * (Npoints + 1)]
-#
-#        result = term1 * term2 * term3 * term4
-#
-#        push!(x_values, r_val)
-#        push!(y_values, result)
-#    end
-#    rlist = reverse(x_values) ./ M
-#    y_values = reverse(y_values)
-#    trapz(y,x) = @views sum(((y[1:end-1].+y[2:end])/2).*(x[2:end].-x[1:end-1]))
-#    # norm result
-#    nm2 = trapz(y_values .* conj.(y_values) .* rlist.^2, rlist)
-#    y_values ./= sqrt.(nm2)
-#
+    # Calculate ω based on the final Nν value from iteration
+    ω = alph * sqrt(1 - (alph^2 * M^2)/(Nν_values[final_idx])^2)
+    kk = sqrt.(ω.^2 .- alph.^2)
     
-    rlist, y_values = solve_radial(mu, M, atilde, n, l0, m; rpts=Npts_r, rmaxT=100, pre_compute_erg=erg_out, Ntot_safe=7000)
+    
+    # Calculate Pplus for the current ν value
+    Pplus = calc_Pplus(Nν_values[final_idx])
+    Pmns = calc_Pminus(Nν_values[final_idx])
+    beta = 2 * im .* Pplus
+    gam = -2 .* im .* Pmns
+    alpha_other = 2 * im * kk .* (rplus .- rminus)
+    deltt = calc_Aplus(Nν_values[final_idx]) .- calc_Aminus(Nν_values[final_idx])
+    eta = - (Pplus.^2 .+ Pmns.^2 .+ l0 .* (l0 .+ 1) .+ alph.^2 .* rplus.^2 .- ω.^2 .* (4 .* M.^2 .+ 2 .* M .* rplus .+ rplus.^2))
+    phi = (alpha_other .- beta .- gam .+ alpha_other .* beta .- beta .* gam) ./ 2 .- eta
+    nuN = (alpha_other .+ beta .+ gam .+ alpha_other .* gam  .+ beta .* gam) ./ 2 .+ eta .+ deltt
+    
+    ### choose r values i want...
+    r_max_shrt = 2.0 .^(2.0 .* n .- 2 .* (1 .+ n)) .* gamma(2 .+ 2 .* n) ./ alph.^2 ./ factorial(2 .* n - 1) .* 3.0
+    r_max = n ./ alph.^2 .* 100.0
+    if (R(r_max, Nν_values[final_idx]) ./ R(rplus  .* (1.0 .+ 1e-3), Nν_values[final_idx])) .> 1
+        r_max *= 10
+    end
+    r_vals = rlist = 10 .^(range(log10.(rplus  .* (1.0 .+ 1e-3)), log10.(r_max), Npts_r))
+    rout_temp = R.(r_vals, Nν_values[final_idx])
+    rout_temp = abs.(rout_temp)
+    rout_temp ./= trapz(rout_temp.^2 .* r_vals.^2, r_vals)
+    r_thresh = nothing
+    for i in 1:length(r_vals)
+        if r_vals[end - i + 1] .< r_max_shrt
+            r_thresh = r_vals[end - i + 1]
+            break
+        end
+    end
+    # println("R thresh \t", r_thresh ./ (n ./ alph.^2))
+    
+   
+    zz = -(r_vals .- rplus) ./ (rplus .- rminus)
+    weval(W"HeunC"(1, 1, 1, 1, 1, 1)); # init mathematica...
+    phinu = Float64(real.(phi + nuN)) .+ im .* Float64(imag.(phi + nuN))
+    
+    zz_short = zz[abs.(zz) .< r_thresh] # cant call large zz values of heun (takes forever...)
+    heunc_wolf = weval(W"HeunC"(phi, phinu, 1 .+ beta, 1 .+ gam, alpha_other, zz_short))
+    heunc = []
+    for i in 1:length(zz_short)
+        push!(heunc, heunc_wolf.args[i].args[1] + im * heunc_wolf.args[i].args[2])
+    end
+    y_values_short = exp.(-im .* kk .* (r_vals[abs.(zz) .< r_thresh] .- rplus)) .* zz_short.^(im .* Pplus) .* (zz_short .- 1.0).^(- im .* Pmns) .* heunc
+    y_values = []
+    rmax_cut = r_vals[abs.(zz) .< r_thresh][end]
+    
+    # work backward to find where the solution fails
+    imax = length(zz_short)
+    if abs.(y_values_short[end]) .> abs.(y_values_short[end-1])
+        for i in 1:(length(zz_short)-1)
+            if abs.(y_values_short[end-i+1]) .> abs.(y_values_short[end-i])
+                y_values_short[end-i+1] = 0.0 + im * 0.0
+            else
+                imax = length(zz_short) - i - 1
+                break
+            end
+        end
+    end
+    # now go a little further back because you didn't go far enough
+    imax = argmin(abs.(r_vals .- r_vals[imax] .* 0.9))
+    r_max_new = r_vals[imax]
+    
+    for i in 1:Npts_r
+        if r_vals[i] <= r_max_new
+            push!(y_values, y_values_short[i])
+        else
+            push!(y_values, y_values_short[imax] .* exp.(im .* kk .* (r_vals[i] .- r_max_new)) .* (r_vals[i] ./ r_max_new).^2 )
+        end
+    end
+    rlist = r_vals ./ M
+    
+    
+    nm2 = trapz(y_values .* conj.(y_values) .* rlist.^2, rlist)
+    y_values ./= sqrt.(nm2)
 
+#    Not using old way
+#    rlist_2, y_values_2 = solve_radial(mu, M, atilde, n, l0, m; rpts=Npts_r, rmaxT=100, pre_compute_erg=erg_out, Ntot_safe=7000)
+#    writedlm("test_store/tt1.dat", cat(rlist, real.(y_values .* conj.(y_values)), dims=2))
+#     writedlm("test_store/tt2.dat", cat(r_vals, rout_temp, dims=2))
+    
+    
+    number_max_cnt = count_local_maxima(real.(y_values .* conj.(y_values)))
+    if number_max_cnt != (n - l0)
+        println("Nmax count :", number_max_cnt)
+        y_values = rout_temp
+    end
+    
     if !return_nu
         return real(erg_out), imag(erg_out), rlist, y_values # everything normalized by GM, radial WF may not resolve at large r
     else
@@ -2168,9 +2215,22 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
     end
 end
 
+function count_local_maxima(arr::AbstractVector)
+    count = 0
+    for i in 2:length(arr)-1
+        if arr[i] > arr[i-1] && arr[i] > arr[i+1]
+            count += 1
+        end
+    end
+    return count
+end
+
+function trapz(y,x)
+    return sum(((y[1:end-1].+y[2:end])/2).*(x[2:end].-x[1:end-1]))
+end
 
 # test run of system
-# @time wR, wI, rl, r3 = eigensys_Cheby(1, 0.998, 1.0 ./ GNew, 8, 4, 4, debug=true, return_wf=true, L=6, Npoints = 50, Iter = 50,  der_acc=1e-8, cvg_acc=1e-5, prec=200, Npts_r=4000, sfty_run=true)
+# @time wR, wI, rl, r3 = eigensys_Cheby(1, 0.998, 1.0 ./ GNew, 8, 4, 4, debug=true, return_wf=true, L=4, Npoints = 50, Iter = 50,  der_acc=1e-8, cvg_acc=1e-5, prec=200, Npts_r=4000, sfty_run=true)
+wR, wI, rl, r3 = eigensys_Cheby(1, 0.4, 0.9 ./ GNew, 8, 7, 7, debug=true, return_wf=true, L=4, Npoints = 90, Iter = 50,  der_acc=1e-8, cvg_acc=1e-5, prec=200, Npts_r=2000, sfty_run=true)
 # println(wI)
-# println(cat(rl, r3, dims=1))
 # writedlm("test.dat", cat(real.(rl), real.(abs.(r3 .* conj(r3))), dims=2))
