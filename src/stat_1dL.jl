@@ -116,6 +116,8 @@ function log_likelihood(theta, data, mass_ax; tau_max=1e4, non_rel=true, debug=f
         if !one_BH
             final_spin_2, final_mass_2 = super_rad_check(M2, s2, mass_ax, 10 .^log_f[1], tau_max=tau_max, non_rel=non_rel, Nmax=Nmax, cheby=cheby, high_p=high_p)
             println("Init / Final BH 2: ", M2, " ", s2, " ", final_mass_2, " ", final_spin_2)
+        else
+            final_spin_2 = s2
         end
         
         
