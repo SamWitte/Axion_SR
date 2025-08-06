@@ -70,6 +70,10 @@ function parse_commandline()
         "--kde_test"
             arg_type = Bool
             default = false
+            
+        "--one_BH"
+            arg_type = Bool
+            default = false
 
     end
 
@@ -97,7 +101,7 @@ delt_M = parsed_args["delt_M"]
 targetP = parsed_args["targetP"]
 kde_test = parsed_args["kde_test"]
 use_kde = parsed_args["use_kde"]
-
+one_BH = parsed_args["one_BH"]
 
 Fname = "LIGO_"*dataname*"_TauMax_"*string(round(tau_max, sigdigits=2))
 Fname *= "_M_ax_*"
@@ -110,6 +114,9 @@ if non_rel
     Fname *= "_NonRel_"
 else
     Fname *= "_FullRel_"
+end
+if one_BH
+    Fname *= "_OneBH_"
 end
 if use_kde
     Fname *= "_KDE_"
@@ -146,6 +153,7 @@ for i in 1:length(fileList)
     end
     
     if kde_test
+        print(i, "\t", value)
         faL = LinRange(log10.(fa_min), log10.(fa_max), 50)
         writedlm("output_mcmc/KDE_"*string(i)*".dat", cat(faL, f_interp(faL), dims=2))
     end
@@ -190,6 +198,9 @@ if non_rel
     Fname *= "_NonRel_"
 else
     Fname *= "_FullRel_"
+end
+if one_BH
+    Fname *= "_OneBH_"
 end
 if use_kde
     Fname *= "_KDE_"

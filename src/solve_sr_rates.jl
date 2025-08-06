@@ -1269,7 +1269,7 @@ end
 
 
 
-function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, debug=false, Ntot_safe=5000,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=100000, eps_fac = 1e-10, m=0, l=0, NON_REL=false, h_mve=1, to_inf=false, rmaxT=100, prec=200, cvg_acc=1e-3, NptsCh=60, iterC=20, run_leaver=false)
+function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, debug=false, Ntot_safe=5000,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=500000, eps_fac = 1e-10, m=0, l=0, NON_REL=false, h_mve=1, to_inf=false, rmaxT=100, prec=200, cvg_acc=1e-3, NptsCh=60, iterC=20, run_leaver=false)
     
     rp = BigFloat(1.0 .+ sqrt.(1.0 .- a.^2))
     rmm = BigFloat(1.0 .- sqrt.(1.0 .- a.^2))
@@ -1297,13 +1297,21 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         to_inf = false
     end
     
+    if debug
+        println("erg fin proxy \t", erg_pxy)
+    end
+    
     #### fix l,m
     if to_inf
         m = (m1 + m2 - m3)
         l = l1 + l2 - l3
-        rmax = Float64.(100 ./ alph.^2 .* (minN ./ 2.0) ) .* rmaxT
+        # rmax = Float64.(100 ./ alph.^2 .* (minN ./ 2.0) ) .* rmaxT
+        kk_pxy = real(sqrt.(erg_pxy.^2 .- alph.^2))
+        # rmax = 2.0 .^(2.0 .* minN .- 2 .* (1 .+ minN)) .* gamma(2 .+ 2 .* minN) ./ alph.^2 ./ factorial(2 .* minN - 1) .* 2.0
+        rmax = 1/kk_pxy .* 6.0 # Need prefactor here i think...
     else
-        rmax = Float64.(100 ./ alph.^2 .* (minN ./ 2.0) ) 
+        # rmax = Float64.(100 ./ alph.^2 .* (minN ./ 2.0) )
+        rmax = 2.0 .^(2.0 .* minN .- 2 .* (1 .+ minN)) .* gamma(2 .+ 2 .* minN) ./ alph.^2 ./ factorial(2 .* minN - 1) .* 7.0
     end
     
     # rmax = Float64.(100 ./ alph.^2 .* (minN ./ 2.0) )
@@ -1391,15 +1399,16 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     Z2 = spheroidals(l2, m2, a, erg_2)
     Z3 = spheroidals(l3, m3, a, erg_3)
     Z4 = spheroidals(l, m, a, erg)
+    Z4_2 = spheroidals(l + 2, m, a, erg)
    
     thetaV = acos.(1.0 .- 2.0 .* rand(Nang))
     phiV = rand(Nang) .* 2*pi
 
     function func_ang(x)
-        return real(Z1.(x[1], x[2]) .* Z2.(x[1], x[2]) .* conj(Z3.(x[1], x[2])) .* conj(Z4.(x[1], x[2])))
+        return real(Z1.(x[1], x[2]) .* Z2.(x[1], x[2]) .* conj(Z3.(x[1], x[2])) .* conj(Z4.(x[1], x[2]) .+ Z4_2.(x[1], x[2])))
     end
     function func_ang_2(x)
-        return real(Z1.(x[1], x[2]) .* Z2.(x[1], x[2]) .* conj(Z3.(x[1], x[2])) .* conj(Z4.(x[1], x[2]))) .* cos.(x[1]).^2
+        return real(Z1.(x[1], x[2]) .* Z2.(x[1], x[2]) .* conj(Z3.(x[1], x[2])) .* conj(Z4.(x[1], x[2]) .+ Z4_2.(x[1], x[2]))) .* cos.(x[1]).^2
     end
     CG = 0.0
     CG_2 = 0.0
@@ -1410,6 +1419,10 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     CG *= 4*pi / Nang
     CG_2 *= 4*pi / Nang
     
+    if debug
+#        println("erg fin \t ", erg)
+        println("angles \t", CG, "\t", CG_2)
+    end
     
     lam_eff = 1.0e0
     if (n1==n2)&&(l1==l2)&&(m1==m2)
@@ -1550,22 +1563,24 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
 
         lam = (mu ./ (M_pl .* 1e9))^2
         kk = real(sqrt.(erg.^2 .- alph.^2))
+        println("1/kk \t", 1 ./ kk)
         rate_out = 2 .* alph .* kk .* (maxV[end] .* itp_rrstar.(itp_rrstar.(rvals[end])).^2) .* lam^2
         out_gamma = rate_out ./ mu^2 .* (GNew * M^2 * M_to_eV)^2
         
         ### save full WF?
-#        outR = []
-#        r_out = []
-#        nskip = Int(round(length(rvals) / 100))
-#        println("filling output ")
-#        for i in 2:nskip:(length(rvals)-1)
-#            temp = (outWF_fw[i] .* trapz(outWF[i:end] .* Tmm[i:end], itp_rrstar.(rvals[i:end])) .+ outWF[i] .* trapz(outWF_fw[1:i] .* Tmm[1:i], itp_rrstar.(rvals[1:i]))) ./ wronk
-#            append!(outR, temp)
-#            append!(r_out, rvals[i])
-#        end
-#        println("done filling output ")
-#        maxV = Float64.(real(outR .* conj.(outR)))
-#        writedlm("test_store/test_1.dat", hcat(itp_rrstar.(r_out), maxV))
+        outR = []
+        r_out = []
+        nskip = Int(round(length(rvals) / 1000))
+        println("filling output ")
+        # for i in 2:(length(rvals)-1)
+        for i in 2:nskip:(length(rvals)-1)
+            temp = (outWF_fw[i] .* trapz(outWF[i:end] .* Tmm[i:end], itp_rrstar.(rvals[i:end])) .+ outWF[i] .* trapz(outWF_fw[1:i] .* Tmm[1:i], itp_rrstar.(rvals[1:i]))) ./ wronk
+            append!(outR, temp)
+            append!(r_out, rvals[i])
+        end
+        println("done filling output ")
+        maxV = Float64.(real(outR .* conj.(outR)))
+        writedlm("test_store/test_1.dat", hcat(itp_rrstar.(r_out), maxV))
         ####
     else
         # idx_hold = itp_rrstar.(rvals) .> 1.01 .* rp
@@ -2158,7 +2173,9 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
     phinu = Float64(real.(phi + nuN)) .+ im .* Float64(imag.(phi + nuN))
     
     zz_short = zz[abs.(zz) .< r_thresh] # cant call large zz values of heun (takes forever...)
+    # println(phi, "\t", phinu, "\t", beta, "\t", gam, "\t", alpha_other, "\t", zz_short)
     heunc_wolf = weval(W"HeunC"(phi, phinu, 1 .+ beta, 1 .+ gam, alpha_other, zz_short))
+    
     heunc = []
     for i in 1:length(zz_short)
         push!(heunc, heunc_wolf.args[i].args[1] + im * heunc_wolf.args[i].args[2])
@@ -2197,9 +2214,9 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
     y_values ./= sqrt.(nm2)
 
 #    Not using old way
-#    rlist_2, y_values_2 = solve_radial(mu, M, atilde, n, l0, m; rpts=Npts_r, rmaxT=100, pre_compute_erg=erg_out, Ntot_safe=7000)
-#    writedlm("test_store/tt1.dat", cat(rlist, real.(y_values .* conj.(y_values)), dims=2))
-#     writedlm("test_store/tt2.dat", cat(r_vals, rout_temp, dims=2))
+    # rlist_2, y_values_2 = solve_radial(mu, M, atilde, n, l0, m; rpts=Npts_r, rmaxT=100, pre_compute_erg=erg_out, Ntot_safe=7000)
+    # writedlm("test_store/tt1.dat", cat(rlist, real.(y_values .* conj.(y_values)), dims=2))
+    # writedlm("test_store/tt2.dat", cat(r_vals, rout_temp, dims=2))
     
     
     number_max_cnt = count_local_maxima(real.(y_values .* conj.(y_values)))
@@ -2231,6 +2248,6 @@ end
 
 # test run of system
 # @time wR, wI, rl, r3 = eigensys_Cheby(1, 0.998, 1.0 ./ GNew, 8, 4, 4, debug=true, return_wf=true, L=4, Npoints = 50, Iter = 50,  der_acc=1e-8, cvg_acc=1e-5, prec=200, Npts_r=4000, sfty_run=true)
-wR, wI, rl, r3 = eigensys_Cheby(1, 0.4, 0.9 ./ GNew, 8, 7, 7, debug=true, return_wf=true, L=4, Npoints = 90, Iter = 50,  der_acc=1e-8, cvg_acc=1e-5, prec=200, Npts_r=2000, sfty_run=true)
+# wR, wI, rl, r3 = eigensys_Cheby(1, 0.9, 0.08 ./ GNew, 5, 2, 2, debug=true, return_wf=true, L=4, Npoints = 90, Iter = 50,  der_acc=1e-8, cvg_acc=1e-5, prec=200, Npts_r=2000, sfty_run=true)
 # println(wI)
 # writedlm("test.dat", cat(real.(rl), real.(abs.(r3 .* conj(r3))), dims=2))
