@@ -1567,21 +1567,21 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         rate_out = 2 .* alph .* kk .* (maxV[end] .* itp_rrstar.(itp_rrstar.(rvals[end])).^2) .* lam^2
         out_gamma = rate_out ./ mu^2 .* (GNew * M^2 * M_to_eV)^2
         
-        ### save full WF?
-        outR = []
-        r_out = []
-        nskip = Int(round(length(rvals) / 1000))
-        println("filling output ")
-        # for i in 2:(length(rvals)-1)
-        for i in 2:nskip:(length(rvals)-1)
-            temp = (outWF_fw[i] .* trapz(outWF[i:end] .* Tmm[i:end], itp_rrstar.(rvals[i:end])) .+ outWF[i] .* trapz(outWF_fw[1:i] .* Tmm[1:i], itp_rrstar.(rvals[1:i]))) ./ wronk
-            append!(outR, temp)
-            append!(r_out, rvals[i])
-        end
-        println("done filling output ")
-        maxV = Float64.(real(outR .* conj.(outR)))
-        writedlm("test_store/test_1.dat", hcat(itp_rrstar.(r_out), maxV))
-        ####
+#        ### save full WF?
+#        outR = []
+#        r_out = []
+#        nskip = Int(round(length(rvals) / 1000))
+#        println("filling output ")
+#        # for i in 2:(length(rvals)-1)
+#        for i in 2:nskip:(length(rvals)-1)
+#            temp = (outWF_fw[i] .* trapz(outWF[i:end] .* Tmm[i:end], itp_rrstar.(rvals[i:end])) .+ outWF[i] .* trapz(outWF_fw[1:i] .* Tmm[1:i], itp_rrstar.(rvals[1:i]))) ./ wronk
+#            append!(outR, temp)
+#            append!(r_out, rvals[i])
+#        end
+#        println("done filling output ")
+#        maxV = Float64.(real(outR .* conj.(outR)))
+#        writedlm("test_store/test_1.dat", hcat(itp_rrstar.(r_out), maxV))
+#        ####
     else
         # idx_hold = itp_rrstar.(rvals) .> 1.01 .* rp
         # rnew_rp = trapz(outWF[idx_hold] .* Tmm[idx_hold] , itp_rrstar.(rvals[idx_hold])) .* outWF_fw[idx_hold][1] ./ wronk
