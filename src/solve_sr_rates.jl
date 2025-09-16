@@ -1931,7 +1931,15 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
         C3plus = zeros(Complex{BigFloat}, L+1, Npoints+1)
         C3minus = zeros(Complex{BigFloat}, L+1, Npoints+1)
         
+        
+        gam = im * a * sqrt.(ω_val.^2 .- alph.^2)
+        
         for l in 0:L, n in 0:Npoints
+            LLM = l * (l + 1)
+            LLM += (-1 + 2 * l * (l + 1) - 2 * m.^2) * gam.^2 ./ (-3 + 4 * l * (l + 1))
+            LLM += ((l - m - 1 * (l - m) * (l + m) * (l + m - 1)) ./ ((-3 + 2 * l) * (2 * l - 1).^2) - (l + 1 - m) * (2 * l - m) * (l + m + 1) * (2 + l + m) ./ ((3 + 2 * l).^2 * (5 + 2 * l))) * gam.^4 ./ (2 * (1 + 2 * l))
+            LLM += (4 * ((-1 + 4 * m^2) * (l * (1 + l) * (121 + l * (1 + l) * (213 + 8 * l * (1 + l) * (-37 + 10 * l * (1 + l)))) - 2 * l * (1 + l) * (-137 + 56 * l * (1 + l) * (3 + 2 * l * (1 + l))) * m^2 + (705 + 8 * l * (1 + l) * (125 + 18 * l * (1 + l))) * m^4 - 15 * (1 + 46 * m^2))) * gam^6) / ((-5 + 2 * l) * (-3 + 2 * l) * (5 + 2 * l) * (7 + 2 * l) * (-3 + 4 * l * (1 + l))^5)
+            
             r_n = rmap(ζ[n+1])
             C1[l+1, n+1] = (1/(r_n - rplus) + 1/(r_n - rminus)) * 1/Dζmap(r_n) +
                            (2*DF(r_n, ν_val))/F(r_n, ν_val) * 1/Dζmap(r_n) +
@@ -1944,8 +1952,8 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
                            Pminus_val^2/(r_n - rminus)^2 -
                            Aplus_val/((rplus - rminus)*(r_n - rplus)) +
                            Aminus_val/((rplus - rminus)*(r_n - rminus)) - (alph^2 - ω_val^2)) -
-                           1/(Dζmap(r_n))^2 * 1/Δ(r_n) *
-                           (l*(l + 1) + a^2*c_coupling(l, l)*(alph^2 - ω_val^2))
+                           1/(Dζmap(r_n))^2 * 1/Δ(r_n) * LLM
+                           # (l*(l + 1) + a^2*c_coupling(l, l)*(alph^2 - ω_val^2))
             
             C3plus[l+1, n+1] = -(1/(Dζmap(r_n))^2) * 1/Δ(r_n) *
                                a^2 * (alph^2 - ω_val^2) * c_coupling(l, l + 2)
@@ -2144,7 +2152,12 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
     gam = -2 .* im .* Pmns
     alpha_other = 2 * im * kk .* (rplus .- rminus)
     deltt = calc_Aplus(Nν_values[final_idx]) .- calc_Aminus(Nν_values[final_idx])
-    eta = - (Pplus.^2 .+ Pmns.^2 .+ l0 .* (l0 .+ 1) .+ alph.^2 .* rplus.^2 .- ω.^2 .* (4 .* M.^2 .+ 2 .* M .* rplus .+ rplus.^2))
+    gam_llm = im * a * sqrt.(ω.^2 .- alph.^2)
+    LLM = l0 * (l0 + 1)
+    LLM += (-1 + 2 * l0 * (l0 + 1) - 2 * m.^2) * gam_llm.^2 ./ (-3 + 4 * l0 * (l0 + 1))
+    LLM += ((l0 - m - 1 * (l0 - m) * (l0 + m) * (l0 + m - 1)) ./ ((-3 + 2 * l0) * (2 * l0 - 1).^2) - (l0 + 1 - m) * (2 * l0 - m) * (l0 + m + 1) * (2 + l0 + m) ./ ((3 + 2 * l0).^2 * (5 + 2 * l0))) * gam_llm.^4 ./ (2 * (1 + 2 * l0))
+    LLM += (4 * ((-1 + 4 * m^2) * (l0 * (1 + l0) * (121 + l0 * (1 + l0) * (213 + 8 * l0 * (1 + l0) * (-37 + 10 * l0 * (1 + l0)))) - 2 * l0 * (1 + l0) * (-137 + 56 * l0 * (1 + l0) * (3 + 2 * l0 * (1 + l0))) * m^2 + (705 + 8 * l0 * (1 + l0) * (125 + 18 * l0 * (1 + l0))) * m^4 - 15 * (1 + 46 * m^2))) * gam_llm^6) / ((-5 + 2 * l0) * (-3 + 2 * l0) * (5 + 2 * l0) * (7 + 2 * l0) * (-3 + 4 * l0 * (1 + l0))^5)
+    eta = - (Pplus.^2 .+ Pmns.^2 .+ LLM .+ alph.^2 .* rplus.^2 .- ω.^2 .* (4 .* M.^2 .+ 2 .* M .* rplus .+ rplus.^2))
     phi = (alpha_other .- beta .- gam .+ alpha_other .* beta .- beta .* gam) ./ 2 .- eta
     nuN = (alpha_other .+ beta .+ gam .+ alpha_other .* gam  .+ beta .* gam) ./ 2 .+ eta .+ deltt
     
@@ -2169,7 +2182,7 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
     
    
     zz = -(r_vals .- rplus) ./ (rplus .- rminus)
-    weval(W"HeunC"(1, 1, 1, 1, 1, 1)); # init mathematica...
+    weval(W"HeunC"(1, 1, 1, 1, 1, 1)); # init mathematica... makes it quicker
     phinu = Float64(real.(phi + nuN)) .+ im .* Float64(imag.(phi + nuN))
     
     zz_short = zz[abs.(zz) .< r_thresh] # cant call large zz values of heun (takes forever...)
@@ -2247,7 +2260,7 @@ function trapz(y,x)
 end
 
 # test run of system
-# @time wR, wI, rl, r3 = eigensys_Cheby(1, 0.998, 1.0 ./ GNew, 8, 4, 4, debug=true, return_wf=true, L=4, Npoints = 50, Iter = 50,  der_acc=1e-8, cvg_acc=1e-5, prec=200, Npts_r=4000, sfty_run=true)
-# wR, wI, rl, r3 = eigensys_Cheby(1, 0.9, 0.08 ./ GNew, 5, 2, 2, debug=true, return_wf=true, L=4, Npoints = 90, Iter = 50,  der_acc=1e-8, cvg_acc=1e-5, prec=200, Npts_r=2000, sfty_run=true)
+# @time wR, wI, rl, r3 = eigensys_Cheby(1, 0.01, 0.01 ./ GNew, 2, 1, 1, debug=true, return_wf=true, L=4, Npoints = 50, Iter = 50,  der_acc=1e-8, cvg_acc=1e-5, prec=200, Npts_r=4000, sfty_run=true)
+# wR, wI, rl, r3 = eigensys_Cheby(1, 0.01, 0.01 ./ GNew, 2, 1, 1, debug=true, return_wf=true, L=4, Npoints = 90, Iter = 50,  der_acc=1e-8, cvg_acc=1e-5, prec=200, Npts_r=2000, sfty_run=true)
 # println(wI)
 # writedlm("test.dat", cat(real.(rl), real.(abs.(r3 .* conj(r3))), dims=2))
