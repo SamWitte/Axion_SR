@@ -519,7 +519,7 @@ end
 
 function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=500, xtol=1e-20, ftol=1e-90, sve=false, fnm="test_store/WF_", return_erg=false, Ntot_safe=5000, eps_r=1e-10, QNM=false, QNM_ergs=nothing, pre_compute_erg=nothing, prec=100)
     ### dolan 2007
-    # everything normalized
+    
     
     setprecision(BigFloat, prec)
     
@@ -803,6 +803,7 @@ end
 
 
 function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=200, iter=10000, xtol=1e-20, ftol=1e-90, return_both=false, for_s_rates=true, QNM=false, QNM_E=1.0, erg_Guess=nothing, max_n_qnm=5)
+    # output divided by alpha! \tau_nlm = 1 / (2 * output * alpha)!
     
     OmegaH = BigFloat(a ./ (2 .* (GNew .* M) .* (1 .+ sqrt.(1 .- a.^2))))
     alph = BigFloat(mu * GNew * M)
@@ -1269,7 +1270,7 @@ end
 
 
 
-function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, debug=false, Ntot_safe=5000,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=500000, eps_fac = 1e-10, m=0, l=0, NON_REL=false, h_mve=1, to_inf=false, rmaxT=100, prec=200, cvg_acc=1e-3, NptsCh=60, iterC=20, run_leaver=false)
+function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, debug=false, Ntot_safe=5000,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=500000, eps_fac=1e-10, m=0, l=0, NON_REL=false, h_mve=1, to_inf=false, rmaxT=100, prec=200, cvg_acc=1e-3, NptsCh=60, iterC=20, run_leaver=false)
     
     rp = BigFloat(1.0 .+ sqrt.(1.0 .- a.^2))
     rmm = BigFloat(1.0 .- sqrt.(1.0 .- a.^2))
@@ -1318,7 +1319,8 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     
     rlist = 10 .^range(log10(rp .* (1.0 .+ eps_fac)), log10.(rmax), rpts)
     
-    simplify_radial = check_slv_rad(alph, m1)
+    # simplify_radial = check_slv_rad(alph, m1)
+    simplify_radial = false
     if NON_REL||simplify_radial
         rf_1 = radial_bound_NR(n1, l1, m1, mu, M, rlist)
         erg_1 = erg_1G * GNew * M
@@ -1339,7 +1341,8 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         end
     end
     
-    simplify_radial = check_slv_rad(alph, m2)
+    # simplify_radial = check_slv_rad(alph, m2)
+    simplify_radial = false
     if NON_REL||simplify_radial
         rf_2 = radial_bound_NR(n2, l2, m2, mu, M, rlist)
         erg_2 = erg_2G * GNew * M
@@ -1366,7 +1369,8 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         end
     end
     
-    simplify_radial = check_slv_rad(alph, m3)
+    # simplify_radial = check_slv_rad(alph, m3)
+    simplify_radial = false
     if NON_REL||simplify_radial
         rf_3 = radial_bound_NR(n3, l3, m3, mu, M, rlist)
         erg_3 = erg_3G * GNew * M
@@ -1399,16 +1403,15 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     Z2 = spheroidals(l2, m2, a, erg_2)
     Z3 = spheroidals(l3, m3, a, erg_3)
     Z4 = spheroidals(l, m, a, erg)
-    Z4_2 = spheroidals(l + 2, m, a, erg)
    
     thetaV = acos.(1.0 .- 2.0 .* rand(Nang))
     phiV = rand(Nang) .* 2*pi
 
     function func_ang(x)
-        return real(Z1.(x[1], x[2]) .* Z2.(x[1], x[2]) .* conj(Z3.(x[1], x[2])) .* conj(Z4.(x[1], x[2]) .+ Z4_2.(x[1], x[2])))
+        return real(Z1.(x[1], x[2]) .* Z2.(x[1], x[2]) .* conj(Z3.(x[1], x[2])) .* conj(Z4.(x[1], x[2]) ))
     end
     function func_ang_2(x)
-        return real(Z1.(x[1], x[2]) .* Z2.(x[1], x[2]) .* conj(Z3.(x[1], x[2])) .* conj(Z4.(x[1], x[2]) .+ Z4_2.(x[1], x[2]))) .* cos.(x[1]).^2
+        return real(Z1.(x[1], x[2]) .* Z2.(x[1], x[2]) .* conj(Z3.(x[1], x[2])) .* conj(Z4.(x[1], x[2]) )) .* cos.(x[1]).^2
     end
     CG = 0.0
     CG_2 = 0.0
@@ -1418,6 +1421,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     end
     CG *= 4*pi / Nang
     CG_2 *= 4*pi / Nang
+    
     
     if debug
 #        println("erg fin \t ", erg)
