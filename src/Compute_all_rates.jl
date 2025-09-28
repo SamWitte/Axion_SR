@@ -122,6 +122,8 @@ function main(;kpts=14, rpts=1000, rmaxT=100, Nang=200000, Npts_Bnd=2000)
         testVal = gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, Npts_Bnd=Npts_Bnd, debug=false, eps_fac=1e-3, Ntot_safe=Ntot_safe, m=0, l=0, Nang=Nang, NON_REL=NON_REL, h_mve=h_mve, to_inf=to_inf, rmaxT=rmaxT, run_leaver=run_leaver, NptsCh=NptsCh, cvg_acc=cvg_acc, prec=prec, iterC=iterC)
         if (abs.(computed_out .- testVal) ./ computed_out) .> 0.4
             overwrite_file = true
+            println("Test failed.... alpha, old / new \t ", alpha_test, "\t", computed_out, "\t", testVal)
+            rm(fOUT)
         end
     end
     if !isfile(fOUT)||overwrite_file
