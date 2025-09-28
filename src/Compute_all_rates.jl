@@ -40,6 +40,10 @@ function parse_commandline()
             arg_type = Bool
             default = false
             
+        "--check_err" # check if there could be an error in the existing file, overwrite if there is...
+            arg_type = Bool
+            default = false
+            
             
     end
     return parse_args(s)
@@ -59,6 +63,7 @@ S4 = parsed_args["S4"]
 
 ftag = parsed_args["ftag"];
 run_leaver = parsed_args["run_leaver"];
+check_err = parsed_args["check_err"];
 
 print(S1, "\t", S2, "\t", S3, "\t", S4, "\n")
 
@@ -107,7 +112,19 @@ function main(;kpts=14, rpts=1000, rmaxT=100, Nang=200000, Npts_Bnd=2000)
     end
     
     fOUT = "rate_sve/"*S1*"_"*S2*"_"*S3*"_"*S4*ftag*".dat"
-    if !isfile(fOUT)
+    overwrite_file = false
+    if isfile(fOUT)&&check_err
+        file_load = readdlm(fOUT)
+        alpha_test = file_load[1, 1]
+        computed_out = file_load[1, 2]
+        mu = alpha_test ./ (M * GNew)
+        h_mve = 0.1
+        testVal = gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, Npts_Bnd=Npts_Bnd, debug=false, eps_fac=1e-3, Ntot_safe=Ntot_safe, m=0, l=0, Nang=Nang, NON_REL=NON_REL, h_mve=h_mve, to_inf=to_inf, rmaxT=rmaxT, run_leaver=run_leaver, NptsCh=NptsCh, cvg_acc=cvg_acc, prec=prec, iterC=iterC)
+        if (abs.(computed_out .- testVal) ./ computed_out) .> 0.4
+            overwrite_file = true
+        end
+    end
+    if !isfile(fOUT)||overwrite_file
         
         for i in 1:alpha_pts
             mu = alpha_list[i] ./ (M * GNew)
