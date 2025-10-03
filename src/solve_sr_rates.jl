@@ -2191,12 +2191,20 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
     
     zz_short = zz[abs.(zz) .< r_thresh] # cant call large zz values of heun (takes forever...)
     # println(phi, "\t", phinu, "\t", beta, "\t", gam, "\t", alpha_other, "\t", zz_short)
-    heunc_wolf = weval(W"HeunC"(phi, phinu, 1 .+ beta, 1 .+ gam, alpha_other, zz_short))
     
-    heunc = []
-    for i in 1:length(zz_short)
-        push!(heunc, heunc_wolf.args[i].args[1] + im * heunc_wolf.args[i].args[2])
+    
+    # heunc_wolf = weval(W"HeunC"(phi, phinu, 1 .+ beta, 1 .+ gam, alpha_other, zz_short))
+    # heunc = []
+    # for i in 1:length(zz_short)
+    #     push!(heunc, heunc_wolf.args[i].args[1] + im * heunc_wolf.args[i].args[2])
+    # end
+    heunc = ComplexF64[]
+    for z in zz_short
+        h = weval(W"HeunC"(phi, phinu, 1 + beta, 1 + gam, alpha_other, z))
+        push!(heunc, h.args[1] + im * h.args[2])
     end
+    
+    
     y_values_short = exp.(-im .* kk .* (r_vals[abs.(zz) .< r_thresh] .- rplus)) .* zz_short.^(im .* Pplus) .* (zz_short .- 1.0).^(- im .* Pmns) .* heunc
     y_values = []
     rmax_cut = r_vals[abs.(zz) .< r_thresh][end]
