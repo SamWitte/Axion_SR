@@ -2192,7 +2192,9 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
     zz_short = zz[abs.(zz) .< r_thresh] # cant call large zz values of heun (takes forever...)
     # println(phi, "\t", phinu, "\t", beta, "\t", gam, "\t", alpha_other, "\t", zz_short)
     
-    
+    ### CAREFUL!!
+   
+    # weval(W"Set[$TimeConstraint, Infinity]")
     # heunc_wolf = weval(W"HeunC"(phi, phinu, 1 .+ beta, 1 .+ gam, alpha_other, zz_short))
     # heunc = []
     # for i in 1:length(zz_short)
@@ -2200,8 +2202,13 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
     # end
     heunc = ComplexF64[]
     for z in zz_short
-        h = weval(W"HeunC"(phi, phinu, 1 + beta, 1 + gam, alpha_other, z))
-        push!(heunc, h.args[1] + im * h.args[2])
+        reim = weval(W"HeunC"(phi, phinu, 1.0 + beta, 1.0 + gam, alpha_other, z))
+        if !(reim isa Vector) || length(reim) != 2 || any(x -> !isfinite(Float64(x)), reim)
+            push!(heunc, 0.0 .+ 0.0 .* im)
+            continue  # skip aborted/failed evaluations
+        end
+        
+        push!(heunc, complex(Float64(reim.args[1]), Float64(reim.args[2])))
     end
     
     
