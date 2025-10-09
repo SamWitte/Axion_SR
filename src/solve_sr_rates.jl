@@ -1312,10 +1312,11 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         rmax = 1/kk_pxy .* 6.0 # Need prefactor here i think...
     else
         # rmax = Float64.(100 ./ alph.^2 .* (minN ./ 2.0) )
-        rmax = 2.0 .^(2.0 .* minN .- 2 .* (1 .+ minN)) .* gamma(2 .+ 2 .* minN) ./ alph.^2 ./ factorial(2 .* minN - 1) .* 7.0
+        # rmax = 2.0 .^(2.0 .* minN .- 2 .* (1 .+ minN)) .* gamma(2 .+ 2 .* minN) ./ alph.^2 ./ factorial(2 .* minN - 1) .* 7.0
+        rmax = 2.0 .^(2.0 .* maxN .- 2 .* (1 .+ maxN)) .* gamma(2 .+ 2 .* maxN) ./ alph.^2 ./ factorial(2 .* maxN - 1) .* 7.0
     end
     
-    # rmax = Float64.(100 ./ alph.^2 .* (minN ./ 2.0) )
+    rmax = Float64.(100 ./ alph.^2 .* (maxN ./ 2.0) )
     
     rlist = 10 .^range(log10(rp .* (1.0 .+ eps_fac)), log10.(rmax), rpts)
     
@@ -1335,11 +1336,13 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         rf_1 = itp(log10.(rlist))
         if imag(erg_1) < 0
             if debug
-                println("ERG 1", wR, " ", wI)
+                println("ERG 1\t", wR, " ", wI)
             end
             return 0.0
         end
     end
+    
+    
     
     # simplify_radial = check_slv_rad(alph, m2)
     simplify_radial = false
@@ -1362,7 +1365,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             rf_2 = itp(log10.(rlist))
             if imag(erg_2) < 0
                 if debug
-                    println("ERG 2", wR, " ", wI)
+                    println("ERG 2\t", wR, " ", wI)
                 end
                 return 0.0
             end
@@ -1387,7 +1390,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
 
         if imag(erg_3) < 0
             if debug
-                println("ERG 3", wR, " ", wI)
+                println("ERG 3\t", wR, " ", wI)
             end
             return 0.0
         end
@@ -1396,7 +1399,21 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     # writedlm("test_store/test1.dat", hcat(real(rlist), real(rf_1 .* conj.(rf_1))))
     # writedlm("test_store/test2.dat", hcat(real(rlist), real(rf_2 .* conj.(rf_2))))
     # writedlm("test_store/test3.dat", hcat(real(rlist), real(rf_3 .* conj.(rf_3))))
+    # println("HERE \t", erg_1, "\t", erg_2, "\t", erg_3)
     erg = (erg_1 + erg_2 - erg_3) + 0 * im # leave the 0 im for NR case
+    
+    ### recheck if to inf holds...
+    if (real(erg) .> alph)&&!to_inf
+        println("Flipping from bnd to inf")
+        to_inf = true
+        m = (m1 + m2 - m3)
+        l = l1 + l2 - l3
+    else (real(erg) .< alph)&&to_inf
+        println("Flipping from inf to bnd")
+        to_inf = false
+        l = 0
+        m = 0
+    end
     
     
     Z1 = spheroidals(l1, m1, a, erg_1)
@@ -1585,6 +1602,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
 #        println("done filling output ")
 #        maxV = Float64.(real(outR .* conj.(outR)))
 #        writedlm("test_store/test_1.dat", hcat(itp_rrstar.(r_out), maxV))
+#        println("QUIT!")
 #        ####
     else
         # idx_hold = itp_rrstar.(rvals) .> 1.01 .* rp
@@ -2190,25 +2208,29 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
     phinu = Float64(real.(phi + nuN)) .+ im .* Float64(imag.(phi + nuN))
     
     zz_short = zz[abs.(zz) .< r_thresh] # cant call large zz values of heun (takes forever...)
-    # println(phi, "\t", phinu, "\t", beta, "\t", gam, "\t", alpha_other, "\t", zz_short)
     
-    ### CAREFUL!!
-   
-    # weval(W"Set[$TimeConstraint, Infinity]")
-    # heunc_wolf = weval(W"HeunC"(phi, phinu, 1 .+ beta, 1 .+ gam, alpha_other, zz_short))
-    # heunc = []
-    # for i in 1:length(zz_short)
-    #     push!(heunc, heunc_wolf.args[i].args[1] + im * heunc_wolf.args[i].args[2])
-    # end
+    
+    mathm_fail = false
     heunc = ComplexF64[]
     for z in zz_short
-        reim = weval(W"HeunC"(phi, phinu, 1.0 + beta, 1.0 + gam, alpha_other, z))
-        if !(reim isa Vector) || length(reim) != 2 || any(x -> !isfinite(Float64(x)), reim)
-            push!(heunc, 0.0 .+ 0.0 .* im)
-            continue  # skip aborted/failed evaluations
+        if mathm_fail
+            push!(heunc, heunc[end])
+            continue
         end
-        
-        push!(heunc, complex(Float64(reim.args[1]), Float64(reim.args[2])))
+        reim = weval(W"HeunC"(phi, phinu, 1.0 + beta, 1.0 + gam, alpha_other, z))
+        re_prt = reim.args[1]
+        im_prt = reim.args[2]
+        if (typeof(re_prt) != Float64)||(typeof(im_prt) != Float64)
+            re_prt = mlwreal_to_bigfloat(re_prt)
+            im_prt = mlwreal_to_bigfloat(im_prt)
+        end
+        hval = complex(re_prt, im_prt)
+        if log10.(abs.(hval)) > 1000.0
+            push!(heunc, heunc[end])
+            mathm_fail = true
+            continue
+        end
+        push!(heunc, hval)
     end
     
     
@@ -2247,7 +2269,7 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
 
 #    Not using old way
     # rlist_2, y_values_2 = solve_radial(mu, M, atilde, n, l0, m; rpts=Npts_r, rmaxT=100, pre_compute_erg=erg_out, Ntot_safe=7000)
-    # writedlm("test_store/tt1.dat", cat(rlist, real.(y_values .* conj.(y_values)), dims=2))
+    writedlm("test_store/tt1.dat", cat(rlist, real.(y_values .* conj.(y_values)), dims=2))
     # writedlm("test_store/tt2.dat", cat(r_vals, rout_temp, dims=2))
     
     
@@ -2276,6 +2298,117 @@ end
 
 function trapz(y,x)
     return sum(((y[1:end-1].+y[2:end])/2).*(x[2:end].-x[1:end-1]))
+end
+
+function normalize_mathlink_str(s::String)
+    s = strip(s)
+    # If Mathematica prints something like 1.23`15.7*^309 or 1.23`15.7*^309
+    # remove the backtick precision part (e.g. `15.7...) and convert *^ -> e
+    s = replace(s, r"`[^*e]*" => "")   # remove backtick + subsequent chars until * or e
+    s = replace(s, "*^" => "e")
+    return s
+end
+
+
+# Strict reconstruction if you want to avoid parse of exponent form:
+function reconstruct_from_parts(mantissa_str::AbstractString, exponent::Integer)
+    ndigits = count(isdigit, mantissa_str)
+    bits = ceil(Int, ndigits * 3.321928094887362) + 64
+    setprecision(bits) do
+        mant = parse(BigFloat, mantissa_str)
+        return mant * big(10)^exponent
+    end
+end
+
+# ---------------------------
+# Top-level converter for MathLink.WReal (or similar)
+# ---------------------------
+
+"""
+    mlwreal_to_bigfloat(w)
+
+Convert a MathLink.WReal-like object `w` to a `BigFloat`.
+
+Strategy:
+- try `string(w)` / `repr(w)` and parse the returned representation;
+- if `w` exposes `mantissa` and `exponent` properties, use those to reconstruct exactly;
+- otherwise return an informative error with a dump of the object.
+"""
+function mlwreal_to_bigfloat(w)
+    # 1) try string representation (most wrappers provide a readable string)
+    s = nothing
+    try
+        s = string(w)
+    catch err
+        try
+            s = repr(w)
+        catch err
+            s = nothing
+        end
+    end
+
+    if s !== nothing && (occursin("*^", s) || occursin("e", s) || occursin("`", s))
+        # likely a Mathematica numeric form; normalize & parse
+        return parse_mathlink_number(s)
+    end
+
+    # 2) Some wrappers return a small struct with mantissa/exponent fields
+    #    Try to use them if present.
+    if hasproperty(w, :mantissa) && hasproperty(w, :exponent)
+        mant = getproperty(w, :mantissa)
+        exp  = getproperty(w, :exponent)
+        # mantissa may itself be numeric or string; coerce to string
+        mantstr = isa(mant, AbstractString) ? mant : string(mant)
+        return reconstruct_from_parts(mantstr, Int(exp))
+    end
+
+    # 3) Try other common names
+    for name in (:mant, :mantissa_str, :man, :m, :exp, :exponent_int, :e)
+        if hasproperty(w, name)
+            try
+                mant = getproperty(w, name)
+                exp = hasproperty(w, :exponent) ? getproperty(w, :exponent) :
+                      (hasproperty(w, :exp) ? getproperty(w, :exp) : nothing)
+                if exp !== nothing
+                    mantstr = isa(mant, AbstractString) ? mant : string(mant)
+                    return reconstruct_from_parts(mantstr, Int(exp))
+                end
+            catch
+                # ignore and continue
+            end
+        end
+    end
+
+    # 4) last resort: if string is something like "WReal( ... )", try to extract inner "*^" substring
+    if s !== nothing
+        m = match(r"([+-]?\d*\.?\d+(?:`[^*]*)?\*\^[+-]?\d+)", s)
+        if m !== nothing
+            return parse_mathlink_number(m.captures[1])
+        end
+    end
+
+    error("Unable to convert MathLink object to BigFloat. Representation: $(s === nothing ? repr(w) : s)")
+end
+
+function parse_mathlink_number(w)
+    # Step 1: get a string representation
+    s = string(w)
+
+    # Step 2: remove Mathematica-style precision and exponent notation
+    s = strip(s)
+    s = replace(s, r"`[^*e]*" => "")   # remove backtick precision (e.g. `15.7...)
+    s = replace(s, "*^" => "e")        # replace Mathematica exponent with 'e'
+
+    # Step 3: choose precision based on digits
+    m = match(r"^([+-]?\d*\.?\d+)", s)
+    mantissa = m === nothing ? "1.0" : m.captures[1]
+    ndigits = count(isdigit, mantissa)
+    bits = ceil(Int, ndigits * 3.321928) + 64
+
+    # Step 4: parse into BigFloat
+    setprecision(bits) do
+        return parse(BigFloat, s)
+    end
 end
 
 # test run of system
