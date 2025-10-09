@@ -1309,14 +1309,15 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         # rmax = Float64.(100 ./ alph.^2 .* (minN ./ 2.0) ) .* rmaxT
         kk_pxy = real(sqrt.(erg_pxy.^2 .- alph.^2))
         # rmax = 2.0 .^(2.0 .* minN .- 2 .* (1 .+ minN)) .* gamma(2 .+ 2 .* minN) ./ alph.^2 ./ factorial(2 .* minN - 1) .* 2.0
-        rmax = 1/kk_pxy .* 6.0 # Need prefactor here i think...
+        rmax = 1/kk_pxy .* 20.0 # Need prefactor here i think...
     else
         # rmax = Float64.(100 ./ alph.^2 .* (minN ./ 2.0) )
         # rmax = 2.0 .^(2.0 .* minN .- 2 .* (1 .+ minN)) .* gamma(2 .+ 2 .* minN) ./ alph.^2 ./ factorial(2 .* minN - 1) .* 7.0
         rmax = 2.0 .^(2.0 .* maxN .- 2 .* (1 .+ maxN)) .* gamma(2 .+ 2 .* maxN) ./ alph.^2 ./ factorial(2 .* maxN - 1) .* 7.0
     end
     
-    rmax = Float64.(100 ./ alph.^2 .* (maxN ./ 2.0) )
+    # rmax = Float64.(100 ./ alph.^2 .* (maxN ./ 2.0) )
+    # rmax = Float64.(100 ./ alph.^2 .* (minN ./ 2.0) )
     
     rlist = 10 .^range(log10(rp .* (1.0 .+ eps_fac)), log10.(rmax), rpts)
     
@@ -1336,7 +1337,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         rf_1 = itp(log10.(rlist))
         if imag(erg_1) < 0
             if debug
-                println("ERG 1\t", wR, " ", wI)
+                println("ERG 1\t", erg_1)
             end
             return 0.0
         end
@@ -1365,7 +1366,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             rf_2 = itp(log10.(rlist))
             if imag(erg_2) < 0
                 if debug
-                    println("ERG 2\t", wR, " ", wI)
+                    println("ERG 2\t", erg_2)
                 end
                 return 0.0
             end
@@ -1390,7 +1391,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
 
         if imag(erg_3) < 0
             if debug
-                println("ERG 3\t", wR, " ", wI)
+                println("ERG 3\t", erg_3)
             end
             return 0.0
         end
@@ -1403,12 +1404,12 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     erg = (erg_1 + erg_2 - erg_3) + 0 * im # leave the 0 im for NR case
     
     ### recheck if to inf holds...
-    if (real(erg) .> alph)&&!to_inf
+    if (abs.(erg) .> alph)&&!to_inf
         println("Flipping from bnd to inf")
         to_inf = true
         m = (m1 + m2 - m3)
         l = l1 + l2 - l3
-    else (real(erg) .< alph)&&to_inf
+    elseif (abs.(erg) .< alph)&&to_inf
         println("Flipping from inf to bnd")
         to_inf = false
         l = 0
@@ -2225,7 +2226,7 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
             im_prt = mlwreal_to_bigfloat(im_prt)
         end
         hval = complex(re_prt, im_prt)
-        if log10.(abs.(hval)) > 1000.0
+        if log10.(abs.(hval)) > 100.0
             push!(heunc, heunc[end])
             mathm_fail = true
             continue
@@ -2269,7 +2270,7 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
 
 #    Not using old way
     # rlist_2, y_values_2 = solve_radial(mu, M, atilde, n, l0, m; rpts=Npts_r, rmaxT=100, pre_compute_erg=erg_out, Ntot_safe=7000)
-    writedlm("test_store/tt1.dat", cat(rlist, real.(y_values .* conj.(y_values)), dims=2))
+    # writedlm("test_store/tt1.dat", cat(rlist, real.(y_values .* conj.(y_values)), dims=2))
     # writedlm("test_store/tt2.dat", cat(r_vals, rout_temp, dims=2))
     
     
@@ -2277,6 +2278,8 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
     if number_max_cnt != (n - l0)
         println("Nmax count :", number_max_cnt)
         y_values = rout_temp
+        nm2 = trapz(y_values .* conj.(y_values) .* rlist.^2, rlist)
+        y_values ./= sqrt.(nm2)
     end
     
     if !return_nu
