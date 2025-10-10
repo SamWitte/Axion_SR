@@ -71,6 +71,11 @@ function parse_commandline()
             arg_type = Bool
             default = false
 
+        "--cut_high_spin"
+            arg_type = Bool
+            default = false
+
+
     end
 
     return parse_args(s)
@@ -97,6 +102,8 @@ burnin = parsed_args["burnin"]
 delt_M = parsed_args["delt_M"]
 use_kde = parsed_args["use_kde"]
 one_BH = parsed_args["one_BH"]
+
+cut_high_spin = parsed_args["cut_high_spin"]
 
 print("Deets...\n\n")
 println("Datafile: ", dataname)
@@ -155,11 +162,17 @@ else
 end
 
 
+if cut_high_spin
+    high_spin_cut = 0.89
+else
+    high_spin_cut = nothing
+end
+
 check_exists = "output_mcmc/"*Fname*"_mcmc.dat"
 if (!dont_over_run || !isfile(check_exists))
     time0=Dates.now()
     if !spinone
-        @inbounds @fastmath profileL_func_minimize(data, ax_mass, Fname, Nsamples, fa_min=fa_min, fa_max=fa_max, tau_max=tau_max, non_rel=non_rel, Nmax=Nmax, cheby=cheby, numsamples_perwalker=numsamples_perwalker, delt_M=delt_M, burnin=burnin, use_kde=use_kde, over_run=true, high_p=high_p, one_BH=one_BH)
+        @inbounds @fastmath profileL_func_minimize(data, ax_mass, Fname, Nsamples, fa_min=fa_min, fa_max=fa_max, tau_max=tau_max, non_rel=non_rel, Nmax=Nmax, cheby=cheby, numsamples_perwalker=numsamples_perwalker, delt_M=delt_M, burnin=burnin, use_kde=use_kde, over_run=true, high_p=high_p, one_BH=one_BH, high_spin_cut=high_spin_cut)
     else
         @inbounds @fastmath profileL_func_minimize_spinone(data, Fname, Nsamples, tau_max=tau_max, numsamples_perwalker=numsamples_perwalker, delt_M=delt_M, burnin=burnin, use_kde=use_kde, over_run=true)
     end
