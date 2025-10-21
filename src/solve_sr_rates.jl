@@ -1669,7 +1669,7 @@ function pre_computed_sr_rates(n, l, m, alph, M; n_high=20, n_low=20, delt_a=0.0
         else
             fn = "rate_sve/Imag_ergC_pos_$(n)$(l)$(m).npz"
         end
-        if isfile
+        if isfile(fn)
             file_in = npzread(fn)
         
             file_in[:, :, 3] .*= 2.0
@@ -1695,7 +1695,7 @@ function pre_computed_sr_rates(n, l, m, alph, M; n_high=20, n_low=20, delt_a=0.0
         else
             fn = "rate_sve/Imag_ergC_neg_$(n)$(l)$(m).npz"
         end
-        if isfile
+        if isfile(fn)
             file_in = npzread(fn)
         
             file_in[:, :, 3] .*= 2.0
