@@ -1641,7 +1641,7 @@ function pre_computed_sr_rates(n, l, m, alph, M; n_high=20, n_low=20, delt_a=0.0
         fn = "rate_sve/Imag_zeroC_$(n)$(l)$(m).dat"
     end
     if isfile(fn)
-        zerolist= readdlm(fb)
+        zerolist= readdlm(fn)
     
         itp = LinearInterpolation(zerolist[:, 1], zerolist[:, 2], extrapolation_bc=Line())
         a_mid = itp(alph)
