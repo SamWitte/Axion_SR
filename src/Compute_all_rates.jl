@@ -70,18 +70,19 @@ print(S1, "\t", S2, "\t", S3, "\t", S4, "\n")
 function main(;kpts=14, rpts=1000, rmaxT=100, Nang=200000, Npts_Bnd=2000)
     a = 0.95
     M = 10.0
-    Ntot_safe=5000
+    Ntot_safe=20000
     NON_REL = false
-    h_mve = 1.0
     
     prec=200
-    cvg_acc=1e-3
-    NptsCh=60
-    iterC=20
+    cvg_acc=5e-3
+    NptsCh=100
+    iterC=40
+    
+    debug=true
     
     
     min_m = minimum([parse(Int, S1[end]), parse(Int, S2[end]), parse(Int, S3[end])])
-    alpha_max = a .* min_m ./ (2 .* (1 .+ sqrt.(1 .- a.^2))) .* 1.05
+    alpha_max = a .* min_m ./ (2 .* (1 .+ sqrt.(1 .- a.^2))) .* 1.03
     
     # alpha_list = 10 .^LinRange(log10(alpha_min), log10(alpha_max), alpha_pts)
     alpha_list = LinRange(alpha_min, alpha_max, alpha_pts)
@@ -119,7 +120,7 @@ function main(;kpts=14, rpts=1000, rmaxT=100, Nang=200000, Npts_Bnd=2000)
         computed_out = file_load[1, 2]
         mu = alpha_test ./ (M * GNew)
         h_mve = 0.1
-        testVal = gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, Npts_Bnd=Npts_Bnd, debug=false, eps_fac=1e-3, Ntot_safe=Ntot_safe, m=0, l=0, Nang=Nang, NON_REL=NON_REL, h_mve=h_mve, to_inf=to_inf, rmaxT=rmaxT, run_leaver=run_leaver, NptsCh=NptsCh, cvg_acc=cvg_acc, prec=prec, iterC=iterC)
+        testVal = gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, Npts_Bnd=Npts_Bnd,  eps_fac=1e-3, Ntot_safe=Ntot_safe, Nang=Nang, NON_REL=NON_REL, h_mve=h_mve, to_inf=to_inf, rmaxT=rmaxT, run_leaver=run_leaver, NptsCh=NptsCh, cvg_acc=cvg_acc, prec=prec, iterC=iterC, debug=debug)
         if (abs.(computed_out .- testVal) ./ computed_out) .> 0.4
             overwrite_file = true
             println("Test failed.... alpha, old / new \t ", alpha_test, "\t", computed_out, "\t", testVal)
@@ -130,17 +131,19 @@ function main(;kpts=14, rpts=1000, rmaxT=100, Nang=200000, Npts_Bnd=2000)
         
         for i in 1:alpha_pts
             mu = alpha_list[i] ./ (M * GNew)
-            if alpha_list[i] .< 0.1
-                h_mve = 0.1
-            else
-                h_mve = 1.0
-            end
-            output_sve[i] = gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, Npts_Bnd=Npts_Bnd, debug=false, eps_fac=1e-3, Ntot_safe=Ntot_safe, m=0, l=0, Nang=Nang, NON_REL=NON_REL, h_mve=h_mve, to_inf=to_inf, rmaxT=rmaxT, run_leaver=run_leaver, NptsCh=NptsCh, cvg_acc=cvg_acc, prec=prec, iterC=iterC)
+            
+            maxN = maximum([n1 n2 n3])
+            rmax_1 = (2.0 .^(2.0 .* 3 .- 2 .* (1 .+ 3)) .* gamma(2 .+ 2 .* 3) ./ (0.03) ./ factorial(2 .* 3 - 1) .* 7.0)
+            rmax_ratio = (2.0 .^(2.0 .* maxN .- 2 .* (1 .+ maxN)) .* gamma(2 .+ 2 .* maxN) ./ alpha_list[i].^2 ./ factorial(2 .* maxN - 1) .* 7.0) ./ rmax_1
+            h_mve = (0.1) ./ rmax_ratio
+           
+            output_sve[i] = gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, Npts_Bnd=Npts_Bnd, eps_fac=1e-3, Ntot_safe=Ntot_safe, Nang=Nang, NON_REL=NON_REL, h_mve=h_mve, to_inf=to_inf, rmaxT=rmaxT, run_leaver=run_leaver, NptsCh=NptsCh, cvg_acc=cvg_acc, prec=prec, iterC=iterC, debug=debug)
         
             print("alpha \t", alpha_list[i], "\t", output_sve[i], "\n")
         end
        
-        
+        alpha_list = alpha_list[output_sve .> 0.0]
+        output_sve = output_sve[output_sve .> 0.0]
         writedlm(fOUT, hcat(alpha_list, output_sve))
     end
     

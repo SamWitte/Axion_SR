@@ -1270,7 +1270,7 @@ end
 
 
 
-function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, debug=false, Ntot_safe=5000,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=500000, eps_fac=1e-10, m=0, l=0, NON_REL=false, h_mve=1, to_inf=false, rmaxT=100, prec=200, cvg_acc=1e-3, NptsCh=60, iterC=20, run_leaver=false)
+function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, debug=false, Ntot_safe=5000,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=500000, eps_fac=1e-10, NON_REL=false, h_mve=1, to_inf=false, rmaxT=100, prec=200, cvg_acc=1e-3, NptsCh=60, iterC=20, run_leaver=false)
     
     rp = BigFloat(1.0 .+ sqrt.(1.0 .- a.^2))
     rmm = BigFloat(1.0 .- sqrt.(1.0 .- a.^2))
@@ -1290,7 +1290,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     # erg1R, erg1I = find_im_part(mu, M, a, n1, l1, m1; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
     # erg2R, erg2I = find_im_part(mu, M, a, n2, l2, m2; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
     # erg3R, erg3I = find_im_part(mu, M, a, n3, l3, m3; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
-    
+    OmegaH = a ./ (2 .* (GNew .* M) .* (1 .+ sqrt.(1 .- a.^2)))
     
     if erg_pxy .> alph
         to_inf = true
@@ -1316,8 +1316,6 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         rmax = 2.0 .^(2.0 .* maxN .- 2 .* (1 .+ maxN)) .* gamma(2 .+ 2 .* maxN) ./ alph.^2 ./ factorial(2 .* maxN - 1) .* 7.0
     end
     
-    # rmax = Float64.(100 ./ alph.^2 .* (maxN ./ 2.0) )
-    # rmax = Float64.(100 ./ alph.^2 .* (minN ./ 2.0) )
     
     rlist = 10 .^range(log10(rp .* (1.0 .+ eps_fac)), log10.(rmax), rpts)
     
@@ -1339,7 +1337,12 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             if debug
                 println("ERG 1\t", erg_1)
             end
-            return 0.0
+            if (erg_1G * GNew * M .< 0.8 .* m1 .* OmegaH) # if fail is deep in non-relativistic regime, catch
+                rf_1 = radial_bound_NR(n1, l1, m1, mu, M, rlist)
+                erg_1 = erg_1G * GNew * M
+            else
+                return 0.0
+            end
         end
     end
     
@@ -1368,6 +1371,12 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                 if debug
                     println("ERG 2\t", erg_2)
                 end
+                if (erg_2G * GNew * M .< 0.8 .* m2 .* OmegaH) # if fail is deep in non-relativistic regime, catch
+                    rf_2 = radial_bound_NR(n2, l2, m2, mu, M, rlist)
+                    erg_2 = erg_2G * GNew * M
+                else
+                    return 0.0
+                end
                 return 0.0
             end
         end
@@ -1393,6 +1402,12 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             if debug
                 println("ERG 3\t", erg_3)
             end
+            if (erg_3G * GNew * M .< 0.8 .* m3 .* OmegaH) # if fail is deep in non-relativistic regime, catch
+                rf_3 = radial_bound_NR(n3, l3, m3, mu, M, rlist)
+                erg_3 = erg_3G * GNew * M
+            else
+                return 0.0
+            end
             return 0.0
         end
     end
@@ -1415,7 +1430,6 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         l = 0
         m = 0
     end
-    
     
     Z1 = spheroidals(l1, m1, a, erg_1)
     Z2 = spheroidals(l2, m2, a, erg_2)
@@ -1466,7 +1480,6 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     
     
     r_list_map = 10 .^LinRange(log10.(rp * (1.0 .+ eps_fac)), log10.(rmax), 100000)
-    # rout_star = r_list_map .+ 2.0 .* rp ./ (rp .- rmm) .* log.(r_list_map ./ rp .- 1.0) .- 2.0 .* rmm .* log.(r_list_map ./ rmm .- 1.0) ./ (rp .- rmm)
     rout_star = r_list_map .+ 2.0 .* rp ./ (rp .- rmm) .* log.((r_list_map .- rp) ./ 2.0) .- 2.0 .* rmm .* log.((r_list_map .- rmm) ./ 2.0) ./ (rp .- rmm)
     
     
@@ -1538,9 +1551,6 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         net_rescale = h_step.^2
         Vv = delt .* alph.^2 ./ ff .+ delt .* (LLM .+ a.^2 .* (erg.^2 .- alph.^2)) ./ ff.^2 .+ delt .* (3 .* r_input.^2 .- 4 .* r_input .+ a.^2) ./ ff.^3 .- 3 .* delt.^2 .* r_input.^2 ./ ff.^4
         newV = 2 * outWF_fw[idx] .- outWF_fw[idx - 1] .+ net_rescale .* (Vv .- erg.^2) .* outWF_fw[idx]
-#        if add_source
-#            newV += - net_rescale .* SS .* (CG .* r_input.^2 .+ CG_2 .* a.^2) .* delt ./ ff.^(3/2)
-#        end
         
         newV_r = Float64.(real(newV))
         newV_i = Float64.(imag(newV))
@@ -1606,9 +1616,9 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
 #        println("QUIT!")
 #        ####
     else
-        # idx_hold = itp_rrstar.(rvals) .> 1.01 .* rp
-        # rnew_rp = trapz(outWF[idx_hold] .* Tmm[idx_hold] , itp_rrstar.(rvals[idx_hold])) .* outWF_fw[idx_hold][1] ./ wronk
-        rnew_rp = trapz(outWF .* Tmm , itp_rrstar.(rvals)) .* outWF_fw[1] ./ wronk
+        idx_hold = itp_rrstar.(rvals) .> 1.01 .* rp
+        rnew_rp = trapz(outWF[idx_hold] .* Tmm[idx_hold] , itp_rrstar.(rvals[idx_hold])) .* outWF_fw[idx_hold][1] ./ wronk
+        # rnew_rp = trapz(outWF .* Tmm , itp_rrstar.(rvals)) .* outWF_fw[1] ./ wronk
 
         maxV = real(rnew_rp.* conj.(rnew_rp))
 
