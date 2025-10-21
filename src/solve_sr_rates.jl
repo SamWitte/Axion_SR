@@ -33,9 +33,6 @@ end
 
 
 function sr_rates(n, l, m, massB, MBH, aBH; impose_low_cut=0.001, solve_322=true)
-    if (n==3)&&(l==2)&&(m==1)&&(solve_322==false)
-        return 0.0
-    end
     
 
     alph = GNew .* MBH .* massB
@@ -1311,6 +1308,8 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         # rmax = 2.0 .^(2.0 .* minN .- 2 .* (1 .+ minN)) .* gamma(2 .+ 2 .* minN) ./ alph.^2 ./ factorial(2 .* minN - 1) .* 2.0
         rmax = 1/kk_pxy .* 20.0 # Need prefactor here i think...
     else
+        l = 0
+        m = 0
         # rmax = Float64.(100 ./ alph.^2 .* (minN ./ 2.0) )
         # rmax = 2.0 .^(2.0 .* minN .- 2 .* (1 .+ minN)) .* gamma(2 .+ 2 .* minN) ./ alph.^2 ./ factorial(2 .* minN - 1) .* 7.0
         rmax = 2.0 .^(2.0 .* maxN .- 2 .* (1 .+ maxN)) .* gamma(2 .+ 2 .* maxN) ./ alph.^2 ./ factorial(2 .* maxN - 1) .* 7.0
