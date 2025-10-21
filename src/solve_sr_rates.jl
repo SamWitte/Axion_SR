@@ -1634,18 +1634,24 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
 end
 
 
-function pre_computed_sr_rates(n, l, m, alph, M; n_high=20, n_low=20, delt_a=0.001, cheby=false)
+function pre_computed_sr_rates(n, l, m, alph, M; n_high=20, n_low=20, delt_a=0.001, cheby=true)
     if !cheby
-        zerolist= readdlm("rate_sve/Imag_zero_$(n)$(l)$(m).dat")
+        fn = "rate_sve/Imag_zero_$(n)$(l)$(m).dat"
     else
-        zerolist= readdlm("rate_sve/Imag_zeroC_$(n)$(l)$(m).dat")
+        fn = "rate_sve/Imag_zeroC_$(n)$(l)$(m).dat"
     end
-    itp = LinearInterpolation(zerolist[:, 1], zerolist[:, 2], extrapolation_bc=Line())
-    a_mid = itp(alph)
-    if a_mid .< 0
-        a_mid = 0.01
-    elseif a_mid .> maxSpin
-        a_mid = maxSpin
+    if isfile(fn)
+        zerolist= readdlm(fb)
+    
+        itp = LinearInterpolation(zerolist[:, 1], zerolist[:, 2], extrapolation_bc=Line())
+        a_mid = itp(alph)
+        if a_mid .< 0
+            a_mid = 0.01
+        elseif a_mid .> maxSpin
+            a_mid = maxSpin
+        end
+    else
+        a_mid = 0.5
     end
     
     run_high = true
@@ -1659,16 +1665,24 @@ function pre_computed_sr_rates(n, l, m, alph, M; n_high=20, n_low=20, delt_a=0.0
     if run_high
         a_list_high = LinRange(a_mid + delt_a, maxSpin, n_high)
         if !cheby
-            file_in = npzread("rate_sve/Imag_erg_pos_$(n)$(l)$(m).npz")
+            fn = "rate_sve/Imag_erg_pos_$(n)$(l)$(m).npz"
         else
-            file_in = npzread("rate_sve/Imag_ergC_pos_$(n)$(l)$(m).npz")
+            fn = "rate_sve/Imag_ergC_pos_$(n)$(l)$(m).npz"
         end
-        file_in[:, :, 3] .*= 2.0
-        alpha_load = unique(file_in[:,:,1])
-        a_load = unique(file_in[:,:,2])
-        file_in[file_in[:, :, 3] .<= 0.0, 3] .= 1e-100
-        itp = LinearInterpolation((alpha_load, a_load), log10.(file_in[:, :, 3] ./ (GNew * M)), extrapolation_bc=Line())
-        out_high = 10 .^itp(alph, a_list_high)
+        if isfile
+            file_in = npzread(fn)
+        
+            file_in[:, :, 3] .*= 2.0
+            alpha_load = unique(file_in[:,:,1])
+            a_load = unique(file_in[:,:,2])
+            file_in[file_in[:, :, 3] .<= 0.0, 3] .= 1e-100
+            itp = LinearInterpolation((alpha_load, a_load), log10.(file_in[:, :, 3] ./ (GNew * M)), extrapolation_bc=Line())
+            out_high = 10 .^itp(alph, a_list_high)
+        else
+            a_list_high = []
+            out_high = []
+            run_high = false
+        end
     else
         a_list_high = []
         out_high = []
@@ -1677,16 +1691,24 @@ function pre_computed_sr_rates(n, l, m, alph, M; n_high=20, n_low=20, delt_a=0.0
     if run_low
         a_list_low = LinRange(minSpin, a_mid - delt_a, n_low)
         if !cheby
-            file_in = npzread("rate_sve/Imag_erg_neg_$(n)$(l)$(m).npz")
+            fn = "rate_sve/Imag_erg_neg_$(n)$(l)$(m).npz"
         else
-            file_in = npzread("rate_sve/Imag_ergC_neg_$(n)$(l)$(m).npz")
+            fn = "rate_sve/Imag_ergC_neg_$(n)$(l)$(m).npz"
         end
-        file_in[:, :, 3] .*= 2.0
-        alpha_load = unique(file_in[:,:,1])
-        a_load = unique(file_in[:,:,2])
-        file_in[file_in[:, :, 3] .<= 0.0, 3] .= 1e-100
-        itp = LinearInterpolation((alpha_load, a_load), log10.(file_in[:, :, 3] ./ (GNew * M)), extrapolation_bc=Line())
-        out_low = 10 .^itp(alph, a_list_low)
+        if isfile
+            file_in = npzread(fn)
+        
+            file_in[:, :, 3] .*= 2.0
+            alpha_load = unique(file_in[:,:,1])
+            a_load = unique(file_in[:,:,2])
+            file_in[file_in[:, :, 3] .<= 0.0, 3] .= 1e-100
+            itp = LinearInterpolation((alpha_load, a_load), log10.(file_in[:, :, 3] ./ (GNew * M)), extrapolation_bc=Line())
+            out_low = 10 .^itp(alph, a_list_low)
+        else
+            a_list_low = []
+            out_low = []
+            run_low = false
+        end
     else
         a_list_low = []
         out_low = []

@@ -10,7 +10,7 @@ include("solve_sr_rates.jl")
 include("load_rates.jl")
 using Printf
 
-function super_rad_check(M_BH, aBH, massB, f_a; tau_max=1e4, alpha_max_cut=100.0, debug=false, impose_low_cut=0.01, stop_on_a=0, eq_threshold=1e-100, abstol=1e-30, non_rel=true, high_p=true, N_pts_interp=100, N_pts_interpL=100, Nmax=3, cheby=false, spinone=false)
+function super_rad_check(M_BH, aBH, massB, f_a; tau_max=1e4, alpha_max_cut=100.0, debug=false, impose_low_cut=0.01, stop_on_a=0, eq_threshold=1e-100, abstol=1e-30, non_rel=true, high_p=true, N_pts_interp=100, N_pts_interpL=100, Nmax=3, cheby=true, spinone=false)
    
     alph = GNew .* M_BH .* massB #
     if debug
@@ -53,7 +53,7 @@ function isapproxsigfigs(a, b, precision)
     return round(a, sigdigits=precision) == round(b, sigdigits=precision)
 end
 
-function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impose_low_cut=0.01, return_all_info=false, eq_threshold=1e-100, stop_on_a=0, abstol=1e-30, non_rel=true, high_p=true, N_pts_interp=200, N_pts_interpL=200,  Nmax=3, cheby=false)
+function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impose_low_cut=0.01, return_all_info=false, eq_threshold=1e-100, stop_on_a=0, abstol=1e-30, non_rel=true, high_p=true, N_pts_interp=200, N_pts_interpL=200,  Nmax=3, cheby=true)
 
     alph = GNew .* M_BH .* mu
     if debug
@@ -165,7 +165,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
     
     if debug
         println("Rates loaded...")
-        println(rates)
+        # println(rates)
     end
     
    
@@ -749,7 +749,7 @@ function solve_system_spinone(mu, aBH, M_BH, tau_max; n_times=10000, debug=false
     return spinBH[end], MassB[end]
 end
 
-function compute_sr_rates(qtm_cfigs, M_BH, aBH, alph; delt_a=0.0001, cheby=false)
+function compute_sr_rates(qtm_cfigs, M_BH, aBH, alph; delt_a=0.0001, cheby=true)
     # Define the quantum numbers to iterate over
     # Each entry is [n, l, m, alph_threshold]
     

@@ -10,7 +10,7 @@ using MCMCDiagnosticTools
 using Dates
 using KernelDensity
 
-function profileL_func_minimize(data, mass_ax, Fname, Nsamples; fa_min=1e11, fa_max=1e18, tau_max=1e4, non_rel=true, Nmax=3, cheby=false, delt_M=0.05, thinning=1, numsamples_perwalker=2000, burnin=500, use_kde=true, over_run=true, high_p=true, one_BH=false, high_spin_cut=nothing)
+function profileL_func_minimize(data, mass_ax, Fname, Nsamples; fa_min=1e11, fa_max=1e18, tau_max=1e4, non_rel=true, Nmax=3, cheby=true, delt_M=0.05, thinning=1, numsamples_perwalker=2000, burnin=500, use_kde=true, over_run=true, high_p=true, one_BH=false, high_spin_cut=nothing)
     
     ## data format: [M_1, M_2, chi_1, chi_2] samples
     
@@ -46,7 +46,7 @@ end
     
     
 
-function log_probability(theta, data, mass_ax; fa_min=1e11, fa_max=1e20, tau_max=5e7, non_rel=false, Nmax=3, cheby=false, delt_M=0.05, Nsamples=3, use_kde=true, high_p=true, one_BH=false, high_spin_cut=nothing)
+function log_probability(theta, data, mass_ax; fa_min=1e11, fa_max=1e20, tau_max=5e7, non_rel=false, Nmax=3, cheby=true, delt_M=0.05, Nsamples=3, use_kde=true, high_p=true, one_BH=false, high_spin_cut=nothing)
     
     return log_likelihood(theta, data, mass_ax, tau_max=tau_max, non_rel=non_rel, Nmax=Nmax, cheby=cheby, delt_M=delt_M, Nsamples=Nsamples, use_kde=use_kde, high_p=high_p, one_BH=one_BH, high_spin_cut=high_spin_cut)
 end
@@ -74,7 +74,7 @@ function sample_spin(SpinBH_c, Spin_errD)
     return SpinBH
 end
 
-function log_likelihood(theta, data, mass_ax; tau_max=1e4, non_rel=true, debug=false, Nmax=3, cheby=false, Nsamples=3, delt_M=0.05, use_kde=true, high_p=true, one_BH=false, high_spin_cut=nothing)
+function log_likelihood(theta, data, mass_ax; tau_max=1e4, non_rel=true, debug=false, Nmax=3, cheby=true, Nsamples=3, delt_M=0.05, use_kde=true, high_p=true, one_BH=false, high_spin_cut=nothing)
     
     log_f = theta
     sum_loglike = 0.0

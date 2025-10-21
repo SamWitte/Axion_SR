@@ -22,7 +22,7 @@ function prior(theta, lg_m_low, lg_m_high, lg_f_low, lg_f_high)
     return -Inf
 end
 
-function log_probability(theta, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high; tau_max=1e4, alpha_max_cut=0.2, use_input_table=true, impose_low_cut=1e-100, max_mass_matrix=nothing, stop_on_a=0.0, eq_threshold=1e-100, abstol=1e-30, non_rel=true, Nmax=3, cheby=false)
+function log_probability(theta, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high; tau_max=1e4, alpha_max_cut=0.2, use_input_table=true, impose_low_cut=1e-100, max_mass_matrix=nothing, stop_on_a=0.0, eq_threshold=1e-100, abstol=1e-30, non_rel=true, Nmax=3, cheby=true)
 
     lp = prior(theta, lg_m_low, lg_m_high, lg_f_low, lg_f_high)
     if !isfinite.(lp)
@@ -35,7 +35,7 @@ function log_probability(theta, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high; 
     return temp
 end
 
-function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_table=true, impose_low_cut=1e-100, max_mass_matrix=nothing, stop_on_a=0.0, eq_threshold=1e-100, abstol=1e-30, non_rel=true, debug=false, Nmax=3, cheby=false)
+function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_table=true, impose_low_cut=1e-100, max_mass_matrix=nothing, stop_on_a=0.0, eq_threshold=1e-100, abstol=1e-30, non_rel=true, debug=false, Nmax=3, cheby=true)
     
     log_m, log_f = theta
     sum_loglike = 0.0
@@ -213,7 +213,7 @@ function initialize_walkers(numwalkers, data, lg_m_low, lg_m_high, lg_f_low, lg_
     return x0
 end
 
-function mcmc_func_minimize(data, Fname; lg_m_low=-20, lg_m_high=-18, lg_f_high=19, lg_f_low=18, tau_max=1e4, alpha_max_cut=0.2, alpha_min_cut=1e-100, use_input_table=true, numwalkers=10, thinning=1, numsamples_perwalker=2000, burnin=500, max_mass_matrix=nothing, stop_on_a=0.0, eq_threshold=1e-100, abstol=1e-30, non_rel=true, Nmax=3, cheby=false)
+function mcmc_func_minimize(data, Fname; lg_m_low=-20, lg_m_high=-18, lg_f_high=19, lg_f_low=18, tau_max=1e4, alpha_max_cut=0.2, alpha_min_cut=1e-100, use_input_table=true, numwalkers=10, thinning=1, numsamples_perwalker=2000, burnin=500, max_mass_matrix=nothing, stop_on_a=0.0, eq_threshold=1e-100, abstol=1e-30, non_rel=true, Nmax=3, cheby=true)
     numdims = 2
 
 

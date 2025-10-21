@@ -6,15 +6,15 @@ using Suppressor
 include("tde_input.jl")
 using Dates
 
-fout = "_"
-sve = true
+fout = "_HERE_"
+sve = false
 
 
-f_a = 1e15
+f_a = 1e18
 m_a = 1e-12
 SpinBH = 0.9
-MassBH = 20.0
-tau_max = 5.0e7 # 5.0e7, 4.8e6
+MassBH = 10
+tau_max = 1e8 # 5.0e7, 4.8e6
 
 alpha_max_cut = 10.0
 impose_low_cut = 1e-100
@@ -24,19 +24,19 @@ n_times = 100000
 eq_threshold=1e-100
 stop_on_a = 0.0
 abstol=1e-30
-N_pts_interp=200
-N_pts_interpL=200
+N_pts_interp=100
+N_pts_interpL=100
 
 
-Nmax = 3
-cheby=false
+Nmax = 5
+cheby=true
 
 non_rel = false
 high_p = true
 
 alph = GNew .* MassBH .* m_a
 maxa = 4 .* alph ./ (1 .+ 4 .* alph.^2)
-
+println("alpha \t maxa \t", alph, "\t", maxa)
 
 print("Alpha and max a spin down \t", alph, "\t", maxa, "\n")
 println("fa ", f_a)
