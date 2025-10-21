@@ -1332,8 +1332,10 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         end
         itp = LinearInterpolation(log10.(rl), r1, extrapolation_bc=Line())
         rf_1 = itp(log10.(rlist))
-        if imag(erg_1) < 0
+        real_diff_test = abs.((erg_1 .- erg_1G * GNew * M) ./ alph) # saftey net for random fail....
+        if (imag(erg_1) < 0)||(real_diff_test .> 0.5)
             if debug
+                println("Issue with one of the energy eigenstates....")
                 println("ERG 1\t", erg_1)
             end
             if (erg_1G * GNew * M .< 0.8 .* m1 .* OmegaH) # if fail is deep in non-relativistic regime, catch
@@ -1366,8 +1368,10 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             
             itp = LinearInterpolation(log10.(rl), r2, extrapolation_bc=Line())
             rf_2 = itp(log10.(rlist))
-            if imag(erg_2) < 0
+            real_diff_test = abs.((erg_2 .- erg_2G * GNew * M) ./ alph) # saftey net for random fail....
+            if (imag(erg_2) < 0)||(real_diff_test .> 0.5)
                 if debug
+                    println("Issue with one of the energy eigenstates....")
                     println("ERG 2\t", erg_2)
                 end
                 if (erg_2G * GNew * M .< 0.8 .* m2 .* OmegaH) # if fail is deep in non-relativistic regime, catch
@@ -1396,9 +1400,10 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         
         itp = LinearInterpolation(log10.(rl), r3, extrapolation_bc=Line())
         rf_3 = itp(log10.(rlist))
-
-        if imag(erg_3) < 0
+        real_diff_test = abs.((erg_3 .- erg_3G * GNew * M) ./ alph) # saftey net for random fail....
+        if (imag(erg_3) < 0)||(real_diff_test .> 0.5)
             if debug
+                println("Issue with one of the energy eigenstates....")
                 println("ERG 3\t", erg_3)
             end
             if (erg_3G * GNew * M .< 0.8 .* m3 .* OmegaH) # if fail is deep in non-relativistic regime, catch
@@ -1455,7 +1460,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     
     
     if debug
-#        println("erg fin \t ", erg)
+        println("ergs ", erg_1, "  ", erg_2, "  ", erg_3, "  ", erg)
         println("angles \t", CG, "\t", CG_2)
     end
     
