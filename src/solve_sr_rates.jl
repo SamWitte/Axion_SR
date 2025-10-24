@@ -1267,7 +1267,7 @@ end
 
 
 
-function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, debug=false, Ntot_safe=5000,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=500000, eps_fac=1e-10, NON_REL=false, h_mve=1, to_inf=false, rmaxT=100, prec=200, cvg_acc=1e-3, NptsCh=60, iterC=20, run_leaver=false)
+function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, debug=false, Ntot_safe=5000,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=500000, eps_fac=1e-10, NON_REL=false, h_mve=1, to_inf=false, rmaxT=100, prec=200, cvg_acc=1e-3, NptsCh=60, iterC=20, Lcheb=4, run_leaver=false)
     
     rp = BigFloat(1.0 .+ sqrt.(1.0 .- a.^2))
     rmm = BigFloat(1.0 .- sqrt.(1.0 .- a.^2))
@@ -1327,7 +1327,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         if run_leaver
             rl, r1, erg_1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe)
         else
-            wR, wI, rl, r1 = eigensys_Cheby(M, a, mu, n1, l1, m1, return_wf=true, Npoints=NptsCh, Iter=iterC, cvg_acc=cvg_acc, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=true)
+            wR, wI, rl, r1 = eigensys_Cheby(M, a, mu, n1, l1, m1, return_wf=true, Npoints=NptsCh, Iter=iterC, L=Lcheb, cvg_acc=cvg_acc, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=true)
             erg_1 = wR .+ im .* wI
         end
         itp = LinearInterpolation(log10.(rl), r1, extrapolation_bc=Line())
@@ -1362,7 +1362,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             if run_leaver
                 rl, r2, erg_2 = solve_radial(mu, M, a, n2, l2, m2; rpts=Npts_Bnd,  return_erg=true, Ntot_safe=Ntot_safe)
             else
-                wR, wI, rl, r2 = eigensys_Cheby(M, a, mu, n2, l2, m2, return_wf=true, Npoints=NptsCh, Iter=iterC, cvg_acc=cvg_acc, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=true)
+                wR, wI, rl, r2 = eigensys_Cheby(M, a, mu, n2, l2, m2, return_wf=true, Npoints=NptsCh, Iter=iterC, cvg_acc=cvg_acc, L=Lcheb,  Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=true)
                 erg_2 = wR .+ im .* wI
             end
             
@@ -1394,7 +1394,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         if run_leaver
             rl, r3, erg_3 = solve_radial(mu, M, a, n3, l3, m3; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe)
         else
-            wR, wI, rl, r3 = eigensys_Cheby(M, a, mu, n3, l3, m3, return_wf=true, Npoints=NptsCh, Iter=iterC, cvg_acc=cvg_acc, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=true)
+            wR, wI, rl, r3 = eigensys_Cheby(M, a, mu, n3, l3, m3, return_wf=true, Npoints=NptsCh, Iter=iterC, cvg_acc=cvg_acc, L=Lcheb, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=true)
             erg_3 = wR .+ im .* wI
         end
         
@@ -1770,7 +1770,7 @@ function precomputed_spin1(alph, a, M)
 end
 
 
-function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=30, Iter=30, debug=false, return_wf=false, der_acc=1e-10, cvg_acc=1e-4, Npts_r=1000, nu_guess=nothing, return_nu=false, sfty_run=false)
+function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=200, L=4, Npoints=30, Iter=30, debug=false, return_wf=false, der_acc=1e-14, cvg_acc=1e-4, Npts_r=1000, nu_guess=nothing, return_nu=false, sfty_run=false)
     # L field spherical harmonic truncation l-eigenstate
     # Npoints number of Chebyshev interpolation points
     # Iter number of iterations for the non-linear inversion
