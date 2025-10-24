@@ -1770,7 +1770,7 @@ function precomputed_spin1(alph, a, M)
 end
 
 
-function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter=10, debug=false, return_wf=false, der_acc=1e-6, cvg_acc=1e-4, Npts_r=1000, nu_guess=nothing, return_nu=false, sfty_run=false)
+function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=30, Iter=30, debug=false, return_wf=false, der_acc=1e-10, cvg_acc=1e-4, Npts_r=1000, nu_guess=nothing, return_nu=false, sfty_run=false)
     # L field spherical harmonic truncation l-eigenstate
     # Npoints number of Chebyshev interpolation points
     # Iter number of iterations for the non-linear inversion
@@ -2013,7 +2013,8 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
                            Aplus_val/((rplus - rminus)*(r_n - rplus)) +
                            Aminus_val/((rplus - rminus)*(r_n - rminus)) - (alph^2 - ω_val^2)) -
                            1/(Dζmap(r_n))^2 * 1/Δ(r_n) * LLM
-                           # (l*(l + 1) + a^2*c_coupling(l, l)*(alph^2 - ω_val^2))
+                           # 1/(Dζmap(r_n))^2 * 1/Δ(r_n) .* (l*(l + 1) + a^2*c_coupling(l, l)*(alph^2 - ω_val^2))
+                           
             
             C3plus[l+1, n+1] = -(1/(Dζmap(r_n))^2) * 1/Δ(r_n) *
                                a^2 * (alph^2 - ω_val^2) * c_coupling(l, l + 2)
@@ -2070,7 +2071,11 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
         
         # Use numerical differentiation as an approximation
         ε = der_acc
-        return (build_matrix(ν_val .* (1 .+ ε)) - build_matrix(ν_val .* (1 .- ε)))/(2*ν_val*ε)
+        # order x^2
+        # return (build_matrix(ν_val .* (1 .+ ε)) - build_matrix(ν_val .* (1 .- ε)))/(2*ν_val*ε)
+        # x^4
+        del_nu = ν_val .* ε
+        return (-build_matrix(ν_val .+ 2 .* del_nu) .+ 8 .* build_matrix(ν_val .+ del_nu)  .- 8 .* build_matrix(ν_val .- del_nu) .+ build_matrix(ν_val .- 2 .* del_nu))/(12 .* del_nu)
     end
 
     # Initialize solution vectors for non-linear inverse iteration
