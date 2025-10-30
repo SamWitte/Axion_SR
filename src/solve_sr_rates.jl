@@ -3,7 +3,7 @@ using Random
 using OrdinaryDiffEq
 using Statistics
 using Distributions
-using ForwardDiff: gradient, derivative, Dual, Partials, hessian
+using ForwardDiff: gradient, derivative, Dual, Partials, hessian, jacobian
 using DelimitedFiles
 using NLsolve
 using Interpolations
@@ -1770,7 +1770,7 @@ function precomputed_spin1(alph, a, M)
 end
 
 
-function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=200, L=4, Npoints=30, Iter=30, debug=false, return_wf=false, der_acc=1e-20, cvg_acc=1e-4, Npts_r=1000, nu_guess=nothing, return_nu=false, sfty_run=false)
+function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=200, L=4, Npoints=60, Iter=30, debug=false, return_wf=false, der_acc=1e-20, cvg_acc=1e-4, Npts_r=1000, nu_guess=nothing, return_nu=false, sfty_run=false)
     # L field spherical harmonic truncation l-eigenstate
     # Npoints number of Chebyshev interpolation points
     # Iter number of iterations for the non-linear inversion
@@ -2063,19 +2063,48 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=200, L=4, Npoints=30, Iter
         
         return MatrixOp
     end
-
+    
+    
+    
     # Function to build the derivative of the system matrix with respect to ν
     function build_derivative_matrix(ν_val)
         # This is a complex operation, would need symbolic differentiation
         # Placeholder implementation - actual implementation would need careful derivative calculations
         
+                
+        
         # Use numerical differentiation as an approximation
         ε = der_acc
-        # order x^2
-        # return (build_matrix(ν_val .* (1 .+ ε)) - build_matrix(ν_val .* (1 .- ε)))/(2*ν_val*ε)
-        # x^4
         del_nu = ν_val .* ε
-        return (-build_matrix(ν_val .+ 2 .* del_nu) .+ 8 .* build_matrix(ν_val .+ del_nu)  .- 8 .* build_matrix(ν_val .- del_nu) .+ build_matrix(ν_val .- 2 .* del_nu))/(12 .* del_nu)
+        """
+        # order x^2 NOT HIGH ENOUGH
+        # testD = (build_matrix(ν_val .* (1 .+ ε)) - build_matrix(ν_val .* (1 .- ε)))/(2*ν_val*ε)
+        # x^4
+        # der_out =  (-build_matrix(ν_val .+ 2 .* del_nu) .+ 8 .* build_matrix(ν_val .+ del_nu)  .- 8 .* build_matrix(ν_val .- del_nu) .+ build_matrix(ν_val .- 2 .* del_nu))/(12 .* del_nu)
+        
+        # x^6
+        der_out_6th = -(  build_matrix(ν_val .- 3 .* del_nu)
+               .- 9 .* build_matrix(ν_val .- 2 .* del_nu)
+               .+ 45 .* build_matrix(ν_val .- 1 .* del_nu)
+               .- 45 .* build_matrix(ν_val .+ 1 .* del_nu)
+               .+ 9 .* build_matrix(ν_val .+ 2 .* del_nu)
+               .- 1 .* build_matrix(ν_val .+ 3 .* del_nu)
+              ) ./ (60 .* del_nu)
+        """
+        # x^8
+        der_out = ( -3  .* build_matrix(ν_val .+ 4 .* del_nu)
+               +32  .* build_matrix(ν_val .+ 3 .* del_nu)
+               -168 .* build_matrix(ν_val .+ 2 .* del_nu)
+               +672 .* build_matrix(ν_val .+ 1 .* del_nu)
+               -672 .* build_matrix(ν_val .- 1 .* del_nu)
+               +168 .* build_matrix(ν_val .- 2 .* del_nu)
+               -32  .* build_matrix(ν_val .- 3 .* del_nu)
+               +3   .* build_matrix(ν_val .- 4 .* del_nu)
+              ) ./ (840 .* del_nu)
+       
+        # println("here 2 \t ", der_out[1], "\t", der_out_6th[1], "\t", der_out_8th[1])
+        
+        return der_out
     end
 
     # Initialize solution vectors for non-linear inverse iteration
@@ -2173,7 +2202,7 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=200, L=4, Npoints=30, Iter
     
     if sfty_run
         sfty = false
-        Npoints += 10
+        Npoints += 15
         while !sfty
             eR, eI = eigensys_Cheby(M, atilde, mu, n, l0, m; prec=prec, L=L, Npoints=Npoints, Iter=Iter, debug=debug, return_wf=false, der_acc=der_acc, cvg_acc=cvg_acc, Npts_r=Npts_r, nu_guess=(erg_out ./ M), return_nu=false, sfty_run=false)
             imdiff = abs.(log10.(abs.(eI)) .- log10.(abs.(imag(erg_out)))) ./ minimum([abs.(log10.(abs.(eI))),abs.(log10.(abs.(imag(erg_out))))])
