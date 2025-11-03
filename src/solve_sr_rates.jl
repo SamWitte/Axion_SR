@@ -1770,7 +1770,7 @@ function precomputed_spin1(alph, a, M)
 end
 
 
-function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=200, L=4, Npoints=60, Iter=30, debug=false, return_wf=false, der_acc=1e-20, cvg_acc=1e-4, Npts_r=1000, nu_guess=nothing, return_nu=false, sfty_run=false)
+function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=200, L=4, Npoints=60, Iter=30, debug=false, return_wf=false, der_acc=1e-20, cvg_acc=1e-10, Npts_r=1000, nu_guess=nothing, return_nu=false, sfty_run=false)
     # L field spherical harmonic truncation l-eigenstate
     # Npoints number of Chebyshev interpolation points
     # Iter number of iterations for the non-linear inversion
@@ -1880,7 +1880,6 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=200, L=4, Npoints=60, Iter
     
 
 
-
     # Now we can define ω
     function calc_ω(ν_val)
         return alph .* sqrt.(1 .- (alph .^2 .* M.^2) ./ ν_val.^2)
@@ -1891,12 +1890,13 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=200, L=4, Npoints=60, Iter
     
     # Hydrogenic frequency parameter ν (initial value)
     if isnothing(nu_guess)
-        if (atilde < 0.3)
-            Nν = calc_Nν_initial()
-        else
-            eR, eI = find_im_part(alph ./ (GNew .* M), M, atilde, n, l0, m; Ntot_force=10000, return_both=true)
-            Nν = calc_ω_inv(eR + im .* eI)
-        end
+#        if (atilde < 0.3)
+#            Nν = calc_Nν_initial()
+#        else
+#            eR, eI = find_im_part(alph ./ (GNew .* M), M, atilde, n, l0, m; Ntot_force=10000, return_both=true)
+#            Nν = calc_ω_inv(eR + im .* eI)
+#        end
+        Nν = calc_Nν_initial()
     else
         erg_in = BigFloat(real(nu_guess)) .+ im * BigFloat(imag(nu_guess))
         Nν = calc_ω_inv(erg_in)
@@ -2168,21 +2168,20 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=200, L=4, Npoints=60, Iter
             
 #            if debug
 #                println("Iteration $i: ν = $(Nν_values[i+1])")
-#            end
+#             end
             
             if i > 1
                 erg_test_init = calc_ω(Nν_values[i])
                 erg_test = calc_ω(Nν_values[i+1])
                 test_convR = abs.(real.(erg_test .- erg_test_init) ./ real.(erg_test_init))
                 test_convI = abs.(imag.(erg_test .- erg_test_init) ./ imag.(erg_test_init))
-                # println(test_convR, "\t", test_convI)
                 if (test_convR < cvg_acc)&&(test_convI < cvg_acc)
                     final_idx = i
                     i = Iter + 1
                 end
             end
             i += 1
-            
+            # final_idx = i
             
         end
         
@@ -2216,9 +2215,9 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=200, L=4, Npoints=60, Iter
             else
                 erg_out = eR + im * eI
             end
-            Npoints += 10
-            if Npoints > 190
-                println("Npoints exceeded 190.... ")
+            Npoints += 15
+            if Npoints > 150
+                println("Npoints exceeded 150.... ")
                 erg_out = eR + im * eI
                 sfty = true
             end
@@ -2486,7 +2485,6 @@ function parse_mathlink_number(w)
 end
 
 # test run of system
-# @time wR, wI, rl, r3 = eigensys_Cheby(1, 0.01, 0.01 ./ GNew, 2, 1, 1, debug=true, return_wf=true, L=4, Npoints = 50, Iter = 50,  der_acc=1e-8, cvg_acc=1e-5, prec=200, Npts_r=4000, sfty_run=true)
-# wR, wI, rl, r3 = eigensys_Cheby(1, 0.01, 0.01 ./ GNew, 2, 1, 1, debug=true, return_wf=true, L=4, Npoints = 90, Iter = 50,  der_acc=1e-8, cvg_acc=1e-5, prec=200, Npts_r=2000, sfty_run=true)
+# @time wR, wI, rl, r3 = eigensys_Cheby(1, 0.95, 0.30190199402717055 ./ GNew, 5, 4, 4, debug=true, return_wf=true, L=4, Npoints = 80, Iter = 20,  der_acc=1e-20, cvg_acc=1e-5, prec=200, Npts_r=2000, sfty_run=true)
 # println(wI)
 # writedlm("test.dat", cat(real.(rl), real.(abs.(r3 .* conj(r3))), dims=2))
