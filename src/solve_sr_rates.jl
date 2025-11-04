@@ -1303,10 +1303,14 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     if to_inf
         m = (m1 + m2 - m3)
         l = l1 + l2 - l3
-        # rmax = Float64.(100 ./ alph.^2 .* (minN ./ 2.0) ) .* rmaxT
         kk_pxy = real(sqrt.(erg_pxy.^2 .- alph.^2))
-        # rmax = 2.0 .^(2.0 .* minN .- 2 .* (1 .+ minN)) .* gamma(2 .+ 2 .* minN) ./ alph.^2 ./ factorial(2 .* minN - 1) .* 2.0
         rmax = 1/kk_pxy .* 20.0 # Need prefactor here i think...
+        
+        val, iszero = integral4(l1, m1, l2, m2, l3, -m3, l, -m)
+        if iszero
+            l += 2
+        end
+
     else
         l = 0
         m = 0
@@ -1327,7 +1331,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         if run_leaver
             rl, r1, erg_1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe)
         else
-            wR, wI, rl, r1 = eigensys_Cheby(M, a, mu, n1, l1, m1, return_wf=true, Npoints=NptsCh, Iter=iterC, L=Lcheb, cvg_acc=cvg_acc, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=true, der_acc=der_acc)
+            wR, wI, rl, r1 = eigensys_Cheby(M, a, mu, n1, l1, m1, return_wf=true, Npoints=NptsCh, Iter=iterC, L=Lcheb, cvg_acc=cvg_acc, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=false, der_acc=der_acc)
             erg_1 = wR .+ im .* wI
         end
         itp = LinearInterpolation(log10.(rl), r1, extrapolation_bc=Line())
@@ -1362,7 +1366,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             if run_leaver
                 rl, r2, erg_2 = solve_radial(mu, M, a, n2, l2, m2; rpts=Npts_Bnd,  return_erg=true, Ntot_safe=Ntot_safe)
             else
-                wR, wI, rl, r2 = eigensys_Cheby(M, a, mu, n2, l2, m2, return_wf=true, Npoints=NptsCh, Iter=iterC, cvg_acc=cvg_acc, L=Lcheb,  Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=true, der_acc=der_acc)
+                wR, wI, rl, r2 = eigensys_Cheby(M, a, mu, n2, l2, m2, return_wf=true, Npoints=NptsCh, Iter=iterC, cvg_acc=cvg_acc, L=Lcheb,  Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=false, der_acc=der_acc)
                 erg_2 = wR .+ im .* wI
             end
             
@@ -1394,7 +1398,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         if run_leaver
             rl, r3, erg_3 = solve_radial(mu, M, a, n3, l3, m3; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe)
         else
-            wR, wI, rl, r3 = eigensys_Cheby(M, a, mu, n3, l3, m3, return_wf=true, Npoints=NptsCh, Iter=iterC, cvg_acc=cvg_acc, L=Lcheb, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=true, der_acc=der_acc)
+            wR, wI, rl, r3 = eigensys_Cheby(M, a, mu, n3, l3, m3, return_wf=true, Npoints=NptsCh, Iter=iterC, cvg_acc=cvg_acc, L=Lcheb, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=false, der_acc=der_acc)
             erg_3 = wR .+ im .* wI
         end
         
@@ -1419,7 +1423,6 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     # writedlm("test_store/test1.dat", hcat(real(rlist), real(rf_1 .* conj.(rf_1))))
     # writedlm("test_store/test2.dat", hcat(real(rlist), real(rf_2 .* conj.(rf_2))))
     # writedlm("test_store/test3.dat", hcat(real(rlist), real(rf_3 .* conj.(rf_3))))
-    # println("HERE \t", erg_1, "\t", erg_2, "\t", erg_3)
     erg = (erg_1 + erg_2 - erg_3) + 0 * im # leave the 0 im for NR case
     
     ### recheck if to inf holds...
@@ -1428,6 +1431,10 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         to_inf = true
         m = (m1 + m2 - m3)
         l = l1 + l2 - l3
+        val, iszero = integral4(l1, m1, l2, m2, l3, -m3, l, -m)
+        if iszero
+            l += 2
+        end
     elseif (abs.(erg) .< alph)&&to_inf
         println("Flipping from inf to bnd")
         to_inf = false
@@ -2482,6 +2489,64 @@ function parse_mathlink_number(w)
     setprecision(bits) do
         return parse(BigFloat, s)
     end
+end
+
+# Gaunt coefficient G(l1,l2,l3; m1,m2,m3)
+function gaunt(l1::Integer, l2::Integer, l3::Integer,
+               m1::Integer, m2::Integer, m3::Integer)
+    # quick zero checks
+    if m1 + m2 + m3 != 0
+        return 0.0
+    end
+    # triangle condition for 3j with ms = 0
+    if !((abs(l1-l2) <= l3 <= l1 + l2) && ((l1 + l2 + l3) % 1 == 0))
+        return 0.0
+    end
+    pref = sqrt((2l1+1)*(2l2+1)*(2l3+1) / (4 * pi))
+    t1 = wigner3j(l1, l2, l3, 0, 0, 0)
+    t2 = wigner3j(l1, l2, l3, m1, m2, m3)
+    return pref * t1 * t2
+end
+
+"""
+    integral4(l1,m1,l2,m2,l3,m3,l4,m4; tol=1e-12)
+
+Compute I = ∫ Y_{l1 m1} Y_{l2 m2} Y_{l3 m3} Y_{l4 m4} dΩ
+Returns (value, is_zero::Bool) where is_zero tests abs(value) < tol.
+"""
+function integral4(l1::Integer, m1::Integer,
+                   l2::Integer, m2::Integer,
+                   l3::Integer, m3::Integer,
+                   l4::Integer, m4::Integer; tol=1e-12)
+
+    # Selection rule: total m must be zero
+    if m1 + m2 + m3 + m4 != 0
+        return 0.0, true
+    end
+
+    total = 0.0
+    # L must satisfy triangle with (l1,l2) and with (l3,l4)
+    Lmin = max(abs(l1 - l2), abs(l3 - l4))
+    Lmax = min(l1 + l2, l3 + l4)
+    for L in Lmin:Lmax
+        # For a given L, only M = -(m1+m2) contributes (because Gaunt nonzero only when m1+m2+M=0, and similarly)
+        M = -(m1 + m2)
+        if abs(M) > L
+            continue
+        end
+        g1 = gaunt(l1, l2, L, m1, m2, M)
+        if g1 == 0.0
+            continue
+        end
+        g2 = gaunt(l3, l4, L, m3, m4, -M)
+        if g2 == 0.0
+            continue
+        end
+        total += g1 * g2
+    end
+
+    is_zero = abs(total) < tol
+    return total, is_zero
 end
 
 # test run of system
