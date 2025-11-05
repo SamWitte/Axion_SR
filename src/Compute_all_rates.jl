@@ -126,7 +126,7 @@ function main(;kpts=14, rpts=1000, rmaxT=100, Nang=5000000, Npts_Bnd=4000)
             rmax_ratio = (2.0 .^(2.0 .* maxN .- 2 .* (1 .+ maxN)) .* gamma(2 .+ 2 .* maxN) ./ alpha_list[i].^2 ./ factorial(2 .* maxN - 1) .* 7.0) ./ rmax_1
             h_mve = (0.2) ./ rmax_ratio
            
-            output_sve[i] = gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, Npts_Bnd=Npts_Bnd, eps_fac=1e-3, Ntot_safe=Ntot_safe, Nang=Nang, NON_REL=NON_REL, h_mve=h_mve, to_inf=to_inf, rmaxT=rmaxT, run_leaver=run_leaver, NptsCh=NptsCh, cvg_acc=cvg_acc, prec=prec, iterC=iterC, debug=debug, der_acc=der_acc, Lcheb=Lcheb)
+            output_sve[i] = gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, Npts_Bnd=Npts_Bnd, eps_fac=1e-3, Ntot_safe=Ntot_safe, Nang=Nang, NON_REL=NON_REL, h_mve=h_mve, to_inf=to_inf, rmaxT=rmaxT, run_leaver=run_leaver, NptsCh=NptsCh_list[i], cvg_acc=cvg_acc, prec=prec, iterC=iterC, debug=debug, der_acc=der_acc, Lcheb=Lcheb)
             
             if i > 5
                 itp = LinearInterpolation(log10.(alpha_list[1:i-1]), log10.(output_sve[1:i-1]), extrapolation_bc=Line())
