@@ -1303,6 +1303,10 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     if to_inf
         m = (m1 + m2 - m3)
         l = l1 + l2 - l3
+        while l < m
+            l += 2
+        end
+        
         kk_pxy = real(sqrt.(erg_pxy.^2 .- alph.^2))
         rmax = 1/kk_pxy .* 20.0 # Need prefactor here i think...
         
@@ -1431,6 +1435,9 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         to_inf = true
         m = (m1 + m2 - m3)
         l = l1 + l2 - l3
+        while l < m
+            l += 2
+        end
         val, iszero = integral4(l1, m1, l2, m2, l3, -m3, l, -m)
         if iszero
             l += 2

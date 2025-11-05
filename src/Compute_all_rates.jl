@@ -67,27 +67,30 @@ check_err = parsed_args["check_err"];
 
 print(S1, "\t", S2, "\t", S3, "\t", S4, "\n")
 
-function main(;kpts=14, rpts=1000, rmaxT=100, Nang=200000, Npts_Bnd=2000)
+function main(;kpts=14, rpts=1000, rmaxT=100, Nang=5000000, Npts_Bnd=4000)
     a = 0.95
-    M = 10.0
+    M = 1.0
     Ntot_safe=20000
     NON_REL = false
     
     prec=200
-    cvg_acc=5e-3
-    NptsCh=100
-    iterC=40
+    cvg_acc=1e-10
+    NptsCh=90
+    iterC=20
+    Lcheb=4
+    der_acc=1e-20
     
     debug=true
+    overwrite_file = false
     
+    flag_file = "fishy_rates.dat"
     
     min_m = minimum([parse(Int, S1[end]), parse(Int, S2[end]), parse(Int, S3[end])])
     alpha_max = a .* min_m ./ (2 .* (1 .+ sqrt.(1 .- a.^2))) .* 1.03
     
-    # alpha_list = 10 .^LinRange(log10(alpha_min), log10(alpha_max), alpha_pts)
     alpha_list = LinRange(alpha_min, alpha_max, alpha_pts)
-    # alpha_list = [0.1]
-    # alpha_list = [0.45]
+    NptsCh_list = Int.(round.(LinRange(60, 90, alpha_pts)))
+    
     output_sve = zeros(alpha_pts)
     
     State1 = [parse(Int, c) for c in S1]
@@ -113,20 +116,6 @@ function main(;kpts=14, rpts=1000, rmaxT=100, Nang=200000, Npts_Bnd=2000)
     end
     
     fOUT = "rate_sve/"*S1*"_"*S2*"_"*S3*"_"*S4*ftag*".dat"
-    overwrite_file = false
-    if isfile(fOUT)&&check_err
-        file_load = readdlm(fOUT)
-        alpha_test = file_load[1, 1]
-        computed_out = file_load[1, 2]
-        mu = alpha_test ./ (M * GNew)
-        h_mve = 0.1
-        testVal = gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, Npts_Bnd=Npts_Bnd,  eps_fac=1e-3, Ntot_safe=Ntot_safe, Nang=Nang, NON_REL=NON_REL, h_mve=h_mve, to_inf=to_inf, rmaxT=rmaxT, run_leaver=run_leaver, NptsCh=NptsCh, cvg_acc=cvg_acc, prec=prec, iterC=iterC, debug=debug)
-        if (abs.(computed_out .- testVal) ./ computed_out) .> 0.4
-            overwrite_file = true
-            println("Test failed.... alpha, old / new \t ", alpha_test, "\t", computed_out, "\t", testVal)
-            rm(fOUT)
-        end
-    end
     if !isfile(fOUT)||overwrite_file
         
         for i in 1:alpha_pts
@@ -135,9 +124,29 @@ function main(;kpts=14, rpts=1000, rmaxT=100, Nang=200000, Npts_Bnd=2000)
             maxN = maximum([n1 n2 n3])
             rmax_1 = (2.0 .^(2.0 .* 3 .- 2 .* (1 .+ 3)) .* gamma(2 .+ 2 .* 3) ./ (0.03 .^2) ./ factorial(2 .* 3 - 1) .* 7.0)
             rmax_ratio = (2.0 .^(2.0 .* maxN .- 2 .* (1 .+ maxN)) .* gamma(2 .+ 2 .* maxN) ./ alpha_list[i].^2 ./ factorial(2 .* maxN - 1) .* 7.0) ./ rmax_1
-            h_mve = (0.1) ./ rmax_ratio
+            h_mve = (0.2) ./ rmax_ratio
            
-            output_sve[i] = gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, Npts_Bnd=Npts_Bnd, eps_fac=1e-3, Ntot_safe=Ntot_safe, Nang=Nang, NON_REL=NON_REL, h_mve=h_mve, to_inf=to_inf, rmaxT=rmaxT, run_leaver=run_leaver, NptsCh=NptsCh, cvg_acc=cvg_acc, prec=prec, iterC=iterC, debug=debug)
+            output_sve[i] = gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, Npts_Bnd=Npts_Bnd, eps_fac=1e-3, Ntot_safe=Ntot_safe, Nang=Nang, NON_REL=NON_REL, h_mve=h_mve, to_inf=to_inf, rmaxT=rmaxT, run_leaver=run_leaver, NptsCh=NptsCh, cvg_acc=cvg_acc, prec=prec, iterC=iterC, debug=debug, der_acc=der_acc, Lcheb=Lcheb)
+            
+            if i > 5
+                itp = LinearInterpolation(log10.(alpha_list[1:i-1]), log10.(output_sve[1:i-1]), extrapolation_bc=Line())
+                out_guess = 10 .^itp(log10.(alpha_list[i])) ./ output_sve[i]
+                if (out_guess > 1e2)||(out_guess < 1e-2)
+                    linein = S1*" "*S2*" "*S3*" "*S4
+                    lines = isfile(flag_file) ? readlines(flag_file) : String[]
+                    
+                    if linein in lines
+                        println("File already flagged....")
+                    else
+                        # Append to file
+                        open(flag_file, "a") do f
+                            write(f, linein * "\n")
+                        end
+                        println("Rate adddd to fishy files.")
+                    end
+                end
+                
+            end
         
             print("alpha \t", alpha_list[i], "\t", output_sve[i], "\n")
         end

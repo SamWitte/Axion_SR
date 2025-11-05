@@ -8,7 +8,7 @@ S2 = []
 S3 = []
 S4 = []
 
-file1 = open("load_compute_rates.dat", 'r')
+file1 = open("load_compute_rates_new.dat", 'r')
 Lines = file1.readlines()
 
 count = 0
