@@ -1,16 +1,20 @@
 using Pkg
 
 function install_packages(pkgs::Vector{String})
+    # Get currently installed packages
+    deps = keys(Pkg.dependencies())
+    installed_pkgs = Set([string(name) for name in deps])
+
     for pkg in pkgs
-        if !Pkg.installed(pkg) !== nothing  # this check is deprecated; better to try/catch
+        if pkg ∈ installed_pkgs
+            println("$pkg already installed.")
+        else
             println("Installing $pkg...")
             try
                 Pkg.add(pkg)
             catch e
                 @warn "Failed to install $pkg" exception=e
             end
-        else
-            println("$pkg already installed.")
         end
     end
 end
