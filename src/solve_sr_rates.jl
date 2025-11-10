@@ -13,7 +13,8 @@ using NPZ
 using LinearAlgebra
 using WignerSymbols
 include("Constants.jl")
-using MathLink
+include("heunc.jl")
+# using MathLink
 
 
 function ergL(n, l, m, massB, MBH, a; full=true)
@@ -1335,7 +1336,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         if run_leaver
             rl, r1, erg_1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe)
         else
-            wR, wI, rl, r1 = eigensys_Cheby(M, a, mu, n1, l1, m1, return_wf=true, Npoints=NptsCh, Iter=iterC, L=Lcheb, cvg_acc=cvg_acc, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=false, der_acc=der_acc)
+            wR, wI, rl, r1 = eigensys_Cheby(M, a, mu, n1, l1, m1, return_wf=true, Npoints=NptsCh, Iter=iterC, L=Lcheb, cvg_acc=cvg_acc, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=false, der_acc=der_acc, debug=debug)
             erg_1 = wR .+ im .* wI
         end
         itp = LinearInterpolation(log10.(rl), r1, extrapolation_bc=Line())
@@ -1370,7 +1371,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             if run_leaver
                 rl, r2, erg_2 = solve_radial(mu, M, a, n2, l2, m2; rpts=Npts_Bnd,  return_erg=true, Ntot_safe=Ntot_safe)
             else
-                wR, wI, rl, r2 = eigensys_Cheby(M, a, mu, n2, l2, m2, return_wf=true, Npoints=NptsCh, Iter=iterC, cvg_acc=cvg_acc, L=Lcheb,  Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=false, der_acc=der_acc)
+                wR, wI, rl, r2 = eigensys_Cheby(M, a, mu, n2, l2, m2, return_wf=true, Npoints=NptsCh, Iter=iterC, cvg_acc=cvg_acc, L=Lcheb,  Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=false, der_acc=der_acc, debug=debug)
                 erg_2 = wR .+ im .* wI
             end
             
@@ -1402,7 +1403,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         if run_leaver
             rl, r3, erg_3 = solve_radial(mu, M, a, n3, l3, m3; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe)
         else
-            wR, wI, rl, r3 = eigensys_Cheby(M, a, mu, n3, l3, m3, return_wf=true, Npoints=NptsCh, Iter=iterC, cvg_acc=cvg_acc, L=Lcheb, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=false, der_acc=der_acc)
+            wR, wI, rl, r3 = eigensys_Cheby(M, a, mu, n3, l3, m3, return_wf=true, Npoints=NptsCh, Iter=iterC, cvg_acc=cvg_acc, L=Lcheb, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=false, der_acc=der_acc, debug=debug)
             erg_3 = wR .+ im .* wI
         end
         
@@ -1904,19 +1905,12 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=200, L=4, Npoints=60, Iter
     
     # Hydrogenic frequency parameter ν (initial value)
     if isnothing(nu_guess)
-#        if (atilde < 0.3)
-#            Nν = calc_Nν_initial()
-#        else
-#            eR, eI = find_im_part(alph ./ (GNew .* M), M, atilde, n, l0, m; Ntot_force=10000, return_both=true)
-#            Nν = calc_ω_inv(eR + im .* eI)
-#        end
         Nν = calc_Nν_initial()
     else
         erg_in = BigFloat(real(nu_guess)) .+ im * BigFloat(imag(nu_guess))
         Nν = calc_ω_inv(erg_in)
         
     end
-    
     
     function R(r, ν_val)
         # Hydrogenic radial wave function
@@ -2094,17 +2088,18 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=200, L=4, Npoints=60, Iter
         # order x^2 NOT HIGH ENOUGH
         # testD = (build_matrix(ν_val .* (1 .+ ε)) - build_matrix(ν_val .* (1 .- ε)))/(2*ν_val*ε)
         # x^4
-        # der_out =  (-build_matrix(ν_val .+ 2 .* del_nu) .+ 8 .* build_matrix(ν_val .+ del_nu)  .- 8 .* build_matrix(ν_val .- del_nu) .+ build_matrix(ν_val .- 2 .* del_nu))/(12 .* del_nu)
+        der_out =  (-build_matrix(ν_val .+ 2 .* del_nu) .+ 8 .* build_matrix(ν_val .+ del_nu)  .- 8 .* build_matrix(ν_val .- del_nu) .+ build_matrix(ν_val .- 2 .* del_nu))/(12 .* del_nu)
+        
         
         # x^6
-        der_out_6th = -(  build_matrix(ν_val .- 3 .* del_nu)
+        der_out = -(  build_matrix(ν_val .- 3 .* del_nu)
                .- 9 .* build_matrix(ν_val .- 2 .* del_nu)
                .+ 45 .* build_matrix(ν_val .- 1 .* del_nu)
                .- 45 .* build_matrix(ν_val .+ 1 .* del_nu)
                .+ 9 .* build_matrix(ν_val .+ 2 .* del_nu)
                .- 1 .* build_matrix(ν_val .+ 3 .* del_nu)
               ) ./ (60 .* del_nu)
-        """
+              
         # x^8
         der_out = ( -3  .* build_matrix(ν_val .+ 4 .* del_nu)
                +32  .* build_matrix(ν_val .+ 3 .* del_nu)
@@ -2115,9 +2110,20 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=200, L=4, Npoints=60, Iter
                -32  .* build_matrix(ν_val .- 3 .* del_nu)
                +3   .* build_matrix(ν_val .- 4 .* del_nu)
               ) ./ (840 .* del_nu)
-       
-        # println("here 2 \t ", der_out[1], "\t", der_out_6th[1], "\t", der_out_8th[1])
+        """
+        # der_out =  (-build_matrix(ν_val .+ 2 .* del_nu) .+ 8 .* build_matrix(ν_val .+ del_nu)  .- 8 .* build_matrix(ν_val .- del_nu) .+ build_matrix(ν_val .- 2 .* del_nu))/(12 .* del_nu)
         
+        der_out = ( -3  .* build_matrix(ν_val .+ 4 .* del_nu)
+               +32  .* build_matrix(ν_val .+ 3 .* del_nu)
+               -168 .* build_matrix(ν_val .+ 2 .* del_nu)
+               +672 .* build_matrix(ν_val .+ 1 .* del_nu)
+               -672 .* build_matrix(ν_val .- 1 .* del_nu)
+               +168 .* build_matrix(ν_val .- 2 .* del_nu)
+               -32  .* build_matrix(ν_val .- 3 .* del_nu)
+               +3   .* build_matrix(ν_val .- 4 .* del_nu)
+              ) ./ (840 .* del_nu)
+
+    
         return der_out
     end
 
@@ -2180,22 +2186,26 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=200, L=4, Npoints=60, Iter
             # Normalize solution vector
             BnumNorm[i+1] = Bnum[i+1] / sqrt(dot(conj(Bnum[i+1]), Bnum[i+1]))
             
-#            if debug
-#                println("Iteration $i: ν = $(Nν_values[i+1])")
-#             end
+            if debug
+                println("Iteration $i: ν = $(Nν_values[i+1])")
+                if isnan(Nν_values[i+1])
+                    println("HERE \n")
+                    prec += 50
+                    setprecision(BigFloat, prec)
+                end
+             end
             
             if i > 1
                 erg_test_init = calc_ω(Nν_values[i])
                 erg_test = calc_ω(Nν_values[i+1])
-                test_convR = abs.(real.(erg_test .- erg_test_init) ./ real.(erg_test_init))
-                test_convI = abs.(imag.(erg_test .- erg_test_init) ./ imag.(erg_test_init))
+                test_convR = abs.(real.(erg_test .- erg_test_init) ./ minimum([real.(erg_test_init), real.(erg_test)]))
+                test_convI = abs.(imag.(erg_test .- erg_test_init) ./ minimum([imag.(erg_test_init), imag.(erg_test)]))
                 if (test_convR < cvg_acc)&&(test_convI < cvg_acc)
                     final_idx = i
                     i = Iter + 1
                 end
             end
             i += 1
-            # final_idx = i
             
         end
         
@@ -2289,37 +2299,44 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=200, L=4, Npoints=60, Iter
     
    
     zz = -(r_vals .- rplus) ./ (rplus .- rminus)
-    weval(W"HeunC"(1, 1, 1, 1, 1, 1)); # init mathematica... makes it quicker
+#    # weval(W"HeunC"(1, 1, 1, 1, 1, 1)); # init mathematica... makes it quicker
     phinu = Float64(real.(phi + nuN)) .+ im .* Float64(imag.(phi + nuN))
     
     zz_short = zz[abs.(zz) .< r_thresh] # cant call large zz values of heun (takes forever...)
+    heunc = solve_heun_switch(phi, phi + nuN, 1.0 + beta, 1.0 + gam, alpha_other, zz_short)
     
-    
-    mathm_fail = false
-    heunc = ComplexF64[]
-    for z in zz_short
-        if mathm_fail
-            push!(heunc, heunc[end])
-            continue
-        end
-        reim = weval(W"HeunC"(phi, phinu, 1.0 + beta, 1.0 + gam, alpha_other, z))
-        re_prt = reim.args[1]
-        im_prt = reim.args[2]
-        if (typeof(re_prt) != Float64)||(typeof(im_prt) != Float64)
-            re_prt = mlwreal_to_bigfloat(re_prt)
-            im_prt = mlwreal_to_bigfloat(im_prt)
-        end
-        hval = complex(re_prt, im_prt)
-        if log10.(abs.(hval)) > 100.0
-            push!(heunc, heunc[end])
-            mathm_fail = true
-            continue
-        end
-        push!(heunc, hval)
-    end
+#    mathm_fail = false
+#    heunc = ComplexF64[]
+#    for z in zz_short
+#        if mathm_fail
+#            push!(heunc, heunc[end])
+#            continue
+#        end
+#        reim = weval(W"HeunC"(phi, phinu, 1.0 + beta, 1.0 + gam, alpha_other, z))
+#        re_prt = reim.args[1]
+#        im_prt = reim.args[2]
+#
+#
+#        if (typeof(re_prt) != Float64)||(typeof(im_prt) != Float64)
+#            re_prt = mlwreal_to_bigfloat(re_prt)
+#            im_prt = mlwreal_to_bigfloat(im_prt)
+#        end
+#        hval = complex(re_prt, im_prt)
+#        if log10.(abs.(hval)) > 100.0
+#            push!(heunc, heunc[end])
+#            mathm_fail = true
+#            continue
+#        end
+#        push!(heunc, hval)
+#    end
     
     
     y_values_short = exp.(-im .* kk .* (r_vals[abs.(zz) .< r_thresh] .- rplus)) .* zz_short.^(im .* Pplus) .* (zz_short .- 1.0).^(- im .* Pmns) .* heunc
+#    y_values_short = exp.(-im .* kk .* (r_vals[abs.(zz) .< r_thresh] .- rplus)) .* zz_short.^(im .* Pplus) .* (zz_short .- 1.0).^(- im .* Pmns) .* JL_results
+#    for i in 1:length(y_values_short)
+#        println(y_values_short[i], "\t", y_values_short2[i])
+#    end
+    
     y_values = []
     rmax_cut = r_vals[abs.(zz) .< r_thresh][end]
     
@@ -2353,9 +2370,9 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=200, L=4, Npoints=60, Iter
     y_values ./= sqrt.(nm2)
 
 #    Not using old way
-    # rlist_2, y_values_2 = solve_radial(mu, M, atilde, n, l0, m; rpts=Npts_r, rmaxT=100, pre_compute_erg=erg_out, Ntot_safe=7000)
-    # writedlm("test_store/tt1.dat", cat(rlist, real.(y_values .* conj.(y_values)), dims=2))
-    # writedlm("test_store/tt2.dat", cat(r_vals, rout_temp, dims=2))
+#    # rlist_2, y_values_2 = solve_radial(mu, M, atilde, n, l0, m; rpts=Npts_r, rmaxT=100, pre_compute_erg=erg_out, Ntot_safe=7000)
+#    # writedlm("test_store/tt2.dat", cat(rlist, real.(y_values .* conj.(y_values)), dims=2))
+#    # writedlm("test_store/tt2.dat", cat(r_vals, rout_temp, dims=2))
     
     
     number_max_cnt = count_local_maxima(real.(y_values .* conj.(y_values)))
@@ -2557,6 +2574,11 @@ function integral4(l1::Integer, m1::Integer,
 end
 
 # test run of system
-# @time wR, wI, rl, r3 = eigensys_Cheby(1, 0.95, 0.30190199402717055 ./ GNew, 5, 4, 4, debug=true, return_wf=true, L=4, Npoints = 80, Iter = 20,  der_acc=1e-20, cvg_acc=1e-5, prec=200, Npts_r=2000, sfty_run=true)
+# @time wR, wI, rl, r3 = eigensys_Cheby(1, 0.9, 0.8557577459790169 ./ GNew, 4, 3, 3, debug=true, return_wf=true, L=4, Npoints = 70, Iter = 20,  der_acc=1e-20, cvg_acc=1e-10, prec=200, Npts_r=2000, sfty_run=false)
+
+@time wR, wI, rl, r3 = eigensys_Cheby(1, 0.9, 0.03 ./ GNew, 2, 1, 1, debug=true, return_wf=true, L=4, Npoints = 70, Iter = 20,  der_acc=1e-20, cvg_acc=1e-10, prec=200, Npts_r=200, sfty_run=false)
+
+# @time wR, wI = find_im_part(0.3 ./ GNew, 1, 0.99, 2, 1, 1; debug=true, return_both=true, for_s_rates=true, Ntot_force=20000)
+# println(wR ./ 0.3, "\t", wI ./ 0.3)
 # println(wI)
 # writedlm("test.dat", cat(real.(rl), real.(abs.(r3 .* conj(r3))), dims=2))
