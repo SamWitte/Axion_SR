@@ -67,7 +67,7 @@ check_err = parsed_args["check_err"];
 
 print(S1, "\t", S2, "\t", S3, "\t", S4, "\n")
 
-function main(;kpts=14, rpts=1000, rmaxT=100, Nang=5000000, Npts_Bnd=4000)
+function main(;kpts=14, rpts=1000, rmaxT=100, Nang=5000000, Npts_Bnd=1000)
     a = 0.95
     M = 1.0
     Ntot_safe=20000
@@ -75,9 +75,10 @@ function main(;kpts=14, rpts=1000, rmaxT=100, Nang=5000000, Npts_Bnd=4000)
     
     prec=200
     cvg_acc=1e-10
-    NptsCh=90
-    iterC=20
-    Lcheb=4
+    NptsCh_Min=40
+    NptsCh_Max=70
+    iterC=10
+    Lcheb=8
     der_acc=1e-20
     
     debug=true
@@ -89,7 +90,7 @@ function main(;kpts=14, rpts=1000, rmaxT=100, Nang=5000000, Npts_Bnd=4000)
     alpha_max = a .* min_m ./ (2 .* (1 .+ sqrt.(1 .- a.^2))) .* 1.03
     
     alpha_list = LinRange(alpha_min, alpha_max, alpha_pts)
-    NptsCh_list = Int.(round.(LinRange(60, 90, alpha_pts)))
+    NptsCh_list = Int.(round.(LinRange(NptsCh_Min, NptsCh_Max, alpha_pts)))
     
     output_sve = zeros(alpha_pts)
     
@@ -128,7 +129,7 @@ function main(;kpts=14, rpts=1000, rmaxT=100, Nang=5000000, Npts_Bnd=4000)
            
             output_sve[i] = gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, Npts_Bnd=Npts_Bnd, eps_fac=1e-3, Ntot_safe=Ntot_safe, Nang=Nang, NON_REL=NON_REL, h_mve=h_mve, to_inf=to_inf, rmaxT=rmaxT, run_leaver=run_leaver, NptsCh=NptsCh_list[i], cvg_acc=cvg_acc, prec=prec, iterC=iterC, debug=debug, der_acc=der_acc, Lcheb=Lcheb)
             
-            if (i > 5)&&(i < (alpha_pts - 1))&&(output_sve[i] > 0.0)
+            if (i > 5)&&(i < (alpha_pts - 4))&&(output_sve[i] > 0.0)
                 itp = LinearInterpolation(log10.(alpha_list[1:i-1]), log10.(output_sve[1:i-1]), extrapolation_bc=Line())
                 out_guess = 10 .^itp(log10.(alpha_list[i])) ./ output_sve[i]
                 if (out_guess > 1e2)||(out_guess < 1e-2)
