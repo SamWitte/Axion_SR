@@ -1427,7 +1427,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     
     
     rlist = 10 .^range(log10(rp .* (1.0 .+ eps_fac)), log10.(rmax), rpts)
-  
+    
     # simplify_radial = check_slv_rad(alph, m1)
     simplify_radial = false
     if NON_REL||simplify_radial
@@ -1526,6 +1526,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         end
     end
     
+    
     # writedlm("test_store/test1.dat", hcat(real(rlist), real(rf_1 .* conj.(rf_1))))
     # writedlm("test_store/test2.dat", hcat(real(rlist), real(rf_2 .* conj.(rf_2))))
     # writedlm("test_store/test3.dat", hcat(real(rlist), real(rf_3 .* conj.(rf_3))))
@@ -1556,8 +1557,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     Z3 = spheroidals(l3, m3, a, erg_3)
     Z4 = spheroidals(l, m, a, erg)
    
-    thetaV = acos.(1.0 .- 2.0 .* rand(Nang))
-    phiV = rand(Nang) .* 2*pi
+    
 
     function func_ang(x)
         return real(Z1.(x[1], x[2]) .* Z2.(x[1], x[2]) .* conj(Z3.(x[1], x[2])) .* conj(Z4.(x[1], x[2]) ))
@@ -1567,12 +1567,38 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     end
     CG = 0.0
     CG_2 = 0.0
-    for i in 1:Nang
-        CG += func_ang([thetaV[i], phiV[i]])
-        CG_2 += func_ang_2([thetaV[i], phiV[i]])
+    
+    ang_cvrg = false
+    idx = 1
+    idx_skip=100
+    CG_old = 0.0
+    CG_2_old = 0.0
+    while !ang_cvrg
+        thetaV = acos.(1.0 .- 2.0 .* rand())
+        phiV = rand() .* 2*pi
+        
+        CG += func_ang([thetaV, phiV])
+        CG_2 += func_ang_2([thetaV, phiV])
+        
+        idx += 1
+
+        if (idx > 20)&&(idx%idx_skip==0)
+            test1 = abs.((CG ./ idx) .- CG_old) ./ CG_old
+            test2 = abs.((CG_2 ./ idx) .- CG_2_old) ./ CG_2_old
+            if (test1 .< 1e-2)&&(test2 .< 1e-2)
+                ang_cvrg = true
+                CG *= 4*pi / idx
+                CG_2 *= 4*pi / idx
+            else
+                CG_old = CG ./ idx
+                CG_2_old = CG_2 ./ idx
+                idx_skip = idx
+            end
+            
+        end
+        
     end
-    CG *= 4*pi / Nang
-    CG_2 *= 4*pi / Nang
+
     
     
     if debug
@@ -1684,6 +1710,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         end
     end
     
+    
     outWF .*= 1.0 ./ sqrt.(itp_rrstar.(rvals).^2 .+ a.^2)
     outWF_fw .*= 1.0 ./ sqrt.(itp_rrstar.(rvals).^2 .+ a.^2)
 
@@ -1693,19 +1720,6 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     wronk *= (itp_rrstar.(rvals[midP]).^2 .- 2 .* itp_rrstar.(rvals[midP]) .+ a.^2) .* (GNew .* M)
 
     Tmm = (itpG(log10.(itp_rrstar.(rvals))) + im * itpGI(log10.(itp_rrstar.(rvals)))) .* (CG .* itp_rrstar.(rvals).^2 .+ CG_2 .* a.^2)
-    
-#    ###
-#    wronk_test = []
-#    r_test = []
-#    for i in 2:(length(rvals)-1)
-#        tt  = (outWF_fw[i] .* (outWF[i+1] .- outWF[i-1]) .-  outWF[i] .* (outWF_fw[i+1] .- outWF_fw[i-1]) )./ (2 * (itp_rrstar.(rvals[i+1]) .- itp_rrstar.(rvals[i-1])) )
-#        tt *= (itp_rrstar.(rvals[i]).^2 .- 2 .* itp_rrstar.(rvals[i]) .+ a.^2) .* (GNew .* M)
-#        append!(wronk_test, tt)
-#        append!(r_test, itp_rrstar.(rvals[i]))
-#    end
-#    writedlm("test_store/testW_r.dat",hcat(r_test, real(wronk_test)))
-#    writedlm("test_store/testW_i.dat",hcat(r_test, real(wronk_test)))
-#    ##
     
     ####
     if to_inf
@@ -1718,34 +1732,15 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         println("1/kk \t", 1 ./ kk)
         rate_out = 2 .* alph .* kk .* (maxV[end] .* itp_rrstar.(itp_rrstar.(rvals[end])).^2) .* lam^2
         out_gamma = rate_out ./ mu^2 .* (GNew * M^2 * M_to_eV)^2
-        
-#        ### save full WF?
-#        outR = []
-#        r_out = []
-#        nskip = Int(round(length(rvals) / 1000))
-#        println("filling output ")
-#        # for i in 2:(length(rvals)-1)
-#        for i in 2:nskip:(length(rvals)-1)
-#            temp = (outWF_fw[i] .* trapz(outWF[i:end] .* Tmm[i:end], itp_rrstar.(rvals[i:end])) .+ outWF[i] .* trapz(outWF_fw[1:i] .* Tmm[1:i], itp_rrstar.(rvals[1:i]))) ./ wronk
-#            append!(outR, temp)
-#            append!(r_out, rvals[i])
-#        end
-#        println("done filling output ")
-#        maxV = Float64.(real(outR .* conj.(outR)))
-#        writedlm("test_store/test_1.dat", hcat(itp_rrstar.(r_out), maxV))
-#        println("QUIT!")
-#        ####
     else
         idx_hold = itp_rrstar.(rvals) .> 1.01 .* rp
         rnew_rp = trapz(outWF[idx_hold] .* Tmm[idx_hold] , itp_rrstar.(rvals[idx_hold])) .* outWF_fw[idx_hold][1] ./ wronk
-        # rnew_rp = trapz(outWF .* Tmm , itp_rrstar.(rvals)) .* outWF_fw[1] ./ wronk
 
         maxV = real(rnew_rp.* conj.(rnew_rp))
 
         lam = (mu ./ (M_pl .* 1e9))^2
         rate_out = 4 .* alph.^2 .* (1 .+ sqrt.(1 - a.^2)) .* Float64(maxV) .* lam^2
         out_gamma = rate_out ./ mu^2 .* (GNew * M^2 * M_to_eV)^2
-    
     end
 
     if debug
@@ -2396,47 +2391,15 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=200, L=4, Npoints=60, Iter
             break
         end
     end
-    # println("R thresh \t", r_thresh ./ (n ./ alph.^2))
-    
-   
+
     zz = -(r_vals .- rplus) ./ (rplus .- rminus)
-#    # weval(W"HeunC"(1, 1, 1, 1, 1, 1)); # init mathematica... makes it quicker
     phinu = Float64(real.(phi + nuN)) .+ im .* Float64(imag.(phi + nuN))
     
     zz_short = zz[abs.(zz) .< r_thresh] # cant call large zz values of heun (takes forever...)
     heunc = solve_heun_switch(phi, phi + nuN, 1.0 + beta, 1.0 + gam, alpha_other, zz_short)
-    
-#    mathm_fail = false
-#    heunc = ComplexF64[]
-#    for z in zz_short
-#        if mathm_fail
-#            push!(heunc, heunc[end])
-#            continue
-#        end
-#        reim = weval(W"HeunC"(phi, phinu, 1.0 + beta, 1.0 + gam, alpha_other, z))
-#        re_prt = reim.args[1]
-#        im_prt = reim.args[2]
-#
-#
-#        if (typeof(re_prt) != Float64)||(typeof(im_prt) != Float64)
-#            re_prt = mlwreal_to_bigfloat(re_prt)
-#            im_prt = mlwreal_to_bigfloat(im_prt)
-#        end
-#        hval = complex(re_prt, im_prt)
-#        if log10.(abs.(hval)) > 100.0
-#            push!(heunc, heunc[end])
-#            mathm_fail = true
-#            continue
-#        end
-#        push!(heunc, hval)
-#    end
-    
+
     
     y_values_short = exp.(-im .* kk .* (r_vals[abs.(zz) .< r_thresh] .- rplus)) .* zz_short.^(im .* Pplus) .* (zz_short .- 1.0).^(- im .* Pmns) .* heunc
-#    y_values_short = exp.(-im .* kk .* (r_vals[abs.(zz) .< r_thresh] .- rplus)) .* zz_short.^(im .* Pplus) .* (zz_short .- 1.0).^(- im .* Pmns) .* JL_results
-#    for i in 1:length(y_values_short)
-#        println(y_values_short[i], "\t", y_values_short2[i])
-#    end
     
     y_values = []
     rmax_cut = r_vals[abs.(zz) .< r_thresh][end]
@@ -2469,12 +2432,6 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=200, L=4, Npoints=60, Iter
     
     nm2 = trapz(y_values .* conj.(y_values) .* rlist.^2, rlist)
     y_values ./= sqrt.(nm2)
-
-#    Not using old way
-#    # rlist_2, y_values_2 = solve_radial(mu, M, atilde, n, l0, m; rpts=Npts_r, rmaxT=100, pre_compute_erg=erg_out, Ntot_safe=7000)
-#    # writedlm("test_store/tt2.dat", cat(rlist, real.(y_values .* conj.(y_values)), dims=2))
-#    # writedlm("test_store/tt2.dat", cat(r_vals, rout_temp, dims=2))
-    
     
     number_max_cnt = count_local_maxima(real.(y_values .* conj.(y_values)))
     if number_max_cnt != (n - l0)
