@@ -515,7 +515,7 @@ function s_rate_inf(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3, lF_min; rpts=4
     
 end
 
-function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=500, xtol=1e-20, ftol=1e-90, sve=false, fnm="test_store/WF_", return_erg=false, Ntot_safe=5000, eps_r=1e-10, QNM=false, QNM_ergs=nothing, pre_compute_erg=nothing, prec=200, use_heunc=true)
+function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=500, xtol=1e-50, ftol=1e-90, sve=false, fnm="test_store/WF_", return_erg=false, Ntot_safe=5000, eps_r=1e-10, QNM=false, QNM_ergs=nothing, pre_compute_erg=nothing, prec=200, use_heunc=true)
     ### dolan 2007
     
     
@@ -1585,7 +1585,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         if (idx > 20)&&(idx%idx_skip==0)
             test1 = abs.((CG ./ idx) .- CG_old) ./ CG_old
             test2 = abs.((CG_2 ./ idx) .- CG_2_old) ./ CG_2_old
-            if (test1 .< 1e-2)&&(test2 .< 1e-2)
+            if (test1 .< 1e-3)&&(test2 .< 1e-3)
                 ang_cvrg = true
                 CG *= 4*pi / idx
                 CG_2 *= 4*pi / idx
