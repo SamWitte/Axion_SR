@@ -40,6 +40,10 @@ function parse_commandline()
             arg_type = Bool
             default = false
             
+        "--use_heunc"
+            arg_type = Bool
+            default = true
+            
         "--check_err" # check if there could be an error in the existing file, overwrite if there is...
             arg_type = Bool
             default = false
@@ -63,6 +67,7 @@ S4 = parsed_args["S4"]
 
 ftag = parsed_args["ftag"];
 run_leaver = parsed_args["run_leaver"];
+use_heunc = parsed_args["use_heunc"];
 check_err = parsed_args["check_err"];
 
 print(S1, "\t", S2, "\t", S3, "\t", S4, "\n")
@@ -78,7 +83,7 @@ function main(;kpts=14, rpts=1000, rmaxT=100, Nang=5000000, Npts_Bnd=1000)
     NptsCh_Min=40
     NptsCh_Max=70
     iterC=10
-    Lcheb=8
+    Lcheb=4
     der_acc=1e-20
     
     debug=true
@@ -127,7 +132,7 @@ function main(;kpts=14, rpts=1000, rmaxT=100, Nang=5000000, Npts_Bnd=1000)
             rmax_ratio = (2.0 .^(2.0 .* maxN .- 2 .* (1 .+ maxN)) .* gamma(2 .+ 2 .* maxN) ./ alpha_list[i].^2 ./ factorial(2 .* maxN - 1) .* 7.0) ./ rmax_1
             h_mve = (0.2) ./ rmax_ratio
            
-            output_sve[i] = gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, Npts_Bnd=Npts_Bnd, eps_fac=1e-3, Ntot_safe=Ntot_safe, Nang=Nang, NON_REL=NON_REL, h_mve=h_mve, to_inf=to_inf, rmaxT=rmaxT, run_leaver=run_leaver, NptsCh=NptsCh_list[i], cvg_acc=cvg_acc, prec=prec, iterC=iterC, debug=debug, der_acc=der_acc, Lcheb=Lcheb)
+            output_sve[i] = gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, Npts_Bnd=Npts_Bnd, eps_fac=1e-3, Ntot_safe=Ntot_safe, Nang=Nang, NON_REL=NON_REL, h_mve=h_mve, to_inf=to_inf, rmaxT=rmaxT, run_leaver=run_leaver, NptsCh=NptsCh_list[i], cvg_acc=cvg_acc, prec=prec, iterC=iterC, debug=debug, der_acc=der_acc, Lcheb=Lcheb, use_heunc=use_heunc)
             
             if (i > 5)&&(i < (alpha_pts - 4))&&(output_sve[i] > 0.0)
                 itp = LinearInterpolation(log10.(alpha_list[1:i-1]), log10.(output_sve[1:i-1]), extrapolation_bc=Line())

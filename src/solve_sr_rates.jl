@@ -515,7 +515,7 @@ function s_rate_inf(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3, lF_min; rpts=4
     
 end
 
-function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=500, xtol=1e-20, ftol=1e-90, sve=false, fnm="test_store/WF_", return_erg=false, Ntot_safe=5000, eps_r=1e-10, QNM=false, QNM_ergs=nothing, pre_compute_erg=nothing, prec=100)
+function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=500, xtol=1e-20, ftol=1e-90, sve=false, fnm="test_store/WF_", return_erg=false, Ntot_safe=5000, eps_r=1e-10, QNM=false, QNM_ergs=nothing, pre_compute_erg=nothing, prec=200, use_heunc=true)
     ### dolan 2007
     
     
@@ -572,98 +572,215 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
     # rmax = rmaxT * 1.0 ./ abs.(real(q))
     rmax = Float64.(100 * n ./ alph.^2)
     # print("Check \t", rmax, "\t", rmaxT * 1.0 ./ abs.(real(q)), "\n")
+    
+    if !use_heunc
+        rm = (1.0 .- sqrt.(1 - a.^2))
+        rp = (1.0 .+ sqrt.(1 - a.^2))
+        OmH = a  ./ (2 .* rp)
 
-    
-    
-    rm = (1.0 .- sqrt.(1 - a.^2))
-    rp = (1.0 .+ sqrt.(1 - a.^2))
-    OmH = a  ./ (2 .* rp)
-
-    
-    sigm = 2 .* rp .* (erg .- OmH .* m) ./ (rp .- rm)
-    chi = (alph.^2 .- 2 .* erg.^2) ./ q
-    b = sqrt.(1 - a.^2)
-    
-    gam = im * a * sqrt.(erg.^2 .- alph.^2)
-    cc2 = a.^2 .* (erg.^2 .- alph.^2)
-    LLM = l * (l + 1)
-    # LLM += 2 .* cc2 .* (m.^2 .- l .* (l + 1) + 0.5) ./ ((2 * l - 1) .* (2 * l + 3)) # alternative describ 2nd order
-    LLM += (-1 + 2 * l * (l + 1) - 2 * m.^2) * gam.^2 ./ (-3 + 4 * l * (l + 1))
-    LLM += ((l - m - 1 * (l - m) * (l + m) * (l + m - 1)) ./ ((-3 + 2 * l) * (2 * l - 1).^2) - (l + 1 - m) * (2 * l - m) * (l + m + 1) * (2 + l + m) ./ ((3 + 2 * l).^2 * (5 + 2 * l))) * gam.^4 ./ (2 * (1 + 2 * l))
-    LLM += (4 * ((-1 + 4 * m^2) * (l * (1 + l) * (121 + l * (1 + l) * (213 + 8 * l * (1 + l) * (-37 + 10 * l * (1 + l)))) - 2 * l * (1 + l) * (-137 + 56 * l * (1 + l) * (3 + 2 * l * (1 + l))) * m^2 + (705 + 8 * l * (1 + l) * (125 + 18 * l * (1 + l))) * m^4 - 15 * (1 + 46 * m^2))) * gam^6) / ((-5 + 2 * l) * (-3 + 2 * l) * (5 + 2 * l) * (7 + 2 * l) * (-3 + 4 * l * (1 + l))^5)
-    
-    c0 = 1.0 .- 2.0 * im * erg - 2 * im ./ b .* (erg .- a .* m ./ 2.0)
-    c1 = -4.0 .+ 4 * im * (erg - im * q * (1.0 + b)) + 4 * im / b * (erg - a * m / 2.0) .- 2.0 * (erg.^2 .+ q.^2) ./ q
-    c2 = 3.0 - 2 * im * erg - 2.0 * (q.^2 - erg.^2) ./ q - 2.0 * im / b * (erg - a * m ./ 2)
-    c3 = 2.0 * im * (erg - im * q).^3 ./ q .+ 2 * (erg .- im * q).^2 .* b + q.^2 * a.^2 .+ 2 * im * q * a * m - LLM - 1 - (erg - im * q).^2 ./ q .+ 2 * q * b + 2 * im / b * ( (erg - im * q).^2 ./ q + 1.0) * (erg .- a * m / 2)
-    c4 = (erg .- im * q).^4 ./ q.^2 .+ 2 * im * erg * (erg .- im * q).^2 ./ q .- 2 * im ./ b .* (erg .- im * q).^2 ./ q .* (erg .- a * m ./ 2)
-    
-    function alphaN(nn)
-        return nn.^2 .+ (c0 .+ 1) * nn + c0
-    end
-    function betaN(nn)
-        return -2 * nn.^2 .+ (c1 .+ 2) * nn + c3
-    end
-    function gammaN(nn)
-        return nn.^2 .+ (c2 .- 3) * nn + c4
-    end
-    
-    
-    rlist = 10 .^(range(log10.(rp  .* (1.0 .+ eps_r)), log10.(rmax), rpts))
-    if (wR == 0)&&(wI == 0)
-        if return_erg
-            return rlist, zeros(length(rlist)), wR .+ im .* wI
-        else
-            return rlist, zeros(length(rlist))
+        
+        sigm = 2 .* rp .* (erg .- OmH .* m) ./ (rp .- rm)
+        chi = (alph.^2 .- 2 .* erg.^2) ./ q
+        b = sqrt.(1 - a.^2)
+        
+        gam = im * a * sqrt.(erg.^2 .- alph.^2)
+        cc2 = a.^2 .* (erg.^2 .- alph.^2)
+        LLM = l * (l + 1)
+        # LLM += 2 .* cc2 .* (m.^2 .- l .* (l + 1) + 0.5) ./ ((2 * l - 1) .* (2 * l + 3)) # alternative describ 2nd order
+        LLM += (-1 + 2 * l * (l + 1) - 2 * m.^2) * gam.^2 ./ (-3 + 4 * l * (l + 1))
+        LLM += ((l - m - 1 * (l - m) * (l + m) * (l + m - 1)) ./ ((-3 + 2 * l) * (2 * l - 1).^2) - (l + 1 - m) * (2 * l - m) * (l + m + 1) * (2 + l + m) ./ ((3 + 2 * l).^2 * (5 + 2 * l))) * gam.^4 ./ (2 * (1 + 2 * l))
+        LLM += (4 * ((-1 + 4 * m^2) * (l * (1 + l) * (121 + l * (1 + l) * (213 + 8 * l * (1 + l) * (-37 + 10 * l * (1 + l)))) - 2 * l * (1 + l) * (-137 + 56 * l * (1 + l) * (3 + 2 * l * (1 + l))) * m^2 + (705 + 8 * l * (1 + l) * (125 + 18 * l * (1 + l))) * m^4 - 15 * (1 + 46 * m^2))) * gam^6) / ((-5 + 2 * l) * (-3 + 2 * l) * (5 + 2 * l) * (7 + 2 * l) * (-3 + 4 * l * (1 + l))^5)
+        
+        c0 = 1.0 .- 2.0 * im * erg - 2 * im ./ b .* (erg .- a .* m ./ 2.0)
+        c1 = -4.0 .+ 4 * im * (erg - im * q * (1.0 + b)) + 4 * im / b * (erg - a * m / 2.0) .- 2.0 * (erg.^2 .+ q.^2) ./ q
+        c2 = 3.0 - 2 * im * erg - 2.0 * (q.^2 - erg.^2) ./ q - 2.0 * im / b * (erg - a * m ./ 2)
+        c3 = 2.0 * im * (erg - im * q).^3 ./ q .+ 2 * (erg .- im * q).^2 .* b + q.^2 * a.^2 .+ 2 * im * q * a * m - LLM - 1 - (erg - im * q).^2 ./ q .+ 2 * q * b + 2 * im / b * ( (erg - im * q).^2 ./ q + 1.0) * (erg .- a * m / 2)
+        c4 = (erg .- im * q).^4 ./ q.^2 .+ 2 * im * erg * (erg .- im * q).^2 ./ q .- 2 * im ./ b .* (erg .- im * q).^2 ./ q .* (erg .- a * m ./ 2)
+        
+        function alphaN(nn)
+            return nn.^2 .+ (c0 .+ 1) * nn + c0
         end
-    end
-    
-    preF = (rlist .- rp).^(- im .* sigm) .* (rlist .- rm).^(im .* sigm .+ chi .- 1.0) .* exp.(q .* rlist)
+        function betaN(nn)
+            return -2 * nn.^2 .+ (c1 .+ 2) * nn + c3
+        end
+        function gammaN(nn)
+            return nn.^2 .+ (c2 .- 3) * nn + c4
+        end
+        
+        
+        rlist = 10 .^(range(log10.(rp  .* (1.0 .+ eps_r)), log10.(rmax), rpts))
+        if (wR == 0)&&(wI == 0)
+            if return_erg
+                return rlist, zeros(length(rlist)), wR .+ im .* wI
+            else
+                return rlist, zeros(length(rlist))
+            end
+        end
+        
+        preF = (rlist .- rp).^(- im .* sigm) .* (rlist .- rm).^(im .* sigm .+ chi .- 1.0) .* exp.(q .* rlist)
 
-    
-    nfactor = ((rlist .- rp) ./ (rlist .- rm))
-    Rout = zeros(Complex, length(rlist))
-    bk = zeros(Complex, Ntot)
-    bk[1] = 1.0
-    bk[2] = -betaN(0) ./ alphaN(0) .* bk[1]
-    
-    for i in 2:(Ntot-1)
-        bk[i+1] = (-betaN(i-1) .* bk[i] .- gammaN(i-1) .* bk[i-1]) ./ alphaN(i-1)
-    end
-    
-    for i in 1:Ntot
-        Rout .+= preF .* bk[i] .* nfactor.^(i-1)
-    end
-    
-   
-    
-    if QNM
-        # nm = 1.0
-        alp_trans = 2 .* rp ./ (rp .- rm) .* log.(abs.(rlist .- rp)) .- 2 .* rm ./ (rp .- rm) .* log.(abs.(rlist .- rm))
-        Rout .*= exp.(im * erg .* alp_trans) # change coord
-        # Rout .*= exp.(-im * erg .* alp_trans) # change coord
-    end
- 
-    nm = trapz(Rout .* conj(Rout) .* rlist.^2, rlist)
-    if QNM
-        nm = 1.0
-    end
-    
-    
-    
-    
-    
-    # print(Float64.(real(Rout ./ sqrt.(nm))), "\n")
-    if sve
-        normOut = Rout .* conj(Rout) ./ nm
-        writedlm(fnm*"_$(alph)_n_$(n)_l_$(l)_m_$(m)_.dat", hcat(float(real(rlist)), float(real(normOut))))
+        
+        nfactor = ((rlist .- rp) ./ (rlist .- rm))
+        Rout = zeros(Complex, length(rlist))
+        bk = zeros(Complex, Ntot)
+        bk[1] = 1.0
+        bk[2] = -betaN(0) ./ alphaN(0) .* bk[1]
+        
+        for i in 2:(Ntot-1)
+            bk[i+1] = (-betaN(i-1) .* bk[i] .- gammaN(i-1) .* bk[i-1]) ./ alphaN(i-1)
+        end
+        
+        for i in 1:Ntot
+            Rout .+= preF .* bk[i] .* nfactor.^(i-1)
+        end
+        
+       
+        
+        if QNM
+            # nm = 1.0
+            alp_trans = 2 .* rp ./ (rp .- rm) .* log.(abs.(rlist .- rp)) .- 2 .* rm ./ (rp .- rm) .* log.(abs.(rlist .- rm))
+            Rout .*= exp.(im * erg .* alp_trans) # change coord
+            # Rout .*= exp.(-im * erg .* alp_trans) # change coord
+        end
+     
+        nm = trapz(Rout .* conj(Rout) .* rlist.^2, rlist)
+        if QNM
+            nm = 1.0
+        end
+        if sve
+            normOut = Rout .* conj(Rout) ./ nm
+            writedlm(fnm*"_$(alph)_n_$(n)_l_$(l)_m_$(m)_.dat", hcat(float(real(rlist)), float(real(normOut))))
+        else
+            if return_erg
+                return rlist, Rout ./ sqrt.(nm), erg # erg normalized by GM
+            else
+                return rlist, Rout ./ sqrt.(nm)
+            end
+        end
     else
-        if return_erg
-            return rlist, Rout ./ sqrt.(nm), erg # erg normalized by GM
+        rminus = M - sqrt(M^2 - a^2)
+        rplus = M + sqrt(M^2 - a^2)
+        function R(r, ν_val)
+            return ((2*r*M*alph^2)/(l0 + n0 + 1))^l0 *
+                    exp(-((r*M*alph^2)/(l0 + n0 + 1))) *
+                    generalized_laguerre(n - l0 - 1, 2 * l0 + 1, (2*r*M*alph^2)/(l0 + n0 + 1))
+        end
+        function calc_ω_inv(ω)
+            return sqrt.(((1 - (ω ./ alph).^2 ) ./ (alph^2*M^2) ).^-1)
+        end
+        function calc_Pplus(ω_val)
+            return (m*a - 2*ω_val*M*rplus)/(rplus - rminus)
+        end
+        function calc_Pminus(ω_val)
+            return (m*a - 2*ω_val*M*rminus)/(rplus - rminus)
+        end
+        function calc_Aplus(ω_val)
+            return 2*((m*a - 2*ω_val*M^2)/(rplus - rminus))^2 -
+                   4*ω_val^2*M^2 + (alph^2 - 2*ω_val^2)*M*(rplus - rminus) +
+                   (2*M^2 - a^2)*(alph^2 - ω_val^2)
+        end
+        function calc_Aminus(ω_val)
+            return 2*((m*a - 2*ω_val*M^2)/(rplus - rminus))^2 -
+                   4*ω_val^2*M^2 - (alph^2 - 2*ω_val^2)*M*(rplus - rminus) +
+                   (2*M^2 - a^2)*(alph^2 - ω_val^2)
+        end
+
+        ω = erg
+        nuV = calc_ω_inv(ω)
+        kk = sqrt.(ω.^2 .- alph.^2)
+        
+        l0 = l
+        n0 = n - l0 - 1 # field overtone number
+        # Calculate Pplus for the current ν value
+        Pplus = calc_Pplus(ω)
+        Pmns = calc_Pminus(ω)
+        beta = 2 * im .* Pplus
+        gam = -2 .* im .* Pmns
+        alpha_other = 2 * im * kk .* (rplus .- rminus)
+        deltt = calc_Aplus(ω) .- calc_Aminus(ω)
+        gam_llm = im * a * sqrt.(ω.^2 .- alph.^2)
+        LLM = l0 * (l0 + 1)
+        LLM += (-1 + 2 * l0 * (l0 + 1) - 2 * m.^2) * gam_llm.^2 ./ (-3 + 4 * l0 * (l0 + 1))
+        LLM += ((l0 - m - 1 * (l0 - m) * (l0 + m) * (l0 + m - 1)) ./ ((-3 + 2 * l0) * (2 * l0 - 1).^2) - (l0 + 1 - m) * (2 * l0 - m) * (l0 + m + 1) * (2 + l0 + m) ./ ((3 + 2 * l0).^2 * (5 + 2 * l0))) * gam_llm.^4 ./ (2 * (1 + 2 * l0))
+        LLM += (4 * ((-1 + 4 * m^2) * (l0 * (1 + l0) * (121 + l0 * (1 + l0) * (213 + 8 * l0 * (1 + l0) * (-37 + 10 * l0 * (1 + l0)))) - 2 * l0 * (1 + l0) * (-137 + 56 * l0 * (1 + l0) * (3 + 2 * l0 * (1 + l0))) * m^2 + (705 + 8 * l0 * (1 + l0) * (125 + 18 * l0 * (1 + l0))) * m^4 - 15 * (1 + 46 * m^2))) * gam_llm^6) / ((-5 + 2 * l0) * (-3 + 2 * l0) * (5 + 2 * l0) * (7 + 2 * l0) * (-3 + 4 * l0 * (1 + l0))^5)
+        eta = - (Pplus.^2 .+ Pmns.^2 .+ LLM .+ alph.^2 .* rplus.^2 .- ω.^2 .* (4 .* M.^2 .+ 2 .* M .* rplus .+ rplus.^2))
+        phi = (alpha_other .- beta .- gam .+ alpha_other .* beta .- beta .* gam) ./ 2 .- eta
+        nuN = (alpha_other .+ beta .+ gam .+ alpha_other .* gam  .+ beta .* gam) ./ 2 .+ eta .+ deltt
+        
+        ### choose r values i want...
+        r_max_shrt = 2.0 .^(2.0 .* n .- 2 .* (1 .+ n)) .* gamma(2 .+ 2 .* n) ./ alph.^2 ./ factorial(2 .* n - 1) .* 3.0
+        r_max = n ./ alph.^2 .* 100.0
+        r_vals = rlist = 10 .^(range(log10.(rplus  .* (1.0 .+ 1e-3)), log10.(r_max), rpts))
+        
+        rout_temp = R.(r_vals, nuV)
+        rout_temp = abs.(rout_temp)
+        rout_temp ./= trapz(rout_temp.^2 .* r_vals.^2, r_vals)
+        r_thresh = nothing
+        for i in 1:length(r_vals)
+            if r_vals[end - i + 1] .< r_max_shrt
+                r_thresh = r_vals[end - i + 1]
+                break
+            end
+        end
+        zz = -(r_vals .- rplus) ./ (rplus .- rminus)
+
+        phinu = Float64(real.(phi + nuN)) .+ im .* Float64(imag.(phi + nuN))
+        
+        zz_short = zz[abs.(zz) .< r_thresh] # cant call large zz values of heun (takes forever...)
+        heunc = solve_heun_switch(phi, phi + nuN, 1.0 + beta, 1.0 + gam, alpha_other, zz_short)
+        y_values_short = exp.(-im .* kk .* (r_vals[abs.(zz) .< r_thresh] .- rplus)) .* zz_short.^(im .* Pplus) .* (zz_short .- 1.0).^(- im .* Pmns) .* heunc
+
+        
+        y_values = []
+        rmax_cut = r_vals[abs.(zz) .< r_thresh][end]
+        
+        # work backward to find where the solution fails
+        imax = length(zz_short)
+        if abs.(y_values_short[end]) .> abs.(y_values_short[end-1])
+            for i in 1:(length(zz_short)-1)
+                if abs.(y_values_short[end-i+1]) .> abs.(y_values_short[end-i])
+                    y_values_short[end-i+1] = 0.0 + im * 0.0
+                else
+                    imax = length(zz_short) - i - 1
+                    break
+                end
+            end
+        end
+        # now go a little further back because you didn't go far enough
+        imax = argmin(abs.(r_vals .- r_vals[imax] .* 0.9))
+        r_max_new = r_vals[imax]
+        
+        for i in 1:rpts
+            if r_vals[i] <= r_max_new
+                push!(y_values, y_values_short[i])
+            else
+                push!(y_values, y_values_short[imax] .* exp.(im .* kk .* (r_vals[i] .- r_max_new)) .* (r_vals[i] ./ r_max_new).^2 )
+            end
+        end
+        rlist = r_vals ./ M
+        
+        
+        nm2 = trapz(y_values .* conj.(y_values) .* rlist.^2, rlist)
+        y_values ./= sqrt.(nm2)
+        
+        number_max_cnt = count_local_maxima(real.(y_values .* conj.(y_values)))
+        if number_max_cnt != (n - l0)
+            println("Nmax count :", number_max_cnt)
+            y_values = rout_temp
+            nm2 = trapz(y_values .* conj.(y_values) .* rlist.^2, rlist)
+            y_values ./= sqrt.(nm2)
+        end
+        if sve
+            writedlm(fnm*"_$(alph)_n_$(n)_l_$(l)_m_$(m)_.dat", hcat(float(real(rlist)), float(real(y_values .* conj.(y_values)))))
         else
-            return rlist, Rout ./ sqrt.(nm)
+            if return_erg
+                return rlist, y_values, erg
+            else
+                return rlist, y_values
+            end
         end
     end
+        
 end
 
 function radial_inf(erg, mu, M, a, l, m; rpts=1000, rmax_val=1e4, debug=false, iter=50, xtol=1e-120, ftol=1e-120, sve_for_test=false, fnm="test_store/test_radial", is_infin=true)
@@ -800,7 +917,7 @@ function spheroidals(l, m, a, erg)
 end
 
 
-function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=200, iter=10000, xtol=1e-20, ftol=1e-90, return_both=false, for_s_rates=true, QNM=false, QNM_E=1.0, erg_Guess=nothing, max_n_qnm=5)
+function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=5000, iter=10000, xtol=1e-20, ftol=1e-90, return_both=false, for_s_rates=true, QNM=false, QNM_E=1.0, erg_Guess=nothing, max_n_qnm=10)
     # output divided by alpha! \tau_nlm = 1 / (2 * output * alpha)!
     
     OmegaH = BigFloat(a ./ (2 .* (GNew .* M) .* (1 .+ sqrt.(1 .- a.^2))))
@@ -810,16 +927,7 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=200, iter=10000
     
     if (ergL(n, l, m, mu, M, a) < m .* OmegaH)||(for_s_rates==true)||QNM
         
-
-        if (alph < 0.03)
-            alph_ev = BigFloat(0.03)
-        elseif (alph < 0.16)&&(m==3)
-            alph_ev = BigFloat(0.16)
-        elseif (alph < 0.39)&&(m==4)
-            alph_ev = BigFloat(0.39)
-        else
-            alph_ev = alph
-        end
+        
         
         if m == 1
             Ntot = 3000
@@ -840,26 +948,19 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=200, iter=10000
             Ntot = Ntot_force
         end
 
-        rescale = (alph ./ alph_ev).^(4 .* l + 5)
+        
         
         b = sqrt.(1 - a.^2)
         
         
         if !QNM
-#            if (n <= 5)&&(n >= 1)&&(l==0)&&(m==0)&&(alph > 0.03)&&(alph < 2.0)
-#                erg0_r = open(readdlm, "input_info/ErgEvol_n_$(n)_l_0_m_0_.dat")
-#                erg0_i = open(readdlm, "input_info/ErgEvol_I_n_$(n)_l_0_m_0_.dat");
-#                itp = LinearInterpolation(erg0_r[:, 1], erg0_r[:, 2], extrapolation_bc=Line())
-#                itpI = LinearInterpolation(erg0_i[:, 1], erg0_i[:, 2], extrapolation_bc=Line())
-#                w0 =  itp(alph) .+ im .* itpI(alph)
-#            else
             if isnothing(erg_Guess)
-                SR211_g = sr_rates(n, l, m, alph_ev ./ (GNew * M), M, a)
+                SR211_g = sr_rates(n, l, m, alph ./ (GNew * M), M, a)
                 # print("test \t ", SR211_g, "\n")
                 if SR211_g == 0
                     SR211_g = -1e-10 .* mu
                 end
-                w0 = (ergL(n, l, m, alph_ev ./ (GNew * M), M, a; full=false) .+ im * SR211_g) .* GNew * M
+                w0 = (ergL(n, l, m, alph ./ (GNew * M), M, a; full=false) .+ im * SR211_g) .* GNew * M
             else
                 w0 = erg_Guess
             end
@@ -877,7 +978,7 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=200, iter=10000
             wI = x[2]  # imag
             erg = wR + im * wI
     
-            q = - sqrt.(alph_ev.^2 .- erg.^2)
+            q = - sqrt.(alph.^2 .- erg.^2)
             
             if !QNM
                 if real(q) > 0
@@ -890,7 +991,7 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=200, iter=10000
             end
            
             
-            gam = im * a * sqrt.(erg.^2 .- alph_ev.^2)
+            gam = im * a * sqrt.(erg.^2 .- alph.^2)
             LLM = l * (l + 1)
             LLM += (-1 + 2 * l * (l + 1) - 2 * m.^2) * gam.^2 ./ (-3 + 4 * l * (l + 1))
             LLM += ((l - m - 1 * (l - m) * (l + m) * (l + m - 1)) ./ ((-3 + 2 * l) * (2 * l - 1).^2) - (l + 1 - m) * (2 * l - m) * (l + m + 1) * (2 + l + m) ./ ((3 + 2 * l).^2 * (5 + 2 * l))) * gam.^4 ./ (2 * (1 + 2 * l))
@@ -926,7 +1027,7 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=200, iter=10000
         end
         
         if real(w0) < 0
-            w0 = alph_ev + imag(w0)
+            w0 = alph + imag(w0)
         end
         
         # sol = nlsolve(wrapper!, [BigFloat(log10.(real(w0))), BigFloat(imag(w0))], autodiff = :forward, xtol=xtol, ftol=ftol, iterations=iter)
@@ -995,7 +1096,7 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=200, iter=10000
         end
 
         if !return_both
-            return sol.zero[2] .* rescale  # im(G * M * omega)
+            return sol.zero[2]   # im(G * M * omega)
         else
             return sol.zero[1], sol.zero[2]
         end
@@ -1268,7 +1369,7 @@ end
 
 
 
-function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, debug=false, Ntot_safe=5000,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=500000, eps_fac=1e-10, NON_REL=false, h_mve=1, to_inf=false, rmaxT=100, prec=200, cvg_acc=1e-4, NptsCh=60, iterC=40, Lcheb=4, run_leaver=false, der_acc=1e-20)
+function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, debug=false, Ntot_safe=5000,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=500000, eps_fac=1e-10, NON_REL=false, h_mve=1, to_inf=false, rmaxT=100, prec=200, cvg_acc=1e-4, NptsCh=60, iterC=40, Lcheb=4, run_leaver=false, der_acc=1e-20, use_heunc=false)
     
     rp = BigFloat(1.0 .+ sqrt.(1.0 .- a.^2))
     rmm = BigFloat(1.0 .- sqrt.(1.0 .- a.^2))
@@ -1326,7 +1427,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     
     
     rlist = 10 .^range(log10(rp .* (1.0 .+ eps_fac)), log10.(rmax), rpts)
-    
+  
     # simplify_radial = check_slv_rad(alph, m1)
     simplify_radial = false
     if NON_REL||simplify_radial
@@ -1334,7 +1435,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         erg_1 = erg_1G * GNew * M
     else
         if run_leaver
-            rl, r1, erg_1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe)
+            rl, r1, erg_1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe, use_heunc=use_heunc)
         else
             wR, wI, rl, r1 = eigensys_Cheby(M, a, mu, n1, l1, m1, return_wf=true, Npoints=NptsCh, Iter=iterC, L=Lcheb, cvg_acc=cvg_acc, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=false, der_acc=der_acc, debug=debug)
             erg_1 = wR .+ im .* wI
@@ -1369,7 +1470,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             erg_2 = erg_1
         else
             if run_leaver
-                rl, r2, erg_2 = solve_radial(mu, M, a, n2, l2, m2; rpts=Npts_Bnd,  return_erg=true, Ntot_safe=Ntot_safe)
+                rl, r2, erg_2 = solve_radial(mu, M, a, n2, l2, m2; rpts=Npts_Bnd,  return_erg=true, Ntot_safe=Ntot_safe, use_heunc=use_heunc)
             else
                 wR, wI, rl, r2 = eigensys_Cheby(M, a, mu, n2, l2, m2, return_wf=true, Npoints=NptsCh, Iter=iterC, cvg_acc=cvg_acc, L=Lcheb,  Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=false, der_acc=der_acc, debug=debug)
                 erg_2 = wR .+ im .* wI
@@ -1401,7 +1502,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         erg_3 = erg_3G * GNew * M
     else
         if run_leaver
-            rl, r3, erg_3 = solve_radial(mu, M, a, n3, l3, m3; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe)
+            rl, r3, erg_3 = solve_radial(mu, M, a, n3, l3, m3; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe, use_heunc=use_heunc)
         else
             wR, wI, rl, r3 = eigensys_Cheby(M, a, mu, n3, l3, m3, return_wf=true, Npoints=NptsCh, Iter=iterC, cvg_acc=cvg_acc, L=Lcheb, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=false, der_acc=der_acc, debug=debug)
             erg_3 = wR .+ im .* wI
@@ -2576,9 +2677,21 @@ end
 # test run of system
 # @time wR, wI, rl, r3 = eigensys_Cheby(1, 0.9, 0.8557577459790169 ./ GNew, 4, 3, 3, debug=true, return_wf=true, L=4, Npoints = 70, Iter = 20,  der_acc=1e-20, cvg_acc=1e-10, prec=200, Npts_r=2000, sfty_run=false)
 
-@time wR, wI, rl, r3 = eigensys_Cheby(1, 0.9, 0.03 ./ GNew, 2, 1, 1, debug=true, return_wf=true, L=4, Npoints = 70, Iter = 20,  der_acc=1e-20, cvg_acc=1e-10, prec=200, Npts_r=200, sfty_run=false)
+# @time wR, wI, rl, r3 = eigensys_Cheby(1, 0.9, 0.03 ./ GNew, 2, 1, 1, debug=true, return_wf=true, L=4, Npoints = 70, Iter = 20,  der_acc=1e-20, cvg_acc=1e-10, prec=200, Npts_r=200, sfty_run=false)
 
 # @time wR, wI = find_im_part(0.3 ./ GNew, 1, 0.99, 2, 1, 1; debug=true, return_both=true, for_s_rates=true, Ntot_force=20000)
 # println(wR ./ 0.3, "\t", wI ./ 0.3)
 # println(wI)
 # writedlm("test.dat", cat(real.(rl), real.(abs.(r3 .* conj(r3))), dims=2))
+
+# M=1
+# a=0.95
+# alp = 0.3754938817842016
+# mu = alp ./ (M * GNew)
+# wR, wI = find_im_part(mu, M, a, 5, 4, 4; debug=true, iter=500, xtol=1e-30, ftol=1e-90, return_both=true, for_s_rates=true, QNM=false, Ntot_force=10000)
+# println(wR, "\t", wI)
+# rl, r1, erg_1 = solve_radial(mu, M, a, 5, 4, 4; rpts=2000, return_erg=true, Ntot_safe=10000, use_heunc=true)
+# writedlm("test_store/test_chb.dat", cat(real.(rl), real.(abs.(r1 .* conj(r1))), dims=2))
+
+# wR, wI, rl, r3 = eigensys_Cheby(1, a, mu, 5, 4, 4, debug=true, return_wf=true, L=4, Npoints = 90, Iter = 20,  der_acc=1e-20, cvg_acc=1e-10, prec=200, Npts_r=200, sfty_run=false)
+# writedlm("test_store/test_ctrue.dat", cat(real.(rl), real.(abs.(r3 .* conj.(r3))), dims=2))
