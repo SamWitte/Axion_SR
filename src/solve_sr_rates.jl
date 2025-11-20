@@ -1390,7 +1390,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     erg_1G, erg1I = find_im_part(mu, M, a, n1, l1, m1; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
     erg_2G, erg2I = find_im_part(mu, M, a, n2, l2, m2; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
     erg_3G, erg3I = find_im_part(mu, M, a, n3, l3, m3; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
-    if erg1R == 0 || erg2R == 0 || erg3R == 0
+    if erg_1G == 0 || erg_2G == 0 || erg_3G == 0
         erg_1G = ergL(n1, l1, m1, mu, M, a; full=true) .* GNew .* M
         erg_2G = ergL(n1, l1, m1, mu, M, a; full=true) .* GNew .* M
         erg_3G = ergL(n1, l1, m1, mu, M, a; full=true) .* GNew .* M
