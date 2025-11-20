@@ -1369,7 +1369,7 @@ end
 
 
 
-function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, debug=false, Ntot_safe=5000,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=500000, eps_fac=1e-10, NON_REL=false, h_mve=1, to_inf=false, rmaxT=100, prec=200, cvg_acc=1e-4, NptsCh=60, iterC=40, Lcheb=4, run_leaver=false, der_acc=1e-20, use_heunc=false)
+function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, debug=false, Ntot_safe=10000,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=500000, eps_fac=1e-10, NON_REL=false, h_mve=1, to_inf=false, rmaxT=100, prec=200, cvg_acc=1e-4, NptsCh=60, iterC=40, Lcheb=4, run_leaver=false, der_acc=1e-20, use_heunc=false)
 
     
     rp = BigFloat(1.0 .+ sqrt.(1.0 .- a.^2))
@@ -1390,11 +1390,13 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     erg_1G, erg1I = find_im_part(mu, M, a, n1, l1, m1; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
     erg_2G, erg2I = find_im_part(mu, M, a, n2, l2, m2; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
     erg_3G, erg3I = find_im_part(mu, M, a, n3, l3, m3; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
+    
     if erg_1G == 0 || erg_2G == 0 || erg_3G == 0
         erg_1G = ergL(n1, l1, m1, mu, M, a; full=true) .* GNew .* M
         erg_2G = ergL(n1, l1, m1, mu, M, a; full=true) .* GNew .* M
         erg_3G = ergL(n1, l1, m1, mu, M, a; full=true) .* GNew .* M
     end
+    
     erg_pxy = (erg_1G + erg_2G - erg_3G)
     
     OmegaH = a ./ (2 .* (GNew .* M) .* (1 .+ sqrt.(1 .- a.^2)))
@@ -1440,7 +1442,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     simplify_radial = false
     if NON_REL||simplify_radial
         rf_1 = radial_bound_NR(n1, l1, m1, mu, M, rlist)
-        erg_1 = erg_1G * GNew * M
+        erg_1 = erg_1G
     else
         if run_leaver
             rl, r1, erg_1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe, use_heunc=use_heunc, debug=debug)
@@ -1450,15 +1452,15 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         end
         itp = LinearInterpolation(log10.(rl), r1, extrapolation_bc=Line())
         rf_1 = itp(log10.(rlist))
-        real_diff_test = abs.((erg_1 .- erg_1G * GNew * M) ./ alph) # saftey net for random fail....
+        real_diff_test = abs.((erg_1 .- erg_1G) ./ alph) # saftey net for random fail....
         if (imag(erg_1) < 0)||(real_diff_test .> 0.5)
             if debug
                 println("Issue with one of the energy eigenstates....")
                 println("ERG 1\t", erg_1)
             end
-            if (erg_1G * GNew * M .< 0.8 .* m1 .* OmegaH) # if fail is deep in non-relativistic regime, catch
+            if (erg_1G .< 0.8 .* m1 .* OmegaH) # if fail is deep in non-relativistic regime, catch
                 rf_1 = radial_bound_NR(n1, l1, m1, mu, M, rlist)
-                erg_1 = erg_1G * GNew * M
+                erg_1 = erg_1G
             else
                 return 0.0
             end
@@ -1471,7 +1473,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     simplify_radial = false
     if NON_REL||simplify_radial
         rf_2 = radial_bound_NR(n2, l2, m2, mu, M, rlist)
-        erg_2 = erg_2G * GNew * M
+        erg_2 = erg_2G
     else
         if (n2 == n1)&&(l2 == l1)&&(m2 == m1)
             rf_2 = rf_1
@@ -1486,15 +1488,15 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             
             itp = LinearInterpolation(log10.(rl), r2, extrapolation_bc=Line())
             rf_2 = itp(log10.(rlist))
-            real_diff_test = abs.((erg_2 .- erg_2G * GNew * M) ./ alph) # saftey net for random fail....
+            real_diff_test = abs.((erg_2 .- erg_2G ) ./ alph) # saftey net for random fail....
             if (imag(erg_2) < 0)||(real_diff_test .> 0.5)
                 if debug
                     println("Issue with one of the energy eigenstates....")
                     println("ERG 2\t", erg_2)
                 end
-                if (erg_2G * GNew * M .< 0.8 .* m2 .* OmegaH) # if fail is deep in non-relativistic regime, catch
+                if (erg_2G .< 0.8 .* m2 .* OmegaH) # if fail is deep in non-relativistic regime, catch
                     rf_2 = radial_bound_NR(n2, l2, m2, mu, M, rlist)
-                    erg_2 = erg_2G * GNew * M
+                    erg_2 = erg_2G
                 else
                     return 0.0
                 end
@@ -1507,7 +1509,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     simplify_radial = false
     if NON_REL||simplify_radial
         rf_3 = radial_bound_NR(n3, l3, m3, mu, M, rlist)
-        erg_3 = erg_3G * GNew * M
+        erg_3 = erg_3G
     else
         if run_leaver
             rl, r3, erg_3 = solve_radial(mu, M, a, n3, l3, m3; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe, use_heunc=use_heunc, debug=debug)
@@ -1518,15 +1520,15 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         
         itp = LinearInterpolation(log10.(rl), r3, extrapolation_bc=Line())
         rf_3 = itp(log10.(rlist))
-        real_diff_test = abs.((erg_3 .- erg_3G * GNew * M) ./ alph) # saftey net for random fail....
+        real_diff_test = abs.((erg_3 .- erg_3G) ./ alph) # saftey net for random fail....
         if (imag(erg_3) < 0)||(real_diff_test .> 0.5)
             if debug
                 println("Issue with one of the energy eigenstates....")
                 println("ERG 3\t", erg_3)
             end
-            if (erg_3G * GNew * M .< 0.8 .* m3 .* OmegaH) # if fail is deep in non-relativistic regime, catch
+            if (erg_3G .< 0.8 .* m3 .* OmegaH) # if fail is deep in non-relativistic regime, catch
                 rf_3 = radial_bound_NR(n3, l3, m3, mu, M, rlist)
-                erg_3 = erg_3G * GNew * M
+                erg_3 = erg_3G
             else
                 return 0.0
             end
