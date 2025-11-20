@@ -1431,8 +1431,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         l = 0
         m = 0
         # rmax = Float64.(100 ./ alph.^2 .* (minN ./ 2.0) )
-        # rmax = 2.0 .^(2.0 .* minN .- 2 .* (1 .+ minN)) .* gamma(2 .+ 2 .* minN) ./ alph.^2 ./ factorial(2 .* minN - 1) .* 7.0
-        rmax = 2.0 .^(2.0 .* maxN .- 2 .* (1 .+ maxN)) .* gamma(2 .+ 2 .* maxN) ./ alph.^2 ./ factorial(2 .* maxN - 1) .* 7.0
+        rmax = 2.0 .^(2.0 .* maxN .- 2 .* (1 .+ maxN)) .* gamma(2 .+ 2 .* maxN) ./ alph.^2 ./ factorial(2 .* maxN - 1) .* 10.0
     end
     
     
