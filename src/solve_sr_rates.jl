@@ -1370,25 +1370,31 @@ end
 
 
 function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, debug=false, Ntot_safe=5000,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=500000, eps_fac=1e-10, NON_REL=false, h_mve=1, to_inf=false, rmaxT=100, prec=200, cvg_acc=1e-4, NptsCh=60, iterC=40, Lcheb=4, run_leaver=false, der_acc=1e-20, use_heunc=false)
+
     
     rp = BigFloat(1.0 .+ sqrt.(1.0 .- a.^2))
     rmm = BigFloat(1.0 .- sqrt.(1.0 .- a.^2))
     alph = mu * GNew * M
     
     
-    erg_1G = ergL(n1, l1, m1, mu, M, a; full=true)
-    erg_2G = ergL(n2, l2, m2, mu, M, a; full=true)
-    erg_3G = ergL(n3, l3, m3, mu, M, a; full=true)
-    erg_pxy = (erg_1G + erg_2G - erg_3G) .* GNew .* M
+    # erg_1G = ergL(n1, l1, m1, mu, M, a; full=true)
+    # erg_2G = ergL(n2, l2, m2, mu, M, a; full=true)
+    # erg_3G = ergL(n3, l3, m3, mu, M, a; full=true)
+    # erg_pxy = (erg_1G + erg_2G - erg_3G) .* GNew .* M
     
     maxN = maximum([n1 n2 n3])
     minN = maximum([n1 n2 n3])
     
     
     ### quick check if to inf to not!
-    # erg1R, erg1I = find_im_part(mu, M, a, n1, l1, m1; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
-    # erg2R, erg2I = find_im_part(mu, M, a, n2, l2, m2; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
-    # erg3R, erg3I = find_im_part(mu, M, a, n3, l3, m3; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
+    erg1R, erg1I = find_im_part(mu, M, a, n1, l1, m1; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
+    erg2R, erg2I = find_im_part(mu, M, a, n2, l2, m2; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
+    erg3R, erg3I = find_im_part(mu, M, a, n3, l3, m3; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
+    if erg1R == 0 || erg2R == 0 || erg3R == 0
+        erg1R = ergL(n1, l1, m1, mu, M, a; full=true) .* GNew .* M
+        erg2R = ergL(n1, l1, m1, mu, M, a; full=true) .* GNew .* M
+        erg3R = ergL(n1, l1, m1, mu, M, a; full=true) .* GNew .* M
+    end
     OmegaH = a ./ (2 .* (GNew .* M) .* (1 .+ sqrt.(1 .- a.^2)))
     
     if erg_pxy .> alph
@@ -1581,11 +1587,11 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         CG_2 += func_ang_2([thetaV, phiV])
         
         idx += 1
-
+        
         if (idx > 20)&&(idx%idx_skip==0)
             test1 = abs.((CG ./ idx) .- CG_old) ./ CG_old
             test2 = abs.((CG_2 ./ idx) .- CG_2_old) ./ CG_2_old
-            if (test1 .< 1e-3)&&(test2 .< 1e-3)
+            if (test1 .< 1e-2)&&(test2 .< 1e-2)
                 ang_cvrg = true
                 CG *= 4*pi / idx
                 CG_2 *= 4*pi / idx
@@ -2643,10 +2649,10 @@ end
 
 # M=1
 # a=0.95
-# alp = 0.3754938817842016
+# alp = 0.05
 # mu = alp ./ (M * GNew)
-# wR, wI = find_im_part(mu, M, a, 5, 4, 4; debug=true, iter=500, xtol=1e-30, ftol=1e-90, return_both=true, for_s_rates=true, QNM=false, Ntot_force=10000)
-# println(wR, "\t", wI)
+# @time wR, wI = find_im_part(mu, M, a, 3, 2, 0; debug=true, iter=500, xtol=1e-30, ftol=1e-90, return_both=true, for_s_rates=true, QNM=false, Ntot_force=10000)
+#println(wR, "\t", wI)
 # rl, r1, erg_1 = solve_radial(mu, M, a, 5, 4, 4; rpts=2000, return_erg=true, Ntot_safe=10000, use_heunc=true)
 # writedlm("test_store/test_chb.dat", cat(real.(rl), real.(abs.(r1 .* conj(r1))), dims=2))
 

@@ -38,7 +38,7 @@ function parse_commandline()
             
         "--run_leaver"
             arg_type = Bool
-            default = false
+            default = true
             
         "--use_heunc"
             arg_type = Bool
@@ -72,7 +72,7 @@ check_err = parsed_args["check_err"];
 
 print(S1, "\t", S2, "\t", S3, "\t", S4, "\n")
 
-function main(;kpts=14, rpts=1000, rmaxT=100, Nang=5000000, Npts_Bnd=1000)
+function main(;kpts=14, rpts=1000, rmaxT=100, Nang=5000000, Npts_Bnd=500)
     a = 0.95
     M = 1.0
     Ntot_safe=20000
@@ -125,11 +125,12 @@ function main(;kpts=14, rpts=1000, rmaxT=100, Nang=5000000, Npts_Bnd=1000)
     if !isfile(fOUT)||overwrite_file
         
         for i in 1:alpha_pts
-            mu = alpha_list[i] ./ (M * GNew)
+            alpp = alpha_list[i]
+            mu = alpp ./ (M * GNew)
             
             maxN = maximum([n1 n2 n3])
             rmax_1 = (2.0 .^(2.0 .* 3 .- 2 .* (1 .+ 3)) .* gamma(2 .+ 2 .* 3) ./ (0.03 .^2) ./ factorial(2 .* 3 - 1) .* 7.0)
-            rmax_ratio = (2.0 .^(2.0 .* maxN .- 2 .* (1 .+ maxN)) .* gamma(2 .+ 2 .* maxN) ./ alpha_list[i].^2 ./ factorial(2 .* maxN - 1) .* 7.0) ./ rmax_1
+            rmax_ratio = (2.0 .^(2.0 .* maxN .- 2 .* (1 .+ maxN)) .* gamma(2 .+ 2 .* maxN) ./ alpp.^2 ./ factorial(2 .* maxN - 1) .* 7.0) ./ rmax_1
             h_mve = (0.2) ./ rmax_ratio
            
             output_sve[i] = gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, Npts_Bnd=Npts_Bnd, eps_fac=1e-3, Ntot_safe=Ntot_safe, Nang=Nang, NON_REL=NON_REL, h_mve=h_mve, to_inf=to_inf, rmaxT=rmaxT, run_leaver=run_leaver, NptsCh=NptsCh_list[i], cvg_acc=cvg_acc, prec=prec, iterC=iterC, debug=debug, der_acc=der_acc, Lcheb=Lcheb, use_heunc=use_heunc)
