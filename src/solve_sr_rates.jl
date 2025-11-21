@@ -1579,7 +1579,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     
     ang_cvrg = false
     idx = 1
-    idx_skip=100
+    idx_skip=1000
     CG_old = 0.0
     CG_2_old = 0.0
     while !ang_cvrg
@@ -1592,16 +1592,17 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         idx += 1
         
         if (idx > 20)&&(idx%idx_skip==0)
+            println(idx)
             test1 = abs.((CG ./ idx) .- CG_old) ./ CG_old
             test2 = abs.((CG_2 ./ idx) .- CG_2_old) ./ CG_2_old
-            if (test1 .< 1e-2)&&(test2 .< 1e-2)
+            if (test1 .< 1e-4)&&(test2 .< 1e-4)
                 ang_cvrg = true
                 CG *= 4*pi / idx
                 CG_2 *= 4*pi / idx
             else
                 CG_old = CG ./ idx
                 CG_2_old = CG_2 ./ idx
-                idx_skip = idx
+                idx_skip = 5 * idx
             end
             
         end
