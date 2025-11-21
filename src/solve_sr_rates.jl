@@ -1592,7 +1592,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         idx += 1
         
         if (idx > 20)&&(idx%idx_skip==0)
-            println(idx)
+            # println(idx)
             test1 = abs.((CG ./ idx) .- CG_old) ./ CG_old
             test2 = abs.((CG_2 ./ idx) .- CG_2_old) ./ CG_2_old
             if (test1 .< 1e-4)&&(test2 .< 1e-4)
