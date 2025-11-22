@@ -176,13 +176,13 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
                 u[i] = log.(e_init)
             end
               
-            if (abs.(u[i] .- log.(bn_list[i])) < 1e-2)||(u[i] > log.(bn_list[i]))
+            if (abs.(u[i] .- log.(bn_list[i])) < SOLVER_TOLERANCES.bosenova_threshold)||(u[i] > log.(bn_list[i]))
                 u[i] = log.(bn_list[i])
                 u_real[i] = bn_list[i]
             end
         end
-        
-        
+
+
         OmegaH = u_real[spinI] ./ (2 .* (GNew .* u_real[massI]) .* (1 .+ sqrt.(1 .- u_real[spinI].^2)))
         
         SR_rates = [func(u_real[spinI]) for func in interp_funcs]
@@ -230,10 +230,10 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
 
         # check bosenova and correct units
         for i in 1:idx_lvl
-      
-            if ((abs.(u[i] .- log.(bn_list[i])) < 1e-2)||(u[i] > log.(bn_list[i])))&&(du[i] > 0)
+
+            if ((abs.(u[i] .- log.(bn_list[i])) < SOLVER_TOLERANCES.bosenova_threshold)||(u[i] > log.(bn_list[i])))&&(du[i] > 0)
                 du[i] *= 0.0
-            elseif (abs.(u[i] .- log.(e_init)) < 1e-2)&&(du[i] < 0)
+            elseif (abs.(u[i] .- log.(e_init)) < SOLVER_TOLERANCES.bosenova_threshold)&&(du[i] < 0)
                 du[i] *= 0.0
             else
                 du[i] *= mu ./ hbar .* 3.15e7
@@ -270,7 +270,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
         u_fake = u_real * 1.1 # Growth estimate with 10% safety margin (previously used 2x, too aggressive)
 
         for i in 1:idx_lvl
-            if (abs.(u[i] .- log.(bn_list[i])) < 1e-2)||(u[i] > log.(bn_list[i]))
+            if (abs.(u[i] .- log.(bn_list[i])) < SOLVER_TOLERANCES.bosenova_threshold)||(u[i] > log.(bn_list[i]))
                 u[i] = log.(bn_list[i])
                 u_real[i] = bn_list[i]
                 du[i] *= 0
@@ -319,10 +319,9 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
         integrator.opts.reltol =  reltol
         
         tlist = []
-        # print(integrator.sol.u, "\n")
         for i in 1:idx_lvl
-            condBN =  (abs.(u[i] .- log.(bn_list[i])) < 1e-2)
-            
+            condBN =  (abs.(u[i] .- log.(bn_list[i])) < SOLVER_TOLERANCES.bosenova_threshold)
+
             if (u[i] > log.(e_init)) && condBN &&  (du[i] != 0.0)
                 append!(tlist, abs.(1.0 ./ du[i]))
             end
@@ -348,8 +347,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
         tlist = []
         indx_list = []
         for i in 1:idx_lvl
-           
-            condBN =  (abs.(integrator.u[i] .- log.(bn_list[i])) < 1e-2)
+
+            condBN =  (abs.(integrator.u[i] .- log.(bn_list[i])) < SOLVER_TOLERANCES.bosenova_threshold)
             if (integrator.u[i] > log.(e_init)) && condBN
                 append!(tlist, (1.0 ./ du[i]))
                 append!(indx_list, i)
