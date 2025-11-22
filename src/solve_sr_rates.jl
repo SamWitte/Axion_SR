@@ -12,7 +12,7 @@ using SpinWeightedSpheroidalHarmonics
 using NPZ
 using LinearAlgebra
 using WignerSymbols
-include("Constants.jl")
+# NOTE: Core/constants.jl should be included by the parent file
 include("heunc.jl")
 
 function ergL(n, l, m, massB, MBH, a; full=true)
@@ -906,8 +906,10 @@ function spheroidals(l, m, a, erg)
 end
 
 
-function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=5000, iter=500, xtol=1e-50, ftol=1e-90, return_both=false, for_s_rates=true, QNM=false, QNM_E=1.0, erg_Guess=nothing, max_n_qnm=10)
+function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=5000, iter=50000, xtol=1e-50, ftol=1e-70, return_both=false, for_s_rates=true, QNM=false, QNM_E=1.0, erg_Guess=nothing, max_n_qnm=10, prec=300)
     # output divided by alpha! \tau_nlm = 1 / (2 * output * alpha)!
+    
+    setprecision(BigFloat, prec)
     
     OmegaH = BigFloat(a ./ (2 .* (GNew .* M) .* (1 .+ sqrt.(1 .- a.^2))))
     alph = BigFloat(mu * GNew * M)
@@ -945,15 +947,15 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=5000, iter=500,
         if !QNM
             if isnothing(erg_Guess)
                 SR211_g = sr_rates(n, l, m, alph ./ (GNew * M), M, a)
-                # print("test \t ", SR211_g, "\n")
+                
                 if SR211_g == 0
                     SR211_g = -1e-10 .* mu
                 end
                 w0 = (ergL(n, l, m, alph ./ (GNew * M), M, a; full=false) .+ im * SR211_g) .* GNew * M
+                print("test \t ", w0, "\n")
             else
                 w0 = erg_Guess
             end
-#            end
         else
             ### only valid for l= 0,m=0, otherwise better guesses are needed
             w0 = 0.117 .+ 0.004 .* (alph ./ 0.1) .- 0.084 * im .- 0.01 .* (alph ./ 0.1)  # rough guess for n = 1, l=0, m=0
@@ -1557,46 +1559,66 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
    
     
 
-    function func_ang(x)
-        return real(Z1.(x[1], x[2]) .* Z2.(x[1], x[2]) .* conj(Z3.(x[1], x[2])) .* conj(Z4.(x[1], x[2]) ))
+    # Precompute spheroidal products to avoid redundant evaluations
+    function func_ang_pair(theta, phi)
+        Z_prod = Z1(theta, phi) * Z2(theta, phi) * conj(Z3(theta, phi)) * conj(Z4(theta, phi))
+        real_prod = real(Z_prod)
+        return real_prod, real_prod * cos(theta)^2
     end
-    function func_ang_2(x)
-        return real(Z1.(x[1], x[2]) .* Z2.(x[1], x[2]) .* conj(Z3.(x[1], x[2])) .* conj(Z4.(x[1], x[2]) )) .* cos.(x[1]).^2
-    end
+
     CG = 0.0
     CG_2 = 0.0
-    
+    println("getting angles")
     ang_cvrg = false
-    idx = 1
-    idx_skip=1000
+    idx = 0
+    check_interval = 100  # Check convergence every 100 samples (not every idx_skip)
     CG_old = 0.0
     CG_2_old = 0.0
-    while !ang_cvrg
-        thetaV = acos.(1.0 .- 2.0 .* rand())
-        phiV = rand() .* 2*pi
-        
-        CG += func_ang([thetaV, phiV])
-        CG_2 += func_ang_2([thetaV, phiV])
-        
-        idx += 1
-        
-        if (idx > 20)&&(idx%idx_skip==0)
-            # println(idx)
-            test1 = abs.((CG ./ idx) .- CG_old) ./ CG_old
-            test2 = abs.((CG_2 ./ idx) .- CG_2_old) ./ CG_2_old
-            if (test1 .< 1e-4)&&(test2 .< 1e-4)
-                ang_cvrg = true
-                CG *= 4*pi / idx
-                CG_2 *= 4*pi / idx
-            else
-                CG_old = CG ./ idx
-                CG_2_old = CG_2 ./ idx
-                idx_skip = 5 * idx
-            end
-            
+    max_iterations = 100000  # Safeguard against infinite loops
+    tol = 1e-4
+    min_samples = 200  # Require minimum samples before checking convergence
+
+    while !ang_cvrg && idx < max_iterations
+        # Batch evaluate multiple samples per iteration for better cache performance
+        for _ in 1:check_interval
+            theta = acos(1.0 - 2.0 * rand())
+            phi = 2.0 * pi * rand()
+            f1, f2 = func_ang_pair(theta, phi)
+            CG += f1
+            CG_2 += f2
+            idx += 1
         end
-        
+
+        if idx >= min_samples
+            # Compute running averages
+            CG_avg = CG / idx
+            CG_2_avg = CG_2 / idx
+
+            # Check convergence with safeguard against division by zero
+            if abs(CG_old) > 1e-10
+                test1 = abs(CG_avg - CG_old) / abs(CG_old)
+            else
+                test1 = abs(CG_avg - CG_old)
+            end
+
+            if abs(CG_2_old) > 1e-10
+                test2 = abs(CG_2_avg - CG_2_old) / abs(CG_2_old)
+            else
+                test2 = abs(CG_2_avg - CG_2_old)
+            end
+
+            if (test1 < tol) && (test2 < tol)
+                ang_cvrg = true
+            else
+                CG_old = CG_avg
+                CG_2_old = CG_2_avg
+            end
+        end
     end
+
+    # Normalize by volume of integration domain (surface of unit sphere = 4π)
+    CG *= 4*pi / idx
+    CG_2 *= 4*pi / idx
 
     
     

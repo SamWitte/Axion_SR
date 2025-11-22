@@ -19,8 +19,8 @@ function install_packages(pkgs::Vector{String})
     end
 end
 
-install_packages(["DelimitedFiles", "PyCall", "Interpolations", "HypergeometricFunctions", "SpecialFunctions", "Dates", "Plots", "Printf", "Interpolations",
+install_packages(["DelimitedFiles", "PyCall", "Interpolations", "HypergeometricFunctions", "SpecialFunctions", "Dates", "Plots", "Printf",
 "Distributions", "Statistics", "OrdinaryDiffEq", "Random", "MCMCDiagnosticTools", "Suppressor", "KernelDensity", "StatsPlots", "Turing",
-"WignerSymbols", "LinearAlgebra", "NPZ", "SpinWeightedSpheroidalHarmonics", "HypergeometricFunctions", "NLsolve", "ForwardDiff", "Glob", "ArgParse",
-"QuadGK", "StatsBase", "DifferentialEquations"])
+"WignerSymbols", "LinearAlgebra", "NPZ", "SpinWeightedSpheroidalHarmonics", "NLsolve", "ForwardDiff", "Glob", "ArgParse",
+"QuadGK", "StatsBase", "DifferentialEquations", "AffineInvariantMCMC"])
 

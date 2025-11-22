@@ -11,9 +11,9 @@ sve = false
 
 
 f_a = 1e18
-m_a = 2e-19
+m_a = 2e-12
 SpinBH = 0.99
-MassBH = 1e8
+MassBH = 20
 tau_max = 5e7 # 5.0e7, 4.8e6
 
 alpha_max_cut = 10.0
@@ -28,8 +28,8 @@ N_pts_interp=100
 N_pts_interpL=100
 
 
-Nmax = 7
-cheby=true
+Nmax = 5
+cheby=false
 
 non_rel = false
 high_p = true
@@ -46,8 +46,8 @@ println("non rel? ", non_rel)
 
 
 timeT, StatesOut, idx_lvl, spin, massB = @time solve_system(m_a, f_a, SpinBH, MassBH, tau_max; impose_low_cut=impose_low_cut, return_all_info=return_all_info, n_times=n_times, eq_threshold=eq_threshold, abstol=abstol, non_rel=non_rel, debug=true, high_p=high_p, N_pts_interp=N_pts_interp, N_pts_interpL=N_pts_interpL, Nmax=Nmax, cheby=cheby)
- 
-
+println(size(StatesOut), "\n", idx_lvl)
+println("Final states \t", timeT[end], "\t", "\t", spin[end], "\t", massB[end])
 if sve
     fdir = "test_store/"
     fname_time = "Time_"

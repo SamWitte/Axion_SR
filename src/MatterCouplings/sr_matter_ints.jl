@@ -12,7 +12,7 @@ using SpinWeightedSpheroidalHarmonics
 using NPZ
 using LinearAlgebra
 using WignerSymbols
-include("Constants.jl")
+include("Core/constants.jl")
 using MathLink
 
 

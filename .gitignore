@@ -1,0 +1,67 @@
+# Directories - Analysis and output
+n5_paper_plts/
+old_stuff/
+output_mcmc/
+plts/
+MatterCouplings/
+stored_limits/
+stored_limits_fake/
+test_store/
+talk_plts/
+mathematica_nbs/
+data/
+random_papers/
+refs/
+temp_hold/
+ongoing_tests/
+
+# Scripts output
+scripts/*.dat
+scripts/plts/
+
+# LaTeX files
+*.tex
+
+# Documentation (keep only QUICKSTART.md and README.md)
+CLEANUP_GUIDE.md
+EIGENVALUE_PLOTS_README.md
+EXECUTIVE_SUMMARY.md
+FINAL_STATUS_SUMMARY.md
+INTEGRATION_TEST_RESULTS.md
+MODULE_GUIDE.md
+NEXT_STEPS.md
+OVERLEAF_SETUP.md
+PAPER_QUICK_START.md
+PHASE_2_2_COMPLETION.md
+PHASE_2_2_MERGE_PLAN.md
+PHASE_2_SUMMARY.md
+PHASE_3_1_COMPLETION.md
+PHASE_3_2_COMPLETION.md
+PHASE_3_3_COMPLETION.md
+PHASE_6_1_COMPLETION.md
+PHASE_7_CLEANUP.md
+PHASE_7_PERFORMANCE_ANALYSIS.md
+REFACTORING_SUMMARY.md
+SESSION_SUMMARY.md
+README_PROJECT_STATUS.md
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Julia
+*.jl.cov
+*.jl.*.cov
+*.jl.mem
+/Manifest.toml
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+Thumbs.db
