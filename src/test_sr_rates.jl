@@ -7,11 +7,12 @@ function main_plt()
     ftol = 1e-30
     iter = 500
     # alist = range(0.5, 0.99, 7)
-    alist = [0.5, 0.7, 0.9, 0.99]
+    alist = [0.9]
+    Ntot_force=10000
     
-    nn = 4
-    ll = 3
-    mm = 3
+    nn = 3
+    ll = 2
+    mm = 2
     #  amax = 4 * m * alpha ./ (m^2 .+ 4 * alpha.^2)
     
     # muL = range(0.01, 1.0, 50)
@@ -22,7 +23,8 @@ function main_plt()
         muMax = (2 .* (1 + sqrt.(1.0 .- i^2)) .* nn.^2 .- sqrt.(8 * (1.0 .+ sqrt.(1.0 .- i.^2)) .* nn.^4 .- 2.0 .* i^2 * nn^2 * (mm.^2 .+ 2 * nn^2))) ./ (i .* mm)
         # print(muMax, "\n")
         muMin = 3e-2
-        muL = muMax .- 10 .^ range(-4, log10.(muMax .* (1.0 .- muMin ./ muMax)), 20)
+        # muMin = 1e-4
+        muL = 1.005 * muMax .- 10 .^ range(-3, log10.(muMax .* (1.0 .- muMin ./ muMax)), 80)
         
         lv211_d = []
         lv211_c = []
@@ -30,7 +32,7 @@ function main_plt()
         for j in muL
             
             val = sr_rates(nn, ll, mm, j ./ (GNew), 1, i, impose_low_cut=1e-5) * (GNew)
-            val2 = find_im_part(j ./ (GNew), 1, i, nn, ll, mm, iter=iter, xtol=xtol, ftol=ftol)
+            val2 = find_im_part(j ./ (GNew), 1, i, nn, ll, mm, iter=iter, xtol=xtol, ftol=ftol, Ntot_force=Ntot_force)
             if val > 0
                 if length(lv211_d) > 0
                     lv211_d = [lv211_d; [j val ./ (j ./ (GNew))]]
@@ -49,7 +51,7 @@ function main_plt()
            
 
         end
-        writedlm("test_store/$(nn)$(ll)$(mm)_det_spin_$(round(i, sigdigits=2))_test.dat", lv211_d)
+        writedlm("test_store/$(nn)$(ll)$(mm)_det_spin_$(round(i, sigdigits=2))_test.dat", lv211_d) # detweiler
         writedlm("test_store/$(nn)$(ll)$(mm)_new_spin_$(round(i, sigdigits=2))_test.dat", lv211_c)
        
 #        writedlm("test_store/422_det_spin_$(round(i, sigdigits=2))_test.dat", lv422_d)

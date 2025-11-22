@@ -14,8 +14,6 @@ using LinearAlgebra
 using WignerSymbols
 include("Constants.jl")
 include("heunc.jl")
-# using MathLink
-
 
 function ergL(n, l, m, massB, MBH, a; full=true)
     # Key to next level
@@ -28,22 +26,14 @@ function ergL(n, l, m, massB, MBH, a; full=true)
         end
     else
         return massB .* (1.0 .- alph.^2 ./ (2 .* n.^2) .- alph.^4 ./ (8 * n.^4))
-        # return massB .* (1.0 .- alph.^2 ./ (2 .* n.^2))
     end
 end
 
 
 function sr_rates(n, l, m, massB, MBH, aBH; impose_low_cut=0.001, solve_322=true)
-    
 
     alph = GNew .* MBH .* massB
-    
-#    if (alph ./ l < impose_low_cut)&&(MBH < 1e2)
-#        # We expect binaries to disrupt.
-#        return 0.0
-#    end
-    
-    
+
     rP = nothing
     if aBH .> maxSpin
         rP = 1.0 .+ sqrt.(1 - maxSpin .^2)
@@ -59,10 +49,8 @@ function sr_rates(n, l, m, massB, MBH, aBH; impose_low_cut=0.001, solve_322=true
     Anl = 2 .^(4 .* l .+ 1) .* factorial(big(Int(l .+ n))) ./ (n.^(2 .* l .+ 4) .* factorial(big(n .- l .- 1)))
     Anl *= (factorial(Int(l)) ./ (factorial(Int(2 .* l)) .* factorial(Int(2 .* l .+ 1)))).^2
     Chilm = 1.0
-    # erg = ergL(n, l, m, massB, MBH, aBH)
     for k in 1:Int(l)
         Chilm *= (k.^2 .* (1.0 .- aBH.^2) .+ (aBH * m .- 2 .* (rP ./ (GNew .* MBH)) .* alph).^2)
-        # Chilm *= (k.^2 .* (1.0 .- aBH.^2) .+ (aBH * m .- 2 .* (rP ./ (GNew .* MBH)) .* alph).^2)
     end
     Gamma_nlm = 2 * massB .* rP .* (m .* OmegaH .- ergL(n, l, m, massB, MBH, aBH)) .* alph.^(4 .* l + 4) .* Anl .* Chilm
     
@@ -259,7 +247,8 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=10, rpts=
             r4 = radial_bound_NR(n, 0, 0, mu, M, rlist)
             rl = rlist
             erg_4G = alph .* (1 - alph.^2 ./ (2 .* n.^2))
-            if erg_4G != erg_ind
+            # Use tolerance-based comparison instead of exact equality for floating-point numbers
+            if abs(erg_4G - erg_ind) > 1e-10 * abs(erg_ind)
                 erg_4 = erg_4G
             end
         end

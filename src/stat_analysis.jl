@@ -26,7 +26,6 @@ function log_probability(theta, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high; 
 
     lp = prior(theta, lg_m_low, lg_m_high, lg_f_low, lg_f_high)
     if !isfinite.(lp)
-        print("Returning minus Inf..... \n")
         return -Inf
     end
 
@@ -111,12 +110,7 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
             end
                 
             alph = GNew .* MassBH .* 10 .^log_m #
-            print("Mass and fa \t", 10 .^log_m, "\t", 10 .^log_f, "\n")
-            if debug
-                print(MassBH, "\t", SpinBH, "\n")
-            end
-            final_spin, final_mass = @time super_rad_check(MassBH, SpinBH, 10 .^log_m, 10 .^log_f, tau_max=maxtime, alpha_max_cut=alpha_max_cut, debug=false, impose_low_cut=impose_low_cut, stop_on_a=stop_on_a, eq_threshold=eq_threshold, abstol=abstol, non_rel=non_rel, Nmax=Nmax, cheby=cheby)
-            print("Init/Final spin \t", SpinBH, "\t", final_spin, "\n\n")
+            final_spin, final_mass = super_rad_check(MassBH, SpinBH, 10 .^log_m, 10 .^log_f, tau_max=maxtime, alpha_max_cut=alpha_max_cut, debug=false, impose_low_cut=impose_low_cut, stop_on_a=stop_on_a, eq_threshold=eq_threshold, abstol=abstol, non_rel=non_rel, Nmax=Nmax, cheby=cheby)
             ### Likelihood part
 
             if final_spin > SpinBH_c[i]
@@ -160,14 +154,11 @@ function log_likelihood(theta, data; tau_max=1e4, alpha_max_cut=0.2, use_input_t
                     val_found = true
                 end
             end
-            
+
             prior_spins(a) = ones(size(a))  # agnostic spin prior.
             min_spin = one_d_spin_fixed_mass(MassBH .* Ms, prior_spins, max_mass_matrix; return_all=false)
-                                
+
             spinBH_sample = rand() .* (maxSpin .- min_spin) .+ min_spin
-            
-            # alph = GNew .* MassBH .* 10 .^log_m #
-            # day_to_inVeV = 24.0 * 60 * 60 / 6.58e-16
 
             final_spin, final_mass = super_rad_check(MassBH, spinBH_sample, 10 .^log_m, 10 .^log_f, tau_max=tau_max, alpha_max_cut=alpha_max_cut, debug=false, impose_low_cut=alpha_min_cut, abstol=abstol, non_rel=non_rel, Nmax=Nmax, cheby=cheby)
             loglike = tde_like(final_mass, final_spin, max_mass_matrix; plot=false)
@@ -207,7 +198,6 @@ function initialize_walkers(numwalkers, data, lg_m_low, lg_m_high, lg_f_low, lg_
     x0 = rand(2, numwalkers)
     x0[1, :] .*= len_mass
     x0[1, :] .+= lg_m_low
-    # x0[1, :] .= mu_std
     x0[2, :] .*= len_fa
     x0[2, :] .+= lg_f_low
     return x0
@@ -222,23 +212,15 @@ function mcmc_func_minimize(data, Fname; lg_m_low=-20, lg_m_high=-18, lg_f_high=
     end
 
     x0 = initialize_walkers(numwalkers, data, lg_m_low, lg_m_high, lg_f_low, lg_f_high)
-    print("Init walkers \t", x0, "\n")
-    
-    print("Starting burn-in...\n")
+
     chain, llhoodvals = AffineInvariantMCMC.sample(llhood, numwalkers, x0, burnin, 1)
-    print("Starting main run...\n")
     chain, llhoodvals = AffineInvariantMCMC.sample(llhood, numwalkers, chain[:, :, end], numsamples_perwalker, thinning)
-    
-    print("Finished main run...\n")
+
     flatchain, flatllhoodvals = AffineInvariantMCMC.flattenmcmcarray(chain, llhoodvals)
     rHvals = rhat(flatchain')
     essVals = ess(flatchain')
     
-    print("Convergence... (rhat - 1) \t ", rHvals - 1.0, "\n")
-    print("Convergence... ess \t ", essVals, "\n")
-    
     writedlm("output_mcmc/"*Fname*"_mcmc.dat", flatchain')
-#    writedlm("output_mcmc/"*Fname*"_likevals.dat", flatllhoodvals')
-    
+
 end
    

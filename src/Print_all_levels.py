@@ -3,8 +3,9 @@ import numpy as np
 
 def erg_shift_1(n, alph=0.1):
     return 1.0 * (1.0 - alph**2 / (2 * n**2) - alph**4 / (8 * n**4))
+#    return 1.0 * (1.0 - alph**2 / (2 * n**2) )
 
-Nmax = 8
+Nmax = 4
 file_output = "load_rate_input_Nmax_{:.0f}.txt".format(Nmax)
 n_levels = [i for i in range(2,Nmax+1)]
 # n_levels = [2, 3, 4, 5]
@@ -37,8 +38,6 @@ for n1 in n_levels:
                                     if (m1>l1) or (m2>l2) or (m3>l3) or (l1 >= n1) or (l2 >= n2) or (l3 >= n3):
                                         continue
                                         
-                                  
-                                    
                                     # erg
                                     erg_diff = erg_shift_1(n1) + erg_shift_1(n2) - erg_shift_1(n3)
                                     
@@ -76,11 +75,17 @@ for n1 in n_levels:
                                         
                                     else: # m sum
                                         test_m = ((m1 + m2 - m3) == 0)
+                                        for nfinal in n_levels:
+                                            if (tag1 == tag3 or tag2 == tag3) or test_m or nfinal <= 2:
+                                                continue
+                                            if (erg_diff - erg_shift_1(nfinal)) == 0:
+                                                print("Resonant. \t", tag1, " ", tag2, " ", tag3, " nfinal", nfinal)
+                                        
+                                        
                                         test_l = ((l1 + l2 - l3) == 0)
                                         # l even
                                         test1 = ((l1 + l2 + l3) % 2 ==0)
                                         if test1 and test_m and test_l:
-
                                             tag4 = "BH"
                                             in_list = False
                                             for i in range(len(hold_out_1)):
@@ -100,6 +105,7 @@ for n1 in n_levels:
                                                     outtag = "BH"
                                                 
                                                     final_keep_sve.append(tag1[1:4] + "    " + tag2[1:4] + "    " + tag3[1:4] + "    " + outtag)
+
 ### here is how we truncate n-expansion
 for n1 in n_levels:
     for l1 in range(0, n1):
@@ -117,6 +123,7 @@ for n1 in n_levels:
             
             # erg
             erg_diff = erg_shift_1(n1) + erg_shift_1(n2) - erg_shift_1(n3)
+            
             
             tag1 = "|{}{}{}>".format(n1,l1,m1)
             tag2 = "|{}{}{}>".format(n2,l2,m2)

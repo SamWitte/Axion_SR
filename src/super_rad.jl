@@ -11,34 +11,23 @@ include("load_rates.jl")
 using Printf
 
 function super_rad_check(M_BH, aBH, massB, f_a; tau_max=1e4, alpha_max_cut=100.0, debug=false, impose_low_cut=0.01, stop_on_a=0, eq_threshold=1e-100, abstol=1e-30, non_rel=true, high_p=true, N_pts_interp=100, N_pts_interpL=100, Nmax=3, cheby=true, spinone=false)
-   
-    alph = GNew .* M_BH .* massB #
-    if debug
-        print("Alpha \t", alph, "\n")
-        print("Solving system... \n")
-    end
-    
+
+    alph = GNew .* M_BH .* massB
+
     if alph .> alpha_max_cut
-        if debug
-            print("Need higher-level system... \n")
-        end
         return aBH, M_BH
     elseif alph .< impose_low_cut
         return aBH, M_BH
     end
-    
+
     if !spinone
         final_spin, final_BH = solve_system(massB, f_a, aBH, M_BH, tau_max, debug=debug, impose_low_cut=impose_low_cut, stop_on_a=stop_on_a, eq_threshold=eq_threshold, abstol=abstol, non_rel=non_rel, high_p=high_p, N_pts_interp=N_pts_interp, N_pts_interpL=N_pts_interpL, Nmax=Nmax, cheby=cheby)
     else
         final_spin, final_BH = solve_system_spinone(massB, aBH, M_BH, tau_max)
     end
 
-    if debug
-        print("Spin diff.. \t ", aBH, "\t", final_spin, "\t", alph, "\n")
-        print("Mass diff.. \t ", M_BH, "\t", final_BH, "\t", alph, "\n")
-    end
     return final_spin, final_BH
-    
+
 end
 
 function emax_211(MBH, mu, aBH)
@@ -56,9 +45,6 @@ end
 function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impose_low_cut=0.01, return_all_info=false, eq_threshold=1e-100, stop_on_a=0, abstol=1e-30, non_rel=true, high_p=true, N_pts_interp=200, N_pts_interpL=200,  Nmax=3, cheby=true)
 
     alph = GNew .* M_BH .* mu
-    if debug
-        println("Entering...")
-    end
     if non_rel
         default_reltol = 1e-5
     else
@@ -153,20 +139,8 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
     delt_a = 0.0001
     
     SR_rates, interp_funcs, interp_dict = compute_sr_rates(modes, M_BH, aBH, alph, cheby=cheby);
-    
-    if debug
-        println("Number of states \t", idx_lvl)
-        println(modes)
-        print("SR rates @ prod \t", SR_rates, "\n")
-    end
-    
 
     rates = load_rate_coeffs(mu, M_BH, aBH, fa, Nmax, SR_rates; non_rel=non_rel)
-    
-    if debug
-        println("Rates loaded...")
-        # println(rates)
-    end
     
    
     turn_off = []
@@ -205,7 +179,6 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
             if (abs.(u[i] .- log.(bn_list[i])) < 1e-2)||(u[i] > log.(bn_list[i]))
                 u[i] = log.(bn_list[i])
                 u_real[i] = bn_list[i]
-                # print(u[i], "\t", log.(bn_list[i]), "\n")
             end
         end
         
@@ -278,25 +251,24 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
             if turn_off[i]
                 du[i] *= 0.0
             end
-            
+
         end
-        
+
         return
     end
-    
- 
-    
+
+
     #### make sure the integrator timescale doesnt grow too large
     function check_timescale(u, t, integrator)
         du = get_du(integrator)
-        
+
         u_real = exp.(u)
         rate_keys = collect(keys(rates))
-        
+
         all_contribs = zeros(idx_lvl)
         test = zeros(idx_lvl)
-        u_fake = u_real * 1.1 # was 2!
-        
+        u_fake = u_real * 1.1 # Growth estimate with 10% safety margin (previously used 2x, too aggressive)
+
         for i in 1:idx_lvl
             if (abs.(u[i] .- log.(bn_list[i])) < 1e-2)||(u[i] > log.(bn_list[i]))
                 u[i] = log.(bn_list[i])
@@ -306,7 +278,7 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
             all_contribs[i] = SR_rates[i] .* u_real[i] ./ mu
             test[i] = SR_rates[i] .* u_fake[i] ./ mu
         end
-        
+
         for i in 1:idx_lvl
             if (u[i] .< log.(1e-75))&&(SR_rates[i] < 0)
                 turn_off[i] = true
@@ -314,10 +286,6 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
         end
         if u_real[massI] > (1.4 * M_BH) # few safety nets in place...
             turn_off_M = true
-        end
-        
-        if debug
-            println(integrator.t, "\t", exp.(integrator.u[1]), "\t", exp.(integrator.u[4]), "\t", exp.(integrator.u[spinI]))
         end
         
         for i in 1:length(rate_keys)
@@ -426,7 +394,6 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
             end
             
         elseif (integrator.dt .<= 1e-13)
-            print("time step too small!! \n")
             terminate!(integrator)
         end
        
@@ -464,15 +431,10 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
 
     dt_guess = (maximum(SR_rates) ./ hbar .* 3.15e7).^(-1) ./ 5.0
 
-    if debug
-        print("Time guess \t", dt_guess, "\n")
-    end
-    
-    
     max_real_time = 20.0 # Set the maximum allowed time for integration (in minutes)
     max_real_time *= 60 # convert to seconds
     start_time = Dates.now() # Initialize the start time
-    
+
     # Define callback -- if integrater very stuck, don't let it go on for infinite time! it might try!
     function time_limit_callback(u, t, integrator)
         elapsed_time = Dates.now() - start_time
@@ -508,21 +470,11 @@ function solve_system(mu, fa, aBH, M_BH, t_max; n_times=10000, debug=false, impo
     spinBH = [exp.(sol.u[i][spinI]) for i in 1:length(sol.u)]
     MassB = [exp.(sol.u[i][massI]) for i in 1:length(sol.u)]
 
-    
-    if debug
-        idx_211 = get_state_idx("211", Nmax)
-        idx_322 = get_state_idx("322", Nmax)
-        print("Initial \t", state_out[idx_211][1], "\t", state_out[idx_322][1],  "\t", spinBH[1], "\t", MassB[1], "\n")
-        print("Final \t", state_out[idx_211][end], "\t", state_out[idx_322][end], "\t", spinBH[end], "\t", MassB[end], "\n")
-       
-    end
-
     if return_all_info
         return sol.t, state_out, modes, spinBH, MassB
     end
     
     if (sol.t[end] != t_max)&&(spinBH[end] > stop_on_a)
-        print("Fail? Final time only \t", sol.t[end], "\n")
         return 0.0, MassB[end]
     end
     if isnan(spinBH[end])
@@ -554,10 +506,6 @@ function solve_system_spinone(mu, aBH, M_BH, tau_max; n_times=10000, debug=false
     
     idx_lvl = 1
     m_list = [1]
-
-    ### only for testing...
-    # default_reltol = 1e-7
-    # reltol_Thres = 1e-7
 
     spinI = idx_lvl + 1
     massI = spinI + 1
@@ -695,16 +643,9 @@ function solve_system_spinone(mu, aBH, M_BH, tau_max; n_times=10000, debug=false
 
     dt_guess = (maximum(SR_rates) ./ hbar .* 3.15e7).^(-1) ./ 5.0
 
-    if debug
-        print("Time guess \t", dt_guess, "\n")
-    end
-    
-    
     max_real_time = 20.0 # Set the maximum allowed time for integration (in minutes)
     max_real_time *= 60 # convert to seconds
     start_time = Dates.now() # Initialize the start time
-    
-    
 
     # Set up the user_data with the start time
     cbackspin = DiscreteCallback(check_spin, affect_spin!, save_positions=(false, true))
@@ -729,7 +670,6 @@ function solve_system_spinone(mu, aBH, M_BH, tau_max; n_times=10000, debug=false
     end
     
     if (sol.t[end] != tau_max)
-        print("Fail? Final time only \t", sol.t[end], "\n")
         return 0.0, MassB[end]
     end
     if isnan(spinBH[end])

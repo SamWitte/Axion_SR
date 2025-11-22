@@ -167,8 +167,8 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true)
         Drate["322_322^GW"] = 3.0e-8 * alph^18
         
         
-        # rates computed for fixed rP(a=0.95)
-        rP_ratio = rP / (1 + sqrt.(1.0 - 0.95^2))
+        # rates computed for fixed rP(a=0.9)
+        rP_ratio = rP / (1 + sqrt.(1.0 - 0.9^2))
         
         dirN = "rate_sve/"
         ftag = "_GF_v2_"

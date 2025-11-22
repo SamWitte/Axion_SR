@@ -11,10 +11,10 @@ sve = false
 
 
 f_a = 1e18
-m_a = 1e-12
-SpinBH = 0.9
-MassBH = 10
-tau_max = 1e8 # 5.0e7, 4.8e6
+m_a = 2e-19
+SpinBH = 0.99
+MassBH = 1e8
+tau_max = 5e7 # 5.0e7, 4.8e6
 
 alpha_max_cut = 10.0
 impose_low_cut = 1e-100
@@ -28,7 +28,7 @@ N_pts_interp=100
 N_pts_interpL=100
 
 
-Nmax = 5
+Nmax = 7
 cheby=true
 
 non_rel = false

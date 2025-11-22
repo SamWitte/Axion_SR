@@ -7,6 +7,11 @@ function parse_commandline()
 
     @add_arg_table! s begin
     
+
+        "--run_analytic"
+            arg_type = Bool
+            default = false
+            
         "--run_leaver"
             arg_type = Bool
             default = false
@@ -30,12 +35,13 @@ end
 
 parsed_args = parse_commandline()
 
+run_analytic = parsed_args["run_analytic"];
 run_leaver = parsed_args["run_leaver"];
 solve_for_zeros = parsed_args["solve_for_zeros"];
 solve_gridded = parsed_args["solve_gridded"];
 nlmIn = parsed_args["nlmIn"]
 
-function main_gg(run_leaver, solve_for_zeros, solve_gridded)
+function main_gg(run_leaver, run_analytic, solve_for_zeros, solve_gridded)
 
     Ntot_safe = 5000
     debug = true
@@ -66,12 +72,17 @@ function main_gg(run_leaver, solve_for_zeros, solve_gridded)
         if m > mmax
             continue
         end
-        if run_leaver
-            ft1 = "Imag_zero"
-            ft2 = "Imag_erg_pos"
-        else
+        if run_analytic
             ft1 = "Imag_zeroC"
             ft2 = "Imag_ergC_pos"
+        else
+            if run_leaver
+                ft1 = "Imag_zero"
+                ft2 = "Imag_erg_pos"
+            else
+                ft1 = "Imag_zeroC"
+                ft2 = "Imag_ergC_pos"
+            end
         end
         
         for (flag, suffix) in ((solve_for_zeros, ft1), (solve_gridded, ft2))
@@ -128,18 +139,20 @@ function main_gg(run_leaver, solve_for_zeros, solve_gridded)
                 while_found = false
                 cnt = 0
                 while !while_found
-                    
-                    if run_leaver
-                        testF = find_im_part(10 .^ alphList[i] ./ (GNew .* M), M, a_guess, n, l, m; Ntot_force=Ntot_safe, return_both=false, for_s_rates=true)
+                    if run_analytic
+                        testF = sr_rates(n, l, m, 10 .^ alphList[i] ./ (GNew .* M), M, a_guess) .* GNew .* M
                     else
-                        if a_guess > 0.95
-                            npts_use = 120
+                        if run_leaver
+                            testF = find_im_part(10 .^ alphList[i] ./ (GNew .* M), M, a_guess, n, l, m; Ntot_force=Ntot_safe, return_both=false, for_s_rates=true)
                         else
-                            npts_use = Npoints
+                            if a_guess > 0.95
+                                npts_use = 120
+                            else
+                                npts_use = Npoints
+                            end
+                            wR, testF = eigensys_Cheby(M, a_guess, 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=Npoints, Iter=Iter, cvg_acc=cvg_acc, prec=prec, sfty_run=true)
                         end
-                        wR, testF = eigensys_Cheby(M, a_guess, 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=Npoints, Iter=Iter, cvg_acc=cvg_acc, prec=prec, sfty_run=true)
                     end
-                
                     # print(cnt, "\t", a_guess, "\t", testF, "\n")
                     if testF > 0
                         a_max_loop = a_guess
@@ -212,16 +225,20 @@ function main_gg(run_leaver, solve_for_zeros, solve_gridded)
                     else
                         npts_use = Npoints
                     end
-                    if run_leaver
-                        e_imgP = find_im_part(10 .^ alphList[i] ./ (GNew .* M), M, alistP[j], n, l, m; Ntot_force=Ntot_safe, return_both=false, for_s_rates=true)
+                    if run_analytic
+                        e_imgP = sr_rates(n, l, m, 10 .^ alphList[i] ./ (GNew .* M), M, alistP[j]) .* GNew .* M
                     else
-                        if j == 1
-                            wR, e_imgP = eigensys_Cheby(M, alistP[j], 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=npts_use, Iter=Iter, cvg_acc=cvg_acc, prec=prec, sfty_run=true)
-                            erg_store = wR + im .* e_imgP
+                        if run_leaver
+                            e_imgP = find_im_part(10 .^ alphList[i] ./ (GNew .* M), M, alistP[j], n, l, m; Ntot_force=Ntot_safe, return_both=false, for_s_rates=true)
                         else
-                            
-                            wR, e_imgP = eigensys_Cheby(M, alistP[j], 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=npts_use, Iter=Iter, cvg_acc=cvg_acc, prec=prec, sfty_run=true, nu_guess=erg_store)
-                            erg_store = wR + im .* e_imgP .* (1.0 .+ a_diff)
+                            if j == 1
+                                wR, e_imgP = eigensys_Cheby(M, alistP[j], 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=npts_use, Iter=Iter, cvg_acc=cvg_acc, prec=prec, sfty_run=true)
+                                erg_store = wR + im .* e_imgP
+                            else
+                                
+                                wR, e_imgP = eigensys_Cheby(M, alistP[j], 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=npts_use, Iter=Iter, cvg_acc=cvg_acc, prec=prec, sfty_run=true, nu_guess=erg_store)
+                                erg_store = wR + im .* e_imgP .* (1.0 .+ a_diff)
+                            end
                         end
                     end
                     
@@ -245,4 +262,4 @@ function main_gg(run_leaver, solve_for_zeros, solve_gridded)
 
 end
 
-main_gg(run_leaver, solve_for_zeros, solve_gridded)
+main_gg(run_leaver, run_analytic, solve_for_zeros, solve_gridded)
