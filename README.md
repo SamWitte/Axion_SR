@@ -1,17 +1,13 @@
 # Axion Superradiance: Black Hole Evolution & Constraints
 
-A comprehensive computational framework for modeling axion superradiance in rotating black holes and constraining axion physics using multi-messenger astrophysical observations.
-
-## Overview
-
-This codebase simulates the quantum mechanical extraction of angular momentum from rotating black holes by axion clouds (hypothetical dark matter candidates), and uses observations of real black holes to constrain axion properties. The framework integrates quantum mechanics, general relativity, numerical methods, and Bayesian statistical inference.
+A computational framework for modeling axion superradiance in rotating black holes and constraining axion physics using multi-messenger astrophysical observations.
 
 ### Key Physics
 
 **Superradiance** is an instability where bosonic fields (like axions) extract rotational energy from spinning black holes, causing the black hole to spin down while the axion cloud grows exponentially. This project:
 
-- Models the quantum dynamics of up to 8 coupled quantum levels
-- Simulates multi-million year black hole spin evolution
+- Computes the eigenvalues of quasi-bound states, and the rate of energy transfer induced by self-interactions 
+- Simulates black hole mass and spin evolution
 - Compares predictions against observed black hole populations (stellar binaries, AGN, gravitational wave sources)
 - Derives constraints on axion mass and coupling strength
 
@@ -21,20 +17,20 @@ This codebase simulates the quantum mechanical extraction of angular momentum fr
 src/
 ├── Core Physics Computation
 │   ├── solve_sr_rates.jl          # Primary rate calculation engine
-│   ├── heunc.jl                   # Heun equation solver for curved spacetime
+│   ├── heunc.jl                   # Heun equation solver (used in radial wave function solutions)
 │   ├── super_rad.jl               # Black hole evolution dynamics
 │   └── Constants.jl               # Physical constants & utilities
 │
 ├── Rate Computation & Storage
 │   ├── Compute_all_rates.jl       # CLI for computing transition rates
-│   ├── load_rates.jl              # Load pre-computed rate tables
-│   └── rate_sve/                  # 740+ pre-computed rate files
+│   ├── load_rates.jl              # Load pre-computed rate tables for evaluation during evolution
+│   └── rate_sve/                  # Pre-computed rate files [must be pre-computed!]
 │
 ├── Statistical Analysis & Inference
 │   ├── MCMC.jl                    # Affine-invariant MCMC sampler
 │   ├── stat_analysis.jl           # Likelihood & statistical functions
 │   ├── stat_1dL.jl                # 1D likelihood analysis
-│   └── output_mcmc/               # MCMC chains and posteriors
+│   └── output_mcmc/               # MCMC chains and posterior output
 │
 ├── Gravitational Wave Analysis
 │   ├── Ligo_limit.jl              # GW event constraint derivation
@@ -51,18 +47,16 @@ src/
 ├── Utilities & Testing
 │   ├── install_pkgs.jl            # Dependency installation
 │   ├── test_sr_rates.jl           # Unit tests
-│   ├── TEST.jl                    # Comprehensive test suite
 │   └── estimate_lim.jl            # Quick limit estimation
 │
 ├── Data & Results
 │   ├── BH_data/                   # Astrophysical black hole parameters
-│   ├── input_info/                # Pre-computed matrices & data
 │   ├── stored_limits/             # Compiled constraint results
 │   └── plts/                      # Jupyter notebooks & visualizations
 │
 └── Python Utilities
-    ├── Print_all_levels.py        # Generate valid quantum transitions
-    ├── latex_line_gen.py          # LaTeX output generation
+    ├── Print_all_levels.py        # Generate valid quantum transitions [useful for identifying relevant scattering permutations]
+    ├── latex_line_gen.py          # LaTeX output generation [for writing papers]
     ├── Run_Ligo.py                # GW data processing
     └── Combine_data.py            # Data combination utilities
 ```
@@ -122,20 +116,7 @@ Real black hole observations:
 - **Gravitational waves**: GW231123, LIGO test events
 - **Tidal disruption events**: Star-black hole encounters
 - **Parameters**: Mass, spin, age, chirp mass, orbital period
-
-## Key Features
-
-| Feature | Capability |
-|---------|-----------|
-| **Quantum levels** | Up to 8 principal quantum numbers (35-60 coupled states) |
-| **Numerical methods** | Leaver eigenvalue solver, Heun ODE integrator, adaptive Runge-Kutta |
-| **Parameter space** | m_a: 10⁻¹³–10⁻¹¹ eV; BH mass: 5–10⁸ M_☉; spin: 0.01–0.998 |
-| **Observational constraints** | LIGO, stellar binaries, AGN, tidal disruption events |
-| **Statistical analysis** | Bayesian MCMC with automatic differentiation |
-| **Computational optimization** | Chebyshev integration, adaptive mesh, parallel MCMC |
-| **Visualization** | Jupyter notebooks for interactive analysis and plotting |
-| **Testing** | Comprehensive unit tests and validation suites |
-
+ 
 ## Core Workflow
 
 ```
@@ -153,37 +134,6 @@ Derive posterior distributions & exclusion limits
 ```
 
 ## Usage
-
-### Computing Superradiant Rates
-
-```bash
-julia Compute_all_rates.jl --S1 211 --S2 322 --S3 211 --S4 322
-```
-
-Computes transition rates for quantum transitions and saves to `rate_sve/`.
-
-### Running MCMC Analysis
-
-```julia
-include("MCMC.jl")
-chain = mcmc_sample(object_name; Nwalkers=10, steps=10000)
-```
-
-Performs Bayesian inference on a specific black hole object (requires pre-loaded rate tables and BH data).
-
-### Quick Limit Estimation
-
-```julia
-include("estimate_lim.jl")
-# Quickly estimate axion mass limits from observed black hole spins
-```
-
-### Interactive Analysis
-
-See `plts/` directory for Jupyter notebooks:
-- `Look_MCMC_output.ipynb` - Analyze MCMC chains
-- `evol_lvls.ipynb` - Visualize quantum level evolution
-- `mcmcplts.ipynb` - MCMC convergence diagnostics
 
 ## Dependencies
 
@@ -221,29 +171,5 @@ julia install_pkgs.jl
 - Compiled axion mass limits
 - 95% confidence intervals
 - Multi-messenger constraint compilation
-
-## Scientific Background
-
-Axion superradiance offers unique windows into:
-
-1. **Axion dark matter** - Testing a leading dark matter candidate
-2. **Black hole demographics** - Understanding spin distribution in compact object populations
-3. **Gravitational waves** - LIGO/Virgo observations provide spin measurements
-4. **Long-range forces** - Beyond-Standard-Model physics at low energies
-
-The absence of rapidly-spinning black holes in observed populations rules out certain axion parameter space, providing stringent laboratory-independent constraints.
-
-## References
-
-For mathematical details on superradiance, Kerr spacetime, and Teukolsky equations, see:
-- Superradiance from black holes (monograph series)
-- LIGO/Virgo gravitational wave catalogs
-- Multi-messenger astronomy reviews
-
-## Contributing
-
-This codebase is actively maintained for research purposes. For questions or issues, consult the git history or contact the development team.
-
----
 
 **Last Updated**: November 2025
