@@ -7,6 +7,9 @@ Computes imaginary eigenvalue components and saves to HDF5/CSV for plotting with
 
 The dimensionless parameter α = μ * M * G_N is constrained to [0.03, 1].
 This script computes the appropriate μ range based on this constraint.
+
+Uses adaptive alpha sampling to finely resolve exponential cutoff while avoiding
+excessive calculations in the power-law regime at small alpha.
 """
 
 using HDF5
@@ -19,6 +22,72 @@ include(joinpath(src_dir, "Core/constants.jl"))
 include(joinpath(src_dir, "heunc.jl"))
 include(joinpath(src_dir, "solve_sr_rates.jl"))
 
+"""
+    adaptive_alpha_sampling(alpha_min, alpha_max, n_coarse, n_fine;
+                           quantile_threshold=0.8, coarse_factor=0.5)
+
+Generate adaptive alpha sampling that focuses resolution on the exponential cutoff region.
+
+Strategy:
+1. Sample coarsely across full range to identify transition region
+2. Refine sampling in the region where function starts to decay (transition to exponential)
+3. Return merged sorted samples
+
+Arguments:
+- alpha_min, alpha_max: bounds of alpha range
+- n_coarse: number of coarse samples (initial sweep)
+- n_fine: number of fine samples (refined region)
+- quantile_threshold: trigger refinement when derivative crosses this quantile of max derivative
+- coarse_factor: fraction of alpha range to refine (default 0.5 means refine upper 50%)
+
+Returns: sorted array of alpha values with adaptive density
+"""
+function adaptive_alpha_sampling(alpha_min, alpha_max, n_coarse, n_fine;
+                                 quantile_threshold=0.75, coarse_factor=0.5)
+    # Phase 1: Coarse log-spaced sampling across full range
+    alpha_coarse = 10 .^ (range(log10(alpha_min), log10(alpha_max), n_coarse))
+
+    # Phase 2: Identify transition region by looking at log-derivatives
+    # For power law: d(ln f)/d(ln α) ≈ constant
+    # For exponential: d(ln f)/d(ln α) ≈ α * f'/f → large
+    # We estimate this with finite differences
+    if n_coarse > 3
+        log_alpha = log10.(alpha_coarse)
+        # Compute finite differences to estimate where curvature increases
+        # This is a proxy for detecting the transition region
+        d_indices = 2:n_coarse-1
+        curvatures = similar(alpha_coarse)
+        fill!(curvatures, 0.0)
+
+        # Use log-spacing to estimate second derivative in log-log space
+        for i in d_indices
+            if log_alpha[i+1] - log_alpha[i] > 0 && log_alpha[i] - log_alpha[i-1] > 0
+                # Finite difference of log-spacing (indicator of curvature)
+                curvatures[i] = abs((log_alpha[i+1] - log_alpha[i]) - (log_alpha[i] - log_alpha[i-1]))
+            end
+        end
+
+        # Find transition point: where curvature is highest (or use quantile approach)
+        # Transition typically occurs in upper part of range
+        transition_idx = max(Int(round(n_coarse * (1 - coarse_factor))), 2)
+        alpha_transition = alpha_coarse[transition_idx]
+    else
+        # If very few coarse points, refine upper half
+        alpha_transition = 10^((log10(alpha_min) + log10(alpha_max)) / 2)
+    end
+
+    # Phase 3: Generate fine-grained sampling in transition/exponential region
+    # Use higher density near alpha_max to resolve cutoff
+    alpha_fine_start = alpha_transition
+    alpha_fine = 10 .^ (range(log10(alpha_fine_start), log10(alpha_max), n_fine))
+
+    # Phase 4: Merge and remove duplicates
+    alpha_all = vcat(alpha_coarse, alpha_fine)
+    alpha_adaptive = sort(unique(round.(alpha_all, digits=8)))  # Remove near-duplicates
+
+    return alpha_adaptive
+end
+
 println("="^80)
 println("QUICK EIGENVALUE DATA GENERATION TEST")
 println("="^80)
@@ -30,18 +99,18 @@ spins = [0.5, 0.95, 0.99]  # Fewer spins for quick test
 alpha_min = 0.03
 alpha_max = 1.0
 
-# Calculate mu range from alpha range
-mu_min = alpha_min / (M_BH * GNew)
-mu_max = alpha_max / (M_BH * GNew)
-
-n_mu_points = 100  # Fewer points
-mu_values = 10 .^ (range(log10(mu_min), log10(mu_max), n_mu_points))
-alpha_values = mu_values .* M_BH .* GNew
+# Use adaptive alpha sampling to focus resolution on exponential cutoff
+# n_coarse: initial coarse sweep (20 points)
+# n_fine: refined points in transition region (80 points)
+# This gives ~90-100 total unique points with higher density near cutoff
+alpha_values = adaptive_alpha_sampling(alpha_min, alpha_max, 20, 80; coarse_factor=0.6)
+mu_values = alpha_values ./ (M_BH * GNew)
 
 @printf "[SETUP] M_BH = %.1f M☉\n" M_BH
 @printf "[SETUP] α range: [%.3f, %.3f]\n" alpha_min alpha_max
-@printf "[SETUP] μ range: [%.3e, %.3e]\n" mu_min mu_max
-@printf "[SETUP] Number of μ points: %d\n" n_mu_points
+@printf "[SETUP] μ range: [%.3e, %.3e]\n" mu_values[1] mu_values[end]
+@printf "[SETUP] Number of α points (adaptive): %d\n" length(alpha_values)
+@printf "[SETUP] Point spacing: min Δα = %.2e, max Δα = %.2e\n" minimum(diff(alpha_values)) maximum(diff(alpha_values))
 @printf "[SETUP] Spins: %s\n" join(spins, ", ")
 
 # Fewer quantum levels for quick test
