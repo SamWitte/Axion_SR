@@ -14,7 +14,7 @@ random_papers/
 refs/
 temp_hold/
 ongoing_tests/
-
+tidalspin/
 # Scripts output
 scripts/*.dat
 scripts/plts/
