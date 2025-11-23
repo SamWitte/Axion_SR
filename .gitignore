@@ -14,11 +14,14 @@ random_papers/
 refs/
 temp_hold/
 ongoing_tests/
-tidalspin/
+tidalspin/*
 # Scripts output
 scripts/*.dat
 scripts/plts/
-
+src/scripts/*txt
+src/rate_sve/.ipynb_checkpoints/*
+src/rate_sve/Old_dontuse/
+rc/.ipynb_checkpoints/*
 # LaTeX files
 *.tex
 
