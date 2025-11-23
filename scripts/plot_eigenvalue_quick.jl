@@ -24,7 +24,7 @@ println("QUICK EIGENVALUE DATA GENERATION TEST")
 println("="^80)
 
 M_BH = 1.0  # Solar masses
-spins = [0.5, 0.7, 0.9, 0.95, 0.99]  # Fewer spins for quick test
+spins = [0.5, 0.95, 0.99]  # Fewer spins for quick test
 
 # Physical constraint: 0.03 ≤ α = μ * M * G_N ≤ 1
 alpha_min = 0.03
