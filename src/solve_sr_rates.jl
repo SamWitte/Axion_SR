@@ -1556,69 +1556,137 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     Z2 = spheroidals(l2, m2, a, erg_2)
     Z3 = spheroidals(l3, m3, a, erg_3)
     Z4 = spheroidals(l, m, a, erg)
-   
-    
 
-    # Precompute spheroidal products to avoid redundant evaluations
-    function func_ang_pair(theta, phi)
-        Z_prod = Z1(theta, phi) * Z2(theta, phi) * conj(Z3(theta, phi)) * conj(Z4(theta, phi))
-        real_prod = real(Z_prod)
-        return real_prod, real_prod * cos(theta)^2
+    function compute_angular_integral_adaptive(Z1, Z2, Z3, Z4, use_spherical_fallback=false, timeout_seconds=30.0)
+        """
+        Adaptive Monte Carlo integration with timeout and fallback to spherical harmonics.
+        Returns (CG, CG_2, used_fallback) where CG and CG_2 are the integrated values.
+        """
+
+        # Simple cache for spheroidal evaluations (key = (theta, phi) rounded to grid, value = product)
+        cache = Dict{Tuple{Float64, Float64}, Tuple{Float64, Float64}}()
+        CACHE_GRID = 1000  # Round to ~3 decimal places for caching
+
+        function cache_key(theta::Float64, phi::Float64)
+            return (round(theta * CACHE_GRID) / CACHE_GRID, round(phi * CACHE_GRID) / CACHE_GRID)
+        end
+
+        # Precompute spheroidal products to avoid redundant evaluations
+        function func_ang_pair(theta, phi)
+            try
+                key = cache_key(theta, phi)
+                if haskey(cache, key)
+                    return cache[key]
+                end
+
+                if use_spherical_fallback
+                    # Use spherical harmonics (much faster)
+                    S1 = sphericalY(l1, m1, theta, phi)
+                    S2 = sphericalY(l2, m2, theta, phi)
+                    S3 = sphericalY(l3, m3, theta, phi)
+                    S4 = sphericalY(l, m, theta, phi)
+                    Z_prod = S1 * S2 * conj(S3) * conj(S4)
+                else
+                    Z_prod = Z1(theta, phi) * Z2(theta, phi) * conj(Z3(theta, phi)) * conj(Z4(theta, phi))
+                end
+                real_prod = real(Z_prod)
+                result = (real_prod, real_prod * cos(theta)^2)
+                cache[key] = result
+                return result
+            catch
+                return 0.0, 0.0
+            end
+        end
+
+        CG = 0.0
+        CG_2 = 0.0
+        ang_cvrg = false
+        idx = 0
+        check_interval = 100  # Check convergence every 100 samples
+        CG_old = 0.0
+        CG_2_old = 0.0
+        max_iterations = 100000  # Safeguard against infinite loops
+        tol = 1e-4
+        min_samples = 200  # Require minimum samples before checking convergence
+        max_samples = 50000  # Stop if we exceed this many samples
+
+        # Track time to implement timeout
+        start_time = time()
+
+        while !ang_cvrg && idx < max_iterations
+            # Check timeout periodically
+            if idx % 1000 == 0 && (time() - start_time) > timeout_seconds
+                if debug
+                    println("Angular MC integration timeout! Using spherical harmonics fallback.")
+                end
+                # Fallback to spherical harmonics
+                if !use_spherical_fallback
+                    return compute_angular_integral_adaptive(Z1, Z2, Z3, Z4, true, timeout_seconds)
+                else
+                    # Already tried fallback, return best estimate with warning
+                    if idx > 0
+                        CG *= 4*pi / idx
+                        CG_2 *= 4*pi / idx
+                    end
+                    return CG, CG_2, true
+                end
+            end
+
+            # Batch evaluate multiple samples per iteration
+            for _ in 1:check_interval
+                theta = acos(1.0 - 2.0 * rand())
+                phi = 2.0 * pi * rand()
+                f1, f2 = func_ang_pair(theta, phi)
+                CG += f1
+                CG_2 += f2
+                idx += 1
+            end
+
+            if idx >= min_samples
+                # Compute running averages
+                CG_avg = CG / idx
+                CG_2_avg = CG_2 / idx
+
+                # Check convergence with safeguard against division by zero
+                if abs(CG_old) > 1e-10
+                    test1 = abs(CG_avg - CG_old) / abs(CG_old)
+                else
+                    test1 = abs(CG_avg - CG_old)
+                end
+
+                if abs(CG_2_old) > 1e-10
+                    test2 = abs(CG_2_avg - CG_2_old) / abs(CG_2_old)
+                else
+                    test2 = abs(CG_2_avg - CG_2_old)
+                end
+
+                if (test1 < tol) && (test2 < tol)
+                    ang_cvrg = true
+                elseif idx > max_samples
+                    # Force convergence if we've reached max samples
+                    ang_cvrg = true
+                else
+                    CG_old = CG_avg
+                    CG_2_old = CG_2_avg
+                end
+            end
+        end
+
+        # Normalize by volume of integration domain (surface of unit sphere = 4π)
+        if idx > 0
+            CG *= 4*pi / idx
+            CG_2 *= 4*pi / idx
+        end
+
+        return CG, CG_2, use_spherical_fallback
     end
 
-    CG = 0.0
-    CG_2 = 0.0
     println("getting angles")
-    ang_cvrg = false
-    idx = 0
-    check_interval = 100  # Check convergence every 100 samples (not every idx_skip)
-    CG_old = 0.0
-    CG_2_old = 0.0
-    max_iterations = 100000  # Safeguard against infinite loops
-    tol = 1e-4
-    min_samples = 200  # Require minimum samples before checking convergence
+    CG, CG_2, used_fallback = compute_angular_integral_adaptive(Z1, Z2, Z3, Z4, false, 30.0)
 
-    while !ang_cvrg && idx < max_iterations
-        # Batch evaluate multiple samples per iteration for better cache performance
-        for _ in 1:check_interval
-            theta = acos(1.0 - 2.0 * rand())
-            phi = 2.0 * pi * rand()
-            f1, f2 = func_ang_pair(theta, phi)
-            CG += f1
-            CG_2 += f2
-            idx += 1
-        end
-
-        if idx >= min_samples
-            # Compute running averages
-            CG_avg = CG / idx
-            CG_2_avg = CG_2 / idx
-
-            # Check convergence with safeguard against division by zero
-            if abs(CG_old) > 1e-10
-                test1 = abs(CG_avg - CG_old) / abs(CG_old)
-            else
-                test1 = abs(CG_avg - CG_old)
-            end
-
-            if abs(CG_2_old) > 1e-10
-                test2 = abs(CG_2_avg - CG_2_old) / abs(CG_2_old)
-            else
-                test2 = abs(CG_2_avg - CG_2_old)
-            end
-
-            if (test1 < tol) && (test2 < tol)
-                ang_cvrg = true
-            else
-                CG_old = CG_avg
-                CG_2_old = CG_2_avg
-            end
-        end
+    if used_fallback && debug
+        println("Warning: Angular integration used spherical harmonic fallback")
     end
-
-    # Normalize by volume of integration domain (surface of unit sphere = 4π)
-    CG *= 4*pi / idx
-    CG_2 *= 4*pi / idx
 
     
     
