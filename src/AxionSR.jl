@@ -121,6 +121,7 @@ export RateCoefficients
 # Public exports - Eigenvalue computation
 export EigenvalueComputation
 export ScatteringRates
+export find_im_part
 
 # Public exports - Helper functions
 export get_clamped_spin
