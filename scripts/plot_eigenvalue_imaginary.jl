@@ -24,67 +24,86 @@ include(joinpath(src_dir, "heunc.jl"))
 include(joinpath(src_dir, "solve_sr_rates.jl"))
 
 """
-    adaptive_alpha_sampling(alpha_min, alpha_max, n_coarse, n_fine;
-                           quantile_threshold=0.8, coarse_factor=0.5)
+    adaptive_alpha_sampling_smart(mu_min, mu_max, M_BH, a, n, l, m, n_probe, n_fine)
 
-Generate adaptive alpha sampling that focuses resolution on the exponential cutoff region.
+Generate adaptive alpha sampling by probing imaginary part values.
 
 Strategy:
-1. Sample coarsely across full range to identify transition region
-2. Refine sampling in the region where function starts to decay (transition to exponential)
-3. Return merged sorted samples
+1. Coarse probe across full range to find where imaginary part starts significant decay
+2. Refine heavily in the sharp transition/cutoff region
+3. Sparse sampling in flat power-law regime
+
+The key insight: the imaginary part is relatively flat at small alpha (power law),
+then shows a sharp exponential decay. We detect this transition by computing derivatives.
 
 Arguments:
-- alpha_min, alpha_max: bounds of alpha range
-- n_coarse: number of coarse samples (initial sweep)
-- n_fine: number of fine samples (refined region)
-- quantile_threshold: trigger refinement when derivative crosses this quantile of max derivative
-- coarse_factor: fraction of alpha range to refine (default 0.5 means refine upper 50%)
+- mu_min, mu_max: bounds of mu range
+- M_BH: black hole mass
+- a: spin parameter
+- n, l, m: quantum numbers
+- n_probe: number of probe points for transition detection (~10-15)
+- n_fine: number of fine points in sharp transition region (~100+)
 
 Returns: sorted array of alpha values with adaptive density
 """
-function adaptive_alpha_sampling(alpha_min, alpha_max, n_coarse, n_fine;
-                                 quantile_threshold=0.75, coarse_factor=0.5)
-    # Phase 1: Coarse log-spaced sampling across full range
-    alpha_coarse = 10 .^ (range(log10(alpha_min), log10(alpha_max), n_coarse))
+function adaptive_alpha_sampling_smart(mu_min, mu_max, M_BH, a, n, l, m, n_probe, n_fine)
+    # Phase 1: Probe with sparse sampling to find transition point
+    alpha_probe = 10 .^ (range(log10(mu_min * M_BH * GNew), log10(mu_max * M_BH * GNew), n_probe))
 
-    # Phase 2: Identify transition region by looking at log-derivatives
-    # For power law: d(ln f)/d(ln α) ≈ constant
-    # For exponential: d(ln f)/d(ln α) ≈ α * f'/f → large
-    # We estimate this with finite differences
-    if n_coarse > 3
-        log_alpha = log10.(alpha_coarse)
-        # Compute finite differences to estimate where curvature increases
-        # This is a proxy for detecting the transition region
-        d_indices = 2:n_coarse-1
-        curvatures = similar(alpha_coarse)
-        fill!(curvatures, 0.0)
-
-        # Use log-spacing to estimate second derivative in log-log space
-        for i in d_indices
-            if log_alpha[i+1] - log_alpha[i] > 0 && log_alpha[i] - log_alpha[i-1] > 0
-                # Finite difference of log-spacing (indicator of curvature)
-                curvatures[i] = abs((log_alpha[i+1] - log_alpha[i]) - (log_alpha[i] - log_alpha[i-1]))
-            end
+    # Evaluate imaginary part at probe points
+    imag_vals = Float64[]
+    for alpha in alpha_probe
+        try
+            mu = alpha / (M_BH * GNew)
+            erg_r, erg = find_im_part(mu, M_BH, a, n, l, m; return_both=true, for_s_rates=true, Ntot_force=5000, debug=false)
+            push!(imag_vals, imag(erg))
+        catch
+            push!(imag_vals, 0.0)  # Handle failures gracefully
         end
-
-        # Find transition point: where curvature is highest (or use quantile approach)
-        # Transition typically occurs in upper part of range
-        transition_idx = max(Int(round(n_coarse * (1 - coarse_factor))), 2)
-        alpha_transition = alpha_coarse[transition_idx]
-    else
-        # If very few coarse points, refine upper half
-        alpha_transition = 10^((log10(alpha_min) + log10(alpha_max)) / 2)
     end
 
-    # Phase 3: Generate fine-grained sampling in transition/exponential region
-    # Use higher density near alpha_max to resolve cutoff
-    alpha_fine_start = alpha_transition
-    alpha_fine = 10 .^ (range(log10(alpha_fine_start), log10(alpha_max), n_fine))
+    # Phase 2: Detect sharp transition by computing log-derivatives
+    # Look for where |d(ln|imag|)/d(ln alpha)| is largest
+    max_decay_idx = 1
+    if n_probe > 2
+        log_alpha_probe = log10.(alpha_probe)
+        max_derivative = 0.0
 
-    # Phase 4: Merge and remove duplicates
-    alpha_all = vcat(alpha_coarse, alpha_fine)
-    alpha_adaptive = sort(unique(round.(alpha_all, digits=8)))  # Remove near-duplicates
+        for i in 2:n_probe-1
+            if imag_vals[i] > 1e-20 && imag_vals[i-1] > 1e-20 && imag_vals[i+1] > 1e-20
+                # Log-log derivative: d(ln y)/d(ln x)
+                dlog_y = log(imag_vals[i+1]) - log(imag_vals[i-1])
+                dlog_x = log_alpha_probe[i+1] - log_alpha_probe[i-1]
+                if dlog_x > 0
+                    derivative = abs(dlog_y / dlog_x)
+                    if derivative > max_derivative
+                        max_derivative = derivative
+                        max_decay_idx = i
+                    end
+                end
+            end
+        end
+    end
+
+    # Phase 3: Transition point is where max decay occurs
+    alpha_transition = alpha_probe[max_decay_idx]
+
+    # Only refine if transition is not at very end (need room to resolve)
+    if max_decay_idx < n_probe - 1
+        alpha_fine_start = alpha_probe[max(1, max_decay_idx - 1)]
+        alpha_fine_end = alpha_probe[end]
+    else
+        # Fallback: refine in upper 30% of range
+        alpha_fine_start = alpha_probe[max(1, Int(round(n_probe * 0.7)))]
+        alpha_fine_end = alpha_probe[end]
+    end
+
+    # Phase 4: Generate fine sampling only in transition region
+    alpha_fine = 10 .^ (range(log10(alpha_fine_start), log10(alpha_fine_end), n_fine))
+
+    # Phase 5: Keep probe points + fine points (sparse elsewhere, dense at transition)
+    alpha_all = vcat(alpha_probe, alpha_fine)
+    alpha_adaptive = sort(unique(round.(alpha_all, digits=8)))
 
     return alpha_adaptive
 end
@@ -105,18 +124,12 @@ spins = [0.0, 0.5, 0.7, 0.9, 0.95, 0.99]
 # Physical constraint: 0.03 ≤ α = μ * M * G_N ≤ 1
 alpha_min = 0.03
 alpha_max = 1.0
-
-# Use adaptive alpha sampling to focus resolution on exponential cutoff
-# n_coarse: initial coarse sweep (30 points across full range)
-# n_fine: refined points in transition region (100+ points)
-# This gives ~120-130 total unique points with much higher density near cutoff
-alpha_values = adaptive_alpha_sampling(alpha_min, alpha_max, 30, 100; coarse_factor=0.55)
-mu_values = alpha_values ./ (M_BH * GNew)
+mu_min = alpha_min / (M_BH * GNew)
+mu_max = alpha_max / (M_BH * GNew)
 
 @printf "[SETUP] α range: [%.3f, %.3f]\n" alpha_min alpha_max
-@printf "[SETUP] μ range: [%.3e, %.3e]\n" mu_values[1] mu_values[end]
-@printf "[SETUP] Boson mass points: %d (adaptive sampling)\n" length(alpha_values)
-@printf "[SETUP] Point spacing: min Δα = %.2e, max Δα = %.2e\n" minimum(diff(alpha_values)) maximum(diff(alpha_values))
+@printf "[SETUP] μ range: [%.3e, %.3e]\n" mu_min mu_max
+@printf "[SETUP] Adaptive sampling strategy: probe transitions per (n,l,m,spin)\n"
 
 # Quantum levels to consider: (n, l, m)
 quantum_levels = [
@@ -137,17 +150,21 @@ isdir(data_dir) || mkdir(data_dir)
 # Data storage
 eigenvalue_data = Dict()
 
-total = length(quantum_levels) * length(spins) * length(mu_values)
-println("\n[COMPUTING] Calculating eigenvalues ($total total computations)...")
+println("\n[COMPUTING] Computing adaptive alpha sampling and eigenvalues...")
 println("-"^80)
 
-comp_count = Ref(0)
 for (n, l, m) in quantum_levels
     for a in spins
+        # Compute adaptive alpha sampling for this quantum state
+        @printf "\nComputing adaptive sampling for (n,l,m,a) = (%d,%d,%d,%.2f)...\n" n l m a
+        alpha_values = adaptive_alpha_sampling_smart(mu_min, mu_max, M_BH, a, n, l, m, 15, 150)
+        mu_values = alpha_values ./ (M_BH * GNew)
+        n_alpha = length(alpha_values)
+        @printf "  Sampled %d alpha points (spacing: %.2e to %.2e)\n" n_alpha minimum(diff(alpha_values)) maximum(diff(alpha_values))
+
         for (i, mu) in enumerate(mu_values)
-            comp_count[] += 1
-            if comp_count[] % max(1, div(total, 20)) == 0
-                @printf "  Progress: %d / %d (%.1f%%)\n" comp_count[] total (100 * comp_count[] / total)
+            if i % max(1, div(n_alpha, 5)) == 0
+                @printf "  State (%d,%d,%d,%.2f): %d / %d points\n" n l m a i n_alpha
             end
 
             try
