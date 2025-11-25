@@ -171,7 +171,7 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true)
         rP_ratio = rP / (1 + sqrt.(1.0 - 0.9^2))
         
         dirN = "rate_sve/"
-        ftag = "_GF_v2_"
+        ftag = "_LvrHc_"
         
         for i in 1:length(rate_list[:,1])
             nm_tag = string(rate_list[i, 1]) * "_" * string(rate_list[i, 2]) * "^" * string(rate_list[i, 3]) * "^" * string(rate_list[i, 4])
