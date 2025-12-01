@@ -901,6 +901,9 @@ end
 
 function spheroidals(l, m, a, erg)
     # pass erg in normalized units
+    if abs.(m) > l
+        return 0.0
+    end
     Zlm = spin_weighted_spheroidal_harmonic(0, l, m, a .* erg)
     return Zlm
 end
@@ -1406,16 +1409,27 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     if to_inf
         m = (m1 + m2 - m3)
         l = l1 + l2 - l3
-        while l < m
+        
+        while !((l >= m)&&(l>0))
             l += 2
         end
+        
         
         kk_pxy = real(sqrt.(erg_pxy.^2 .- alph.^2))
         rmax = 1/kk_pxy .* 20.0 # Need prefactor here i think...
         
         val, iszero = integral4(l1, m1, l2, m2, l3, -m3, l, -m)
-        if iszero
-            l += 2
+        tcnt = 0
+        while iszero
+            val, iszero = integral4(l1, m1, l2, m2, l3, -m3, l, -m)
+            if iszero
+                l += 1
+                tcnt += 1
+                if tcnt > 10
+                    iszero = false
+                    return 0.0
+                end
+            end
         end
 
     else
@@ -2673,9 +2687,12 @@ function gaunt(l1::Integer, l2::Integer, l3::Integer,
     if !((abs(l1-l2) <= l3 <= l1 + l2) && ((l1 + l2 + l3) % 1 == 0))
         return 0.0
     end
+    if (m1 > l1)||(m2 > l2)||(m3>l3)
+        return 0.0
+    end
     pref = sqrt((2l1+1)*(2l2+1)*(2l3+1) / (4 * pi))
-    t1 = wigner3j(l1, l2, l3, 0, 0, 0)
-    t2 = wigner3j(l1, l2, l3, m1, m2, m3)
+    t1 = Float64.(wigner3j(l1, l2, l3, 0, 0, 0))
+    t2 = Float64.(wigner3j(l1, l2, l3, m1, m2, m3))
     return pref * t1 * t2
 end
 
