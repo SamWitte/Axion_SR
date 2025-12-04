@@ -15,6 +15,66 @@ using WignerSymbols
 # NOTE: Core/constants.jl should be included by the parent file
 include("heunc.jl")
 
+"""
+    assoc_legendre_P(l::Int, m::Int, x::Float64) -> Float64
+
+Compute the associated Legendre polynomial P_l^m(x) using recursion.
+"""
+function assoc_legendre_P(l::Int, m::Int, x::Float64)::Float64
+    abs_m = abs(m)
+
+    # Base cases
+    if abs_m > l
+        return 0.0
+    end
+
+    # P_m^m(x) = (-1)^m * (2m-1)!! * (1-x²)^(m/2)
+    if l == abs_m
+        return (-1)^abs_m * prod(2*k - 1 for k in 1:abs_m) * (1 - x^2)^(abs_m / 2)
+    end
+
+    # P_{m+1}^m(x) = x * (2m+1) * P_m^m(x)
+    if l == abs_m + 1
+        pm_m = assoc_legendre_P(abs_m, abs_m, x)
+        return x * (2*abs_m + 1) * pm_m
+    end
+
+    # Recurrence: (l-m)*P_l^m(x) = x*(2l-1)*P_{l-1}^m(x) - (l+m-1)*P_{l-2}^m(x)
+    p_lm2 = assoc_legendre_P(l - 2, abs_m, x)
+    p_lm1 = assoc_legendre_P(l - 1, abs_m, x)
+    return (x * (2*l - 1) * p_lm1 - (l + abs_m - 1) * p_lm2) / (l - abs_m)
+end
+
+"""
+    sphericalY(l::Int, m::Int, theta::Real, phi::Real) -> Complex
+
+Compute the standard spherical harmonic Y_l^m(θ, φ).
+Uses closed-form expressions via associated Legendre polynomials.
+"""
+function sphericalY(l::Int, m::Int, theta::Float64, phi::Float64)::Complex{Float64}
+    # Validate quantum numbers
+    if abs(m) > l || l < 0
+        return 0.0 + 0.0im
+    end
+
+    # Normalization constant: sqrt((2l+1)/(4π) * (l-|m|)! / (l+|m|)!)
+    # Use BigFloat to avoid factorial overflow for large m
+    l_minus_m = l - abs(m)
+    l_plus_m = l + abs(m)
+    norm_squared = (2*l + 1) / (4*pi) * factorial(big(l_minus_m)) / factorial(big(l_plus_m))
+    norm = sqrt(Float64(norm_squared))
+
+    # Associated Legendre polynomial P_l^|m|(cos(θ))
+    cos_theta = cos(theta)
+    legendre = assoc_legendre_P(l, abs(m), cos_theta)
+
+    # Phase factor: (-1)^m for m < 0
+    phase = ifelse(m >= 0, 1.0, (-1.0)^abs(m))
+
+    # Full expression: norm * P_l^|m|(cos θ) * exp(i m φ)
+    return phase * norm * legendre * exp(im * m * phi)
+end
+
 function ergL(n, l, m, massB, MBH, a; full=true)
     # Key to next level
     alph = GNew * MBH * massB
@@ -904,6 +964,14 @@ function spheroidals(l, m, a, erg)
     if abs.(m) > l
         return 0.0
     end
+
+    # Protection: spin-weighted spheroidal harmonics break down for |m| >= 14
+    # In that regime, use spherical harmonics as approximation (valid for small rotation a)
+    if abs(m) >= 14
+        # Return a wrapper function that evaluates spherical harmonics instead
+        return (theta, phi) -> sphericalY(l, m, theta, phi)
+    end
+
     Zlm = spin_weighted_spheroidal_harmonic(0, l, m, a .* erg)
     return Zlm
 end
@@ -1079,6 +1147,13 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=5000, iter=5000
             Ff = zeros(2)
             wrapper!(Ff, sol.zero)
             print("sanity check \t", Ff, "\n")
+            if (abs.(Ff[1]) .> 1e-30)||(abs.(Ff[2]) .> 1e-30)
+                if return_both
+                    return 0.0, 0.0
+                else
+                    return 0.0
+                end
+            end
         end
         
         if ((!sol.x_converged) && (!sol.f_converged))||(sol.zero[1] .< 0.0)
@@ -1088,13 +1163,7 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=5000, iter=5000
                 return 0.0
             end
         end
-        if (abs.(Ff[1]) .> 1e-30)||(abs.(Ff[2]) .> 1e-30)
-            if return_both
-                return 0.0, 0.0
-            else
-                return 0.0
-            end
-        end
+        
         
 
         if !return_both
