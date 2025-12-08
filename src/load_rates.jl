@@ -244,9 +244,9 @@ end
 function get_state_idx(str_nlm, Nmax)
     cnt = 1
     out_idx = -1
-    
+
     for nn in 1:Nmax, l in 1:(nn - 1),  m in 1:l
-       
+
         if str_nlm == string(nn)*string(l)*string(m)
             out_idx = cnt
             found = true
@@ -254,19 +254,24 @@ function get_state_idx(str_nlm, Nmax)
         end
         cnt += 1
     end
-            
-    
+
+
     if out_idx == -1
+        seen_truncation_modes = Set()
         for nn in 1:Nmax, l in 1:(nn - 1)
             m_new = (2 * l)
             if m_new < Nmax
                 continue # already included
             else
-                if str_nlm == string(m_new + 1)*string(m_new)*string(m_new)
-                    out_idx = cnt
-                    break
+                truncation_key = (m_new + 1, m_new, m_new)
+                if !(truncation_key in seen_truncation_modes)
+                    if str_nlm == string(m_new + 1)*string(m_new)*string(m_new)
+                        out_idx = cnt
+                        break
+                    end
+                    push!(seen_truncation_modes, truncation_key)
+                    cnt += 1
                 end
-                cnt += 1
             end
         end
     end
