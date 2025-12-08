@@ -94,8 +94,6 @@ Identify quantum levels that have fallen below energy floor.
 # Returns
 - `Vector{Int}`: Indices of levels below energy floor (e < 1e-75)
 
-# Details
-Identifies levels where quantum coherence is effectively lost (underflow regime)
 """
 function check_energy_floor(u::Vector, idx_lvl::Int)::Vector{Int}
     below_floor = Int[]
@@ -217,6 +215,7 @@ function setup_quantum_levels_standard(Nmax::Int, fa::Float64, M_Pl::Float64, al
     m_list = []
     bn_list = []
     modes = []
+    truncation_modes = []
 
     # Compute maximum bosenova energy scale
     e2_maxBN = 1024 * pi * (fa / M_Pl)^2 / (9 * alph^3)
@@ -234,10 +233,11 @@ function setup_quantum_levels_standard(Nmax::Int, fa::Float64, M_Pl::Float64, al
     for nn in 1:Nmax, l in 1:(nn - 1)
         m = l
         m_new = 2 * m
-        if m_new >= Nmax
+        if (m_new >= Nmax)&&!((m_new + 1, m_new, m_new, max_alph) in truncation_modes)
             idx_lvl += 1
             max_alph = aBH * m_new / (2 * (1 + sqrt(1 - aBH^2))) * 1.1
             push!(modes, (m_new + 1, m_new, m_new, max_alph))
+            push!(truncation_modes, (m_new + 1, m_new, m_new, max_alph))
             push!(m_list, m_new)
             push!(bn_list, e2_maxBN * ((m_new + 1) / 2)^4)
         end
