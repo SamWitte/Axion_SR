@@ -15,6 +15,66 @@ using WignerSymbols
 # NOTE: Core/constants.jl should be included by the parent file
 include("heunc.jl")
 
+"""
+    assoc_legendre_P(l::Int, m::Int, x::Float64) -> Float64
+
+Compute the associated Legendre polynomial P_l^m(x) using recursion.
+"""
+function assoc_legendre_P(l::Int, m::Int, x::Float64)::Float64
+    abs_m = abs(m)
+
+    # Base cases
+    if abs_m > l
+        return 0.0
+    end
+
+    # P_m^m(x) = (-1)^m * (2m-1)!! * (1-x²)^(m/2)
+    if l == abs_m
+        return (-1)^abs_m * prod(2*k - 1 for k in 1:abs_m) * (1 - x^2)^(abs_m / 2)
+    end
+
+    # P_{m+1}^m(x) = x * (2m+1) * P_m^m(x)
+    if l == abs_m + 1
+        pm_m = assoc_legendre_P(abs_m, abs_m, x)
+        return x * (2*abs_m + 1) * pm_m
+    end
+
+    # Recurrence: (l-m)*P_l^m(x) = x*(2l-1)*P_{l-1}^m(x) - (l+m-1)*P_{l-2}^m(x)
+    p_lm2 = assoc_legendre_P(l - 2, abs_m, x)
+    p_lm1 = assoc_legendre_P(l - 1, abs_m, x)
+    return (x * (2*l - 1) * p_lm1 - (l + abs_m - 1) * p_lm2) / (l - abs_m)
+end
+
+"""
+    sphericalY(l::Int, m::Int, theta::Real, phi::Real) -> Complex
+
+Compute the standard spherical harmonic Y_l^m(θ, φ).
+Uses closed-form expressions via associated Legendre polynomials.
+"""
+function sphericalY(l::Int, m::Int, theta::Float64, phi::Float64)::Complex{Float64}
+    # Validate quantum numbers
+    if abs(m) > l || l < 0
+        return 0.0 + 0.0im
+    end
+
+    # Normalization constant: sqrt((2l+1)/(4π) * (l-|m|)! / (l+|m|)!)
+    # Use BigFloat to avoid factorial overflow for large m
+    l_minus_m = l - abs(m)
+    l_plus_m = l + abs(m)
+    norm_squared = (2*l + 1) / (4*pi) * factorial(big(l_minus_m)) / factorial(big(l_plus_m))
+    norm = sqrt(Float64(norm_squared))
+
+    # Associated Legendre polynomial P_l^|m|(cos(θ))
+    cos_theta = cos(theta)
+    legendre = assoc_legendre_P(l, abs(m), cos_theta)
+
+    # Phase factor: (-1)^m for m < 0
+    phase = ifelse(m >= 0, 1.0, (-1.0)^abs(m))
+
+    # Full expression: norm * P_l^|m|(cos θ) * exp(i m φ)
+    return phase * norm * legendre * exp(im * m * phi)
+end
+
 function ergL(n, l, m, massB, MBH, a; full=true)
     # Key to next level
     alph = GNew * MBH * massB
@@ -47,7 +107,7 @@ function sr_rates(n, l, m, massB, MBH, aBH; impose_low_cut=0.001, solve_322=true
     rP *= (GNew .* MBH)
     OmegaH = aBH ./ (2 .* (GNew .* MBH) .* (1 .+ sqrt.(1 .- aBH.^2)))
     Anl = 2 .^(4 .* l .+ 1) .* factorial(big(Int(l .+ n))) ./ (n.^(2 .* l .+ 4) .* factorial(big(n .- l .- 1)))
-    Anl *= (factorial(Int(l)) ./ (factorial(Int(2 .* l)) .* factorial(Int(2 .* l .+ 1)))).^2
+    Anl *= (factorial(big(Int(l))) ./ (factorial(big(Int(2 .* l))) .* factorial(big(Int(2 .* l .+ 1))))).^2
     Chilm = 1.0
     for k in 1:Int(l)
         Chilm *= (k.^2 .* (1.0 .- aBH.^2) .+ (aBH * m .- 2 .* (rP ./ (GNew .* MBH)) .* alph).^2)
@@ -84,7 +144,7 @@ function radial_inf_NR(k, l, mu, M, r)
     a0 = 1 / alph.^2
     rF = zeros(Complex, length(r))
     for i in 1:length(r)
-        rF[i] = 2 .* k .* exp.(pi ./ (2 .* k .* a0)) .* abs.(gamma(l + 1 - im ./ (k .* a0))) ./ factorial(2 * l + 1) .* (2 .* k .* r[i]).^l .* exp.(-im * k * r[i]) .* pFq((im ./ (k .* a0) + l + 1,), (2 * l + 2, ), 2 * im .* k .* r[i])
+        rF[i] = 2 .* k .* exp.(pi ./ (2 .* k .* a0)) .* abs.(gamma(l + 1 - im ./ (k .* a0))) ./ factorial(big(2 * l + 1)) .* (2 .* k .* r[i]).^l .* exp.(-im * k * r[i]) .* pFq((im ./ (k .* a0) + l + 1,), (2 * l + 2, ), 2 * im .* k .* r[i])
     end
     return rF # unitless
 end
@@ -697,7 +757,7 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
         nuN = (alpha_other .+ beta .+ gam .+ alpha_other .* gam  .+ beta .* gam) ./ 2 .+ eta .+ deltt
         
         ### choose r values i want...
-        r_max_shrt = 2.0 .^(2.0 .* n .- 2 .* (1 .+ n)) .* gamma(2 .+ 2 .* n) ./ alph.^2 ./ factorial(2 .* n - 1) .* 3.0
+        r_max_shrt = 2.0 .^(2.0 .* n .- 2 .* (1 .+ n)) .* gamma(2 .+ 2 .* n) ./ alph.^2 ./ factorial(big(2 .* n - 1)) .* 3.0
         r_max = n ./ alph.^2 .* 100.0
         r_vals = rlist = 10 .^(range(log10.(rplus  .* (1.0 .+ 1e-3)), log10.(r_max), rpts))
         
@@ -904,6 +964,14 @@ function spheroidals(l, m, a, erg)
     if abs.(m) > l
         return 0.0
     end
+
+    # Protection: spin-weighted spheroidal harmonics break down for |m| >= 14
+    # In that regime, use spherical harmonics as approximation (valid for small rotation a)
+    if abs(m) >= 14
+        # Return a wrapper function that evaluates spherical harmonics instead
+        return (theta, phi) -> sphericalY(l, m, theta, phi)
+    end
+
     Zlm = spin_weighted_spheroidal_harmonic(0, l, m, a .* erg)
     return Zlm
 end
@@ -1079,6 +1147,13 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=5000, iter=5000
             Ff = zeros(2)
             wrapper!(Ff, sol.zero)
             print("sanity check \t", Ff, "\n")
+            if (abs.(Ff[1]) .> 1e-30)||(abs.(Ff[2]) .> 1e-30)
+                if return_both
+                    return 0.0, 0.0
+                else
+                    return 0.0
+                end
+            end
         end
         
         if ((!sol.x_converged) && (!sol.f_converged))||(sol.zero[1] .< 0.0)
@@ -1088,6 +1163,8 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=5000, iter=5000
                 return 0.0
             end
         end
+        
+        
 
         if !return_both
             return sol.zero[2]   # im(G * M * omega)
@@ -1371,27 +1448,34 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     alph = mu * GNew * M
     
     
-    # erg_1G = ergL(n1, l1, m1, mu, M, a; full=true)
-    # erg_2G = ergL(n2, l2, m2, mu, M, a; full=true)
-    # erg_3G = ergL(n3, l3, m3, mu, M, a; full=true)
-    # erg_pxy = (erg_1G + erg_2G - erg_3G) .* GNew .* M
+    
     
     maxN = maximum([n1 n2 n3])
     minN = maximum([n1 n2 n3])
     
-    
+    erg_pxy = 0.0
+    erg_1G = 0.0
+    erg_2G = 0.0
+    erg_3G = 0.0
     ### quick check if to inf to not!
-    erg_1G, erg1I = find_im_part(mu, M, a, n1, l1, m1; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
-    erg_2G, erg2I = find_im_part(mu, M, a, n2, l2, m2; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
-    erg_3G, erg3I = find_im_part(mu, M, a, n3, l3, m3; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
-    
-    if erg_1G == 0 || erg_2G == 0 || erg_3G == 0
-        erg_1G = ergL(n1, l1, m1, mu, M, a; full=true) .* GNew .* M
-        erg_2G = ergL(n1, l1, m1, mu, M, a; full=true) .* GNew .* M
-        erg_3G = ergL(n1, l1, m1, mu, M, a; full=true) .* GNew .* M
+    try
+        erg_1G, erg1I = find_im_part(mu, M, a, n1, l1, m1; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
+        erg_2G, erg2I = find_im_part(mu, M, a, n2, l2, m2; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
+        erg_3G, erg3I = find_im_part(mu, M, a, n3, l3, m3; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
+        
+        if erg_1G == 0 || erg_2G == 0 || erg_3G == 0
+            erg_1G = ergL(n1, l1, m1, mu, M, a; full=true) .* GNew .* M
+            erg_2G = ergL(n1, l1, m1, mu, M, a; full=true) .* GNew .* M
+            erg_3G = ergL(n1, l1, m1, mu, M, a; full=true) .* GNew .* M
+        end
+        
+        erg_pxy = (erg_1G + erg_2G - erg_3G)
+    catch
+        erg_1G = ergL(n1, l1, m1, mu, M, a; full=true)
+        erg_2G = ergL(n2, l2, m2, mu, M, a; full=true)
+        erg_3G = ergL(n3, l3, m3, mu, M, a; full=true)
+        erg_pxy = (erg_1G + erg_2G - erg_3G) .* GNew .* M
     end
-    
-    erg_pxy = (erg_1G + erg_2G - erg_3G)
     
     OmegaH = a ./ (2 .* (GNew .* M) .* (1 .+ sqrt.(1 .- a.^2)))
     
@@ -1436,7 +1520,11 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         l = 0
         m = 0
         # rmax = Float64.(100 ./ alph.^2 .* (minN ./ 2.0) )
-        rmax = 2.0 .^(2.0 .* maxN .- 2 .* (1 .+ maxN)) .* gamma(2 .+ 2 .* maxN) ./ alph.^2 ./ factorial(2 .* maxN - 1) .* 10.0
+        if maxN < 10
+            rmax = 2.0 .^(2.0 .* maxN .- 2 .* (1 .+ maxN)) .* gamma(2 .+ 2 .* maxN) ./ alph.^2 ./ factorial(2 .* maxN - 1) .* 10.0
+        else
+            rmax = 2.0 .^(2.0 .* maxN .- 2 .* (1 .+ maxN)) .* 4 .* maxN .^2 ./ alph.^2 .* 10.0
+        end
     end
     
     
@@ -1817,8 +1905,13 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     outWF .*= 1.0 ./ sqrt.(itp_rrstar.(rvals).^2 .+ a.^2)
     outWF_fw .*= 1.0 ./ sqrt.(itp_rrstar.(rvals).^2 .+ a.^2)
 
-    
-    midP = Int(round(length(rvals) - 10))
+    if length(outWF_fw) > 15
+        midP = Int(round(length(rvals) - 10))
+    elseif length(outWF_fw) > 4
+        midP = Int(round(length(rvals) - 3))
+    else
+        return 0.0
+    end
     wronk  = (outWF_fw[midP] .* (outWF[midP+1] .- outWF[midP-1]) .-  outWF[midP] .* (outWF_fw[midP+1] .- outWF_fw[midP-1]) )./ (itp_rrstar.(rvals[midP+1]) .- itp_rrstar.(rvals[midP-1]))
     wronk *= (itp_rrstar.(rvals[midP]).^2 .- 2 .* itp_rrstar.(rvals[midP]) .+ a.^2) .* (GNew .* M)
 
@@ -2478,7 +2571,7 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=200, L=4, Npoints=60, Iter
     nuN = (alpha_other .+ beta .+ gam .+ alpha_other .* gam  .+ beta .* gam) ./ 2 .+ eta .+ deltt
     
     ### choose r values i want...
-    r_max_shrt = 2.0 .^(2.0 .* n .- 2 .* (1 .+ n)) .* gamma(2 .+ 2 .* n) ./ alph.^2 ./ factorial(2 .* n - 1) .* 3.0
+    r_max_shrt = 2.0 .^(2.0 .* n .- 2 .* (1 .+ n)) .* gamma(2 .+ 2 .* n) ./ alph.^2 ./ factorial(big(2 .* n - 1)) .* 3.0
     r_max = n ./ alph.^2 .* 100.0
     if (R(r_max, Nν_values[final_idx]) ./ R(rplus  .* (1.0 .+ 1e-3), Nν_values[final_idx])) .> 1
         r_max *= 10
