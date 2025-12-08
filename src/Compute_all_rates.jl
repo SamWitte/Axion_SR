@@ -72,13 +72,13 @@ check_err = parsed_args["check_err"];
 
 print(S1, "\t", S2, "\t", S3, "\t", S4, "\n")
 
-function main(;kpts=14, rpts=1000, rmaxT=100, Nang=5000000, Npts_Bnd=500)
+function main(;kpts=14, rpts=2000, rmaxT=100, Nang=5000000, Npts_Bnd=2000)
     a = 0.95
     M = 1.0
-    Ntot_safe=20000
+    Ntot_safe=30000
     NON_REL = false
     
-    prec=200
+    prec=300
     cvg_acc=1e-10
     NptsCh_Min=40
     NptsCh_Max=70
@@ -86,7 +86,7 @@ function main(;kpts=14, rpts=1000, rmaxT=100, Nang=5000000, Npts_Bnd=500)
     Lcheb=4
     der_acc=1e-20
     
-    debug=true
+    debug=false
     overwrite_file = false
     
     flag_file = "fishy_rates.dat"
