@@ -233,7 +233,7 @@ function setup_quantum_levels_standard(Nmax::Int, fa::Float64, M_Pl::Float64, al
     for nn in 1:Nmax, l in 1:(nn - 1)
         m = l
         m_new = 2 * m
-        if (m_new >= Nmax)&&!((m_new + 1, m_new, m_new, max_alph) in truncation_modes)
+        if (m_new >= Nmax) && !any(mode -> mode[1:3] == (m_new + 1, m_new, m_new), truncation_modes)
             idx_lvl += 1
             max_alph = aBH * m_new / (2 * (1 + sqrt(1 - aBH^2))) * 1.1
             push!(modes, (m_new + 1, m_new, m_new, max_alph))
