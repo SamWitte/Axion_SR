@@ -19,7 +19,7 @@ def format_state(n, l, m):
         # New format with delimiter for multi-digit
         return "{}-{}-{}".format(n, l, m)
 
-Nmax = 4
+Nmax = 8
 file_output = "load_rate_input_Nmax_{:.0f}.txt".format(Nmax)
 n_levels = [i for i in range(2,Nmax+1)]
 # n_levels = [2, 3, 4, 5]
@@ -65,15 +65,15 @@ for n1 in n_levels:
                                         # print(n1, n2, l1, l2, erg_diff, test1)
                                         lf = l1 + l2 - l3
                                         mf = m1 + m2 - m3
-                                        
+
                                         tag4 = "Inf ({}{})".format(lf, mf)
-                                        
-                                        
+
+
                                         in_list = False
                                         for i in range(len(hold_out_1)):
                                             if ((hold_out_1[i]==tag1)and(hold_out_2[i]==tag2)and(hold_out_3[i]==tag3) or (hold_out_1[i]==tag2)and(hold_out_2[i]==tag1)and(hold_out_3[i]==tag3)):
                                                 in_list=True
-                                        
+
                                         if not in_list:
                                             hold_out_1.append(tag1)
                                             hold_out_2.append(tag2)
@@ -86,7 +86,33 @@ for n1 in n_levels:
                                                 outtag = "Inf"
                                                 final_keep_sve.append(tag1[1:-1] + "    " + tag2[1:-1] + "    " + tag3[1:-1] + "    " + outtag)
 
-                                        
+                                    elif erg_diff > 0.999: # near-threshold: check if BH emission is allowed
+                                        # These transitions don't quite have enough energy for infinity
+                                        # For BH emission, we need lf=0 and mf=0 (angular momentum sums to zero)
+                                        test_m = ((m1 + m2 - m3) == 0)
+                                        test_l = ((l1 + l2 - l3) == 0)
+                                        test1 = ((l1 + l2 + l3) % 2 == 0)
+
+                                        if test1 and test_m and test_l:
+                                            tag4 = "BH"
+
+                                            in_list = False
+                                            for i in range(len(hold_out_1)):
+                                                if ((hold_out_1[i]==tag1)and(hold_out_2[i]==tag2)and(hold_out_3[i]==tag3) or (hold_out_1[i]==tag2)and(hold_out_2[i]==tag1)and(hold_out_3[i]==tag3)):
+                                                    in_list=True
+
+                                            if not in_list:
+                                                hold_out_1.append(tag1)
+                                                hold_out_2.append(tag2)
+                                                hold_out_3.append(tag3)
+                                                hold_out_4.append(tag4)
+                                                if print_all:
+                                                    print(tag1 + " x " + tag2 + " ---> " + tag3 + " x " + tag4)
+                                                else:
+                                                    final_keep.append(tag1 + " x " + tag2 + " ---> " + tag3 + " x " + tag4)
+                                                    outtag = "BH"
+                                                    final_keep_sve.append(tag1[1:-1] + "    " + tag2[1:-1] + "    " + tag3[1:-1] + "    " + outtag)
+
                                     else: # m sum
                                         test_m = ((m1 + m2 - m3) == 0)
                                         for nfinal in n_levels:
@@ -127,7 +153,7 @@ extra_states = []  # Will store (n1, l1, m1, n3, l3, m3) tuples
 for n1 in n_levels:
     for l1 in range(0, n1):
         for m1 in range(1, l1 + 1):
-            if (m1>l1) or (m2>l2) or (m3>l3) or (l1 >= n1) or (l2 >= n2) or (l3 >= n3):
+            if (m1>l1) or (l1 >= n1):
                 continue
 
             n2 = n1
@@ -137,6 +163,10 @@ for n1 in n_levels:
             m3 = m1 + m2
             l3 = m3
             n3 = l3 + 1
+
+            # Check validity of computed values
+            if (m2>l2) or (m3>l3) or (l2 >= n2) or (l3 >= n3):
+                continue
 
             # Store for inverse process (will create n3 x n3 -> n1 x Inf)
             extra_states.append((n1, l1, m1, n3, l3, m3))
@@ -156,15 +186,15 @@ for n1 in n_levels:
                 # print(n1, n2, l1, l2, erg_diff, test1)
                 lf = l1 + l2 - l3
                 mf = m1 + m2 - m3
-                
+
                 tag4 = "Inf ({}{})".format(lf, mf)
-                
-                
+
+
                 in_list = False
                 for i in range(len(hold_out_1)):
                     if ((hold_out_1[i]==tag1)and(hold_out_2[i]==tag2)and(hold_out_3[i]==tag3) or (hold_out_1[i]==tag2)and(hold_out_2[i]==tag1)and(hold_out_3[i]==tag3)):
                         in_list=True
-                
+
                 if not in_list:
                     hold_out_1.append(tag1)
                     hold_out_2.append(tag2)
@@ -177,7 +207,33 @@ for n1 in n_levels:
                         outtag = "Inf"
                         final_keep_sve.append(tag1[1:-1] + "    " + tag2[1:-1] + "    " + tag3[1:-1] + "    " + outtag)
 
-                
+            elif erg_diff > 0.999: # near-threshold: check if BH emission is allowed
+                # These transitions don't quite have enough energy for infinity
+                # For BH emission, we need lf=0 and mf=0 (angular momentum sums to zero)
+                test_m = ((m1 + m2 - m3) == 0)
+                test_l = ((l1 + l2 - l3) == 0)
+                test1 = ((l1 + l2 + l3) % 2 == 0)
+
+                if test1 and test_m and test_l:
+                    tag4 = "BH"
+
+                    in_list = False
+                    for i in range(len(hold_out_1)):
+                        if ((hold_out_1[i]==tag1)and(hold_out_2[i]==tag2)and(hold_out_3[i]==tag3) or (hold_out_1[i]==tag2)and(hold_out_2[i]==tag1)and(hold_out_3[i]==tag3)):
+                            in_list=True
+
+                    if not in_list:
+                        hold_out_1.append(tag1)
+                        hold_out_2.append(tag2)
+                        hold_out_3.append(tag3)
+                        hold_out_4.append(tag4)
+                        if print_all:
+                            print(tag1 + " x " + tag2 + " ---> " + tag3 + " x " + tag4)
+                        else:
+                            final_keep.append(tag1 + " x " + tag2 + " ---> " + tag3 + " x " + tag4)
+                            outtag = "BH"
+                            final_keep_sve.append(tag1[1:-1] + "    " + tag2[1:-1] + "    " + tag3[1:-1] + "    " + outtag)
+
             else: # m sum
                 test_m = ((m1 + m2 - m3) == 0)
                 test_l = ((l1 + l2 - l3) == 0)
