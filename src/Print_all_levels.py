@@ -5,7 +5,21 @@ def erg_shift_1(n, alph=0.1):
     return 1.0 * (1.0 - alph**2 / (2 * n**2) - alph**4 / (8 * n**4))
 #    return 1.0 * (1.0 - alph**2 / (2 * n**2) )
 
-Nmax = 8
+
+def format_state(n, l, m):
+    """Format quantum state with delimiter for multi-digit support.
+
+    Uses hyphen delimiter to match Julia implementation.
+    For backward compatibility, uses no delimiter for single-digit numbers.
+    """
+    if n < 10 and l < 10 and m < 10:
+        # Legacy format for single digits
+        return "{}{}{}".format(n, l, m)
+    else:
+        # New format with delimiter for multi-digit
+        return "{}-{}-{}".format(n, l, m)
+
+Nmax = 4
 file_output = "load_rate_input_Nmax_{:.0f}.txt".format(Nmax)
 n_levels = [i for i in range(2,Nmax+1)]
 # n_levels = [2, 3, 4, 5]
@@ -40,10 +54,10 @@ for n1 in n_levels:
                                         
                                     # erg
                                     erg_diff = erg_shift_1(n1) + erg_shift_1(n2) - erg_shift_1(n3)
-                                    
-                                    tag1 = "|{}{}{}>".format(n1,l1,m1)
-                                    tag2 = "|{}{}{}>".format(n2,l2,m2)
-                                    tag3 = "|{}{}{}>".format(n3,l3,m3)
+
+                                    tag1 = "|{}>".format(format_state(n1, l1, m1))
+                                    tag2 = "|{}>".format(format_state(n2, l2, m2))
+                                    tag3 = "|{}>".format(format_state(n3, l3, m3))
                                     if (tag1 in ignore_lvls)or(tag2 in ignore_lvls)or(tag3 in ignore_lvls):
                                         continue
                                         
@@ -70,7 +84,7 @@ for n1 in n_levels:
                                             else:
                                                 final_keep.append(tag1 + " x " + tag2 + " ---> " + tag3 + " x " + tag4)
                                                 outtag = "Inf"
-                                                final_keep_sve.append(tag1[1:4] + "    " + tag2[1:4] + "    " + tag3[1:4] + "    " + outtag)
+                                                final_keep_sve.append(tag1[1:-1] + "    " + tag2[1:-1] + "    " + tag3[1:-1] + "    " + outtag)
 
                                         
                                     else: # m sum
@@ -101,10 +115,10 @@ for n1 in n_levels:
                                                     print(tag1 + " x " + tag2 + " ---> " + tag3 + " x " + tag4)
                                                 else:
                                                     final_keep.append(tag1 + " x " + tag2 + " ---> " + tag3 + " x " + tag4)
-                                                    
+
                                                     outtag = "BH"
-                                                
-                                                    final_keep_sve.append(tag1[1:4] + "    " + tag2[1:4] + "    " + tag3[1:4] + "    " + outtag)
+
+                                                    final_keep_sve.append(tag1[1:-1] + "    " + tag2[1:-1] + "    " + tag3[1:-1] + "    " + outtag)
 
 ### here is how we truncate n-expansion
 # Store the extra states for inverse processes
@@ -129,11 +143,11 @@ for n1 in n_levels:
 
             # erg
             erg_diff = erg_shift_1(n1) + erg_shift_1(n2) - erg_shift_1(n3)
-            
-            
-            tag1 = "|{}{}{}>".format(n1,l1,m1)
-            tag2 = "|{}{}{}>".format(n2,l2,m2)
-            tag3 = "|{}{}{}>".format(n3,l3,m3)
+
+
+            tag1 = "|{}>".format(format_state(n1, l1, m1))
+            tag2 = "|{}>".format(format_state(n2, l2, m2))
+            tag3 = "|{}>".format(format_state(n3, l3, m3))
             if (tag1 in ignore_lvls)or(tag2 in ignore_lvls)or(tag3 in ignore_lvls):
                 continue
             
@@ -161,7 +175,7 @@ for n1 in n_levels:
                     else:
                         final_keep.append(tag1 + " x " + tag2 + " ---> " + tag3 + " x " + tag4)
                         outtag = "Inf"
-                        final_keep_sve.append(tag1[1:4] + "    " + tag2[1:4] + "    " + tag3[1:4] + "    " + outtag)
+                        final_keep_sve.append(tag1[1:-1] + "    " + tag2[1:-1] + "    " + tag3[1:-1] + "    " + outtag)
 
                 
             else: # m sum
@@ -186,10 +200,10 @@ for n1 in n_levels:
                             print(tag1 + " x " + tag2 + " ---> " + tag3 + " x " + tag4)
                         else:
                             final_keep.append(tag1 + " x " + tag2 + " ---> " + tag3 + " x " + tag4)
-                            
+
                             outtag = "BH"
-                        
-                            final_keep_sve.append(tag1[1:4] + "    " + tag2[1:4] + "    " + tag3[1:4] + "    " + outtag)
+
+                            final_keep_sve.append(tag1[1:-1] + "    " + tag2[1:-1] + "    " + tag3[1:-1] + "    " + outtag)
 
 
 ### Add inverse processes for extra states beyond Nmax
@@ -211,9 +225,9 @@ for (n_low, l_low, m_low, n_high, l_high, m_high) in extra_states:
     # Check energy - should emit to infinity
     erg_diff = erg_shift_1(n1) + erg_shift_1(n2) - erg_shift_1(n3)
 
-    tag1 = "|{}{}{}>".format(n1,l1,m1)
-    tag2 = "|{}{}{}>".format(n2,l2,m2)
-    tag3 = "|{}{}{}>".format(n3,l3,m3)
+    tag1 = "|{}>".format(format_state(n1, l1, m1))
+    tag2 = "|{}>".format(format_state(n2, l2, m2))
+    tag3 = "|{}>".format(format_state(n3, l3, m3))
 
     if erg_diff > 1.0:  # emission to infinity
         lf = l1 + l2 - l3
@@ -237,7 +251,7 @@ for (n_low, l_low, m_low, n_high, l_high, m_high) in extra_states:
             else:
                 final_keep.append(tag1 + " x " + tag2 + " ---> " + tag3 + " x " + tag4)
                 outtag = "Inf"
-                final_keep_sve.append(tag1[1:4] + "    " + tag2[1:4] + "    " + tag3[1:4] + "    " + outtag)
+                final_keep_sve.append(tag1[1:-1] + "    " + tag2[1:-1] + "    " + tag3[1:-1] + "    " + outtag)
 
 
 if sve_all:

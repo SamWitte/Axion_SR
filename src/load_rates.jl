@@ -1,4 +1,5 @@
 using Glob
+include("state_utils.jl")
 
 function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true)
     alph = mu * GNew * M
@@ -194,50 +195,77 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true)
 end
 
 function key_to_indx(keyN, Nmax)
-    if keyN[9:10] == "GW"
-        totN = 3
-    else
-        totN = 4
+    # Parse rate dictionary keys like "211_322^GW" or "211_211^322^BH"
+    # Format is: state1_state2^state3_or_GW^TYPE
+    # where each state can be "nlm" (old) or "n_l_m" (new)
+
+    # Split by first underscore to separate state1 and remainder
+    parts = split(keyN, "_", limit=2)
+    if length(parts) != 2
+        error("Invalid key format: $keyN")
     end
+
+    state1 = parts[1]
+    remainder = parts[2]
+
+    # Split remainder by "^" to get state2 and rest
+    caret_parts = split(remainder, "^")
+
+    if length(caret_parts) == 2
+        # Format: "state1_state2^GW" or "state1_state2^Inf" (3 total components)
+        totN = 3
+        state2 = caret_parts[1]
+        state3_or_type = caret_parts[2]  # This is GW, Inf, or BH
+        type_str = nothing
+    elseif length(caret_parts) == 3
+        # Format: "state1_state2^state3^TYPE" (4 total components)
+        totN = 4
+        state2 = caret_parts[1]
+        state3_or_type = caret_parts[2]  # This is state3
+        type_str = caret_parts[3]  # This is BH, Inf, etc.
+    else
+        error("Invalid key format: $keyN (unexpected number of ^ separators)")
+    end
+
     outPix = zeros(Int, totN)
     sgn = zeros(totN)
-    
-    for i in 1:totN
-        if i == 1
-            nme = keyN[1:3]
-            sgn[i] = -1.0
-        elseif i == 2
-            nme = keyN[5:7]
-            sgn[i] = -1.0
-        elseif i == 3
-            if totN == 4
-                nme = keyN[9:11]
-                if keyN[8] == "_"
-                    sgn[i] = -1.0
-                else
-                    sgn[i] = 1.0
-                end
-            else
-                nme = "GW"
-                sgn[i] = 1.0
-            end
+
+    # Parse state 1
+    sgn[1] = -1.0
+    outPix[1] = get_state_idx(state1, Nmax)
+
+    # Parse state 2
+    sgn[2] = -1.0
+    outPix[2] = get_state_idx(state2, Nmax)
+
+    # Parse state 3 (or GW/Inf/BH)
+    if totN == 3
+        # state3_or_type is GW, Inf, or BH
+        if state3_or_type == "BH"
+            outPix[3] = -1
+        elseif state3_or_type == "Inf" || state3_or_type == "GW"
+            outPix[3] = 0
         else
-            nme = keyN[13:end]
-            sgn[i] = 1.0
+            # It's actually a state
+            outPix[3] = get_state_idx(state3_or_type, Nmax)
         end
-        
-        
-        if nme == "BH"
-            outPix[i] = -1.0
-            continue
-        elseif (nme == "Inf")||(nme == "GW")
-            outPix[i] = 0.0
-            continue
+        sgn[3] = 1.0
+    else  # totN == 4
+        # state3_or_type is a quantum state
+        sgn[3] = 1.0
+        outPix[3] = get_state_idx(state3_or_type, Nmax)
+
+        # Parse type (BH, Inf, etc.)
+        sgn[4] = 1.0
+        if type_str == "BH"
+            outPix[4] = -1
+        elseif type_str == "Inf" || type_str == "GW"
+            outPix[4] = 0
         else
-            outPix[i] = get_state_idx(nme, Nmax)
+            error("Unknown type in key: $type_str")
         end
-            
     end
+
     return outPix, sgn
 end
 
@@ -247,7 +275,11 @@ function get_state_idx(str_nlm, Nmax)
 
     for nn in 1:Nmax, l in 1:(nn - 1),  m in 1:l
 
-        if str_nlm == string(nn)*string(l)*string(m)
+        # Support both old format "211" and new format "2_1_1"
+        state_str_new = format_state_string(nn, l, m)
+        state_str_old = (nn < 10 && l < 10 && m < 10) ? format_state_string_legacy(nn, l, m) : ""
+
+        if str_nlm == state_str_new || str_nlm == state_str_old
             out_idx = cnt
             found = true
             break
@@ -265,7 +297,11 @@ function get_state_idx(str_nlm, Nmax)
             else
                 truncation_key = (m_new + 1, m_new, m_new)
                 if !(truncation_key in seen_truncation_modes)
-                    if str_nlm == string(m_new + 1)*string(m_new)*string(m_new)
+                    # Support both old format and new format
+                    state_str_new = format_state_string(m_new + 1, m_new, m_new)
+                    state_str_old = (m_new < 9) ? format_state_string_legacy(m_new + 1, m_new, m_new) : ""
+
+                    if str_nlm == state_str_new || str_nlm == state_str_old
                         out_idx = cnt
                         break
                     end

@@ -1,5 +1,6 @@
 include("solve_sr_rates.jl")
 include("Core/constants.jl")
+include("state_utils.jl")
 using ArgParse
 
 function parse_commandline()
@@ -91,42 +92,33 @@ function main(;kpts=14, rpts=1000, rmaxT=100, Nang=5000000, Npts_Bnd=500)
     
     flag_file = "fishy_rates.dat"
     
-    min_m = minimum([parse(Int, S1[end]), parse(Int, S2[end]), parse(Int, S3[end])])
+    # Parse state strings using utility functions
+    n1, l1, m1 = parse_state_from_args(S1)
+    n2, l2, m2 = parse_state_from_args(S2)
+    n3, l3, m3 = parse_state_from_args(S3)
+
+    min_m = minimum([m1, m2, m3])
     alpha_max = a .* min_m ./ (2 .* (1 .+ sqrt.(1 .- a.^2))) .* 1.03
-    
+
     alpha_list = LinRange(alpha_min, alpha_max, alpha_pts)
     NptsCh_list = Int.(round.(LinRange(NptsCh_Min, NptsCh_Max, alpha_pts)))
-    
+
     output_sve = zeros(alpha_pts)
-    
-    State1 = [parse(Int, c) for c in S1]
-    n1 = State1[1]
-    l1 = State1[2]
-    m1 = State1[3]
 
-    
-    State2 = [parse(Int, c) for c in S2]
-    n2 = State2[1]
-    l2 = State2[2]
-    m2 = State2[3]
-
-    
-    State3 = [parse(Int, c) for c in S3]
-    n3 = State3[1]
-    l3 = State3[2]
-    m3 = State3[3]
-    if (State1==State2)&&(m1+m2 > 9)
+    # Handle special case where states are equal and m values sum to > 9
+    if (n1 == n2) && (l1 == l2) && (m1 == m2) && (m1 + m2 > 9)
         n3 = l1 + l2 + 1
         l3 = l1 + l2
         m3 = m1 + m2
     end
-    
+
     if S4 == "BH"
         to_inf = false
     else
         to_inf = true
     end
-    
+
+    # Create output filename using state strings (preserves format from command line)
     fOUT = "rate_sve/"*S1*"_"*S2*"_"*S3*"_"*S4*ftag*".dat"
     if !isfile(fOUT)||overwrite_file
         
