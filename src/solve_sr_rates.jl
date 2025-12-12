@@ -14,6 +14,7 @@ using LinearAlgebra
 using WignerSymbols
 # NOTE: Core/constants.jl should be included by the parent file
 include("heunc.jl")
+include("state_utils.jl")
 
 """
     assoc_legendre_P(l::Int, m::Int, x::Float64) -> Float64
@@ -1947,10 +1948,11 @@ end
 
 
 function pre_computed_sr_rates(n, l, m, alph, M; n_high=20, n_low=20, delt_a=0.001, cheby=true)
+    state_str = format_state_for_filename(n, l, m)
     if !cheby
-        fn = "rate_sve/Imag_zero_$(n)$(l)$(m).dat"
+        fn = "rate_sve/Imag_zero_$(state_str).dat"
     else
-        fn = "rate_sve/Imag_zeroC_$(n)$(l)$(m).dat"
+        fn = "rate_sve/Imag_zeroC_$(state_str).dat"
     end
     if isfile(fn)
         zerolist= readdlm(fn)
@@ -1978,9 +1980,9 @@ function pre_computed_sr_rates(n, l, m, alph, M; n_high=20, n_low=20, delt_a=0.0
     if run_high
         a_list_high = LinRange(a_mid + delt_a, maxSpin, n_high)
         if !cheby
-            fn = "rate_sve/Imag_erg_pos_$(n)$(l)$(m).npz"
+            fn = "rate_sve/Imag_erg_pos_$(state_str).npz"
         else
-            fn = "rate_sve/Imag_ergC_pos_$(n)$(l)$(m).npz"
+            fn = "rate_sve/Imag_ergC_pos_$(state_str).npz"
         end
         if isfile(fn)
             file_in = npzread(fn)
@@ -2004,9 +2006,9 @@ function pre_computed_sr_rates(n, l, m, alph, M; n_high=20, n_low=20, delt_a=0.0
     if run_low
         a_list_low = LinRange(minSpin, a_mid - delt_a, n_low)
         if !cheby
-            fn = "rate_sve/Imag_erg_neg_$(n)$(l)$(m).npz"
+            fn = "rate_sve/Imag_erg_neg_$(state_str).npz"
         else
-            fn = "rate_sve/Imag_ergC_neg_$(n)$(l)$(m).npz"
+            fn = "rate_sve/Imag_ergC_neg_$(state_str).npz"
         end
         if isfile(fn)
             file_in = npzread(fn)

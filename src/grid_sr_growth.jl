@@ -1,4 +1,5 @@
 include("solve_sr_rates.jl")
+include("state_utils.jl")
 using NPZ
 using ArgParse
 
@@ -87,14 +88,17 @@ function main_gg(run_leaver, run_analytic, solve_for_zeros, solve_gridded)
         
         for (flag, suffix) in ((solve_for_zeros, ft1), (solve_gridded, ft2))
             if flag
-                file_out = "$(suffix)_$(n)$(l)$(m).$(suffix == ft1 ? "dat" : "npz")"
+                state_str = format_state_for_filename(n, l, m)
+                file_out = "$(suffix)_$(state_str).$(suffix == ft1 ? "dat" : "npz")"
                 full_path = "rate_sve/" * file_out
-                
+
                 if !isfile(full_path)
                     if nlmIn == "000"
                         push!(loop_list, [n, l, m])
                     else
-                        if (nlmIn == string(n)*string(l)*string(m))
+                        # Parse nlmIn and compare quantum numbers
+                        n_in, l_in, m_in = parse_state_string(nlmIn)
+                        if (n == n_in) && (l == l_in) && (m == m_in)
                             push!(loop_list, [n, l, m])
                         end
                     end
@@ -112,10 +116,11 @@ function main_gg(run_leaver, run_analytic, solve_for_zeros, solve_gridded)
             
             alpha_max = a_max .* m ./ (2 .* (1 .+ sqrt.(1 .- a_max.^2))) .* 1.3
             alphList = LinRange(log10.(0.03), log10.(alpha_max), alpha_pts)
+            state_str = format_state_for_filename(n, l, m)
             if run_leaver
-                file_out = "Imag_zero_$(n)$(l)$(m).dat"
+                file_out = "Imag_zero_$(state_str).dat"
             else
-                file_out = "Imag_zeroC_$(n)$(l)$(m).dat"
+                file_out = "Imag_zeroC_$(state_str).dat"
             end
            
             M=1;
@@ -189,24 +194,25 @@ function main_gg(run_leaver, run_analytic, solve_for_zeros, solve_gridded)
            
             alpha_max = a_max .* m ./ (2 .* (1 .+ sqrt.(1 .- a_max.^2))) .* 1.3
             alphList = LinRange(log10.(0.03), log10.(alpha_max), alpha_pts)
-            
+
+            state_str = format_state_for_filename(n, l, m)
             if run_leaver
-                file_out = "Imag_erg_pos_$(n)$(l)$(m).npz"
-                file_out2 = "Imag_erg_neg_$(n)$(l)$(m).npz"
+                file_out = "Imag_erg_pos_$(state_str).npz"
+                file_out2 = "Imag_erg_neg_$(state_str).npz"
             else
-                file_out = "Imag_ergC_pos_$(n)$(l)$(m).npz"
-                file_out2 = "Imag_ergC_neg_$(n)$(l)$(m).npz"
+                file_out = "Imag_ergC_pos_$(state_str).npz"
+                file_out2 = "Imag_ergC_neg_$(state_str).npz"
             end
-           
+
             M=1;
             store_P = zeros(alpha_pts, aPts, 3)
             store_M = zeros(alpha_pts, aPts, 3)
 
             # get sign flip a
             if run_leaver
-                zerolist= readdlm("rate_sve/Imag_zero_$(n)$(l)$(m).dat")
+                zerolist= readdlm("rate_sve/Imag_zero_$(state_str).dat")
             else
-                zerolist= readdlm("rate_sve/Imag_zeroC_$(n)$(l)$(m).dat")
+                zerolist= readdlm("rate_sve/Imag_zeroC_$(state_str).dat")
             end
             itp = LinearInterpolation(zerolist[:, 1], zerolist[:, 2], extrapolation_bc=Line())
 
