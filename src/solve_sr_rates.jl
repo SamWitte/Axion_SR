@@ -1700,7 +1700,12 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                 result = (real_prod, real_prod * cos(theta)^2)
                 cache[key] = result
                 return result
-            catch
+            catch e
+                if debug && use_spherical_fallback
+                    println("ERROR in func_ang_pair: ", e)
+                    println("Quantum numbers: (l1,m1)=($l1,$m1), (l2,m2)=($l2,$m2), (l3,m3)=($l3,$m3), (l,m)=($l,$m)")
+                    println("theta=$theta, phi=$phi")
+                end
                 return 0.0, 0.0
             end
         end
@@ -1724,7 +1729,13 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             # Check timeout periodically
             if idx % 1000 == 0 && (time() - start_time) > timeout_seconds
                 if debug
-                    println("Angular MC integration timeout! Using spherical harmonics fallback.")
+                    method = use_spherical_fallback ? "spherical harmonics" : "spheroidals"
+                    println("Angular MC integration timeout after $(time() - start_time) seconds using $method! idx=$idx")
+                    if !use_spherical_fallback
+                        println("Attempting spherical harmonics fallback...")
+                    else
+                        println("Already using fallback! Returning partial result: CG=$CG, CG_2=$CG_2")
+                    end
                 end
                 # Fallback to spherical harmonics
                 if !use_spherical_fallback
@@ -1788,7 +1799,12 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         return CG, CG_2, use_spherical_fallback
     end
 
-    println("getting angles")
+    if debug
+        println("getting angles")
+        println("Quantum numbers: (l1,m1)=($l1,$m1), (l2,m2)=($l2,$m2), (l3,m3)=($l3,$m3), (l,m)=($l,$m)")
+        println("to_inf = $to_inf")
+        println("Energies: erg_1=$erg_1, erg_2=$erg_2, erg_3=$erg_3, erg=$erg")
+    end
     CG, CG_2, used_fallback = compute_angular_integral_adaptive(Z1, Z2, Z3, Z4, false, 30.0)
 
     if used_fallback && debug
