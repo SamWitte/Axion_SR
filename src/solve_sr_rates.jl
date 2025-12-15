@@ -1512,6 +1512,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                 tcnt += 1
                 if tcnt > 10
                     iszero = false
+                    println("Angular funciton zero....")
                     return 0.0
                 end
             end
@@ -1555,6 +1556,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                 rf_1 = radial_bound_NR(n1, l1, m1, mu, M, rlist)
                 erg_1 = erg_1G
             else
+                println("erg 1 failure....")
                 return 0.0
             end
         end
@@ -1591,6 +1593,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                     rf_2 = radial_bound_NR(n2, l2, m2, mu, M, rlist)
                     erg_2 = erg_2G
                 else
+                    println("erg 2 failure....")
                     return 0.0
                 end
 #                return 0.0
@@ -1623,6 +1626,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                 rf_3 = radial_bound_NR(n3, l3, m3, mu, M, rlist)
                 erg_3 = erg_3G
             else
+                println("erg 3 failure....")
                 return 0.0
             end
 #            return 0.0
@@ -1911,6 +1915,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     elseif length(outWF_fw) > 4
         midP = Int(round(length(rvals) - 3))
     else
+        println("WF not enough points.... return zero....")
         return 0.0
     end
     wronk  = (outWF_fw[midP] .* (outWF[midP+1] .- outWF[midP-1]) .-  outWF[midP] .* (outWF_fw[midP+1] .- outWF_fw[midP-1]) )./ (itp_rrstar.(rvals[midP+1]) .- itp_rrstar.(rvals[midP-1]))
