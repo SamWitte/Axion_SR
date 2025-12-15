@@ -1730,7 +1730,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             if idx % 1000 == 0 && (time() - start_time) > timeout_seconds
                 if debug
                     method = use_spherical_fallback ? "spherical harmonics" : "spheroidals"
-                    println("Angular MC integration timeout after $(time() - start_time) seconds using $method! idx=$idx")
+                    println("Angular MC integration timeout after $(time() - start_time) seconds using $(method)! idx=$idx")
                     if !use_spherical_fallback
                         println("Attempting spherical harmonics fallback...")
                     else
