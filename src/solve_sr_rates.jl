@@ -31,7 +31,7 @@ function assoc_legendre_P(l::Int, m::Int, x::Float64)::Float64
 
     # P_m^m(x) = (-1)^m * (2m-1)!! * (1-x²)^(m/2)
     if l == abs_m
-        return (-1)^abs_m * prod(2*k - 1 for k in 1:abs_m) * (1 - x^2)^(abs_m / 2)
+        return (-1)^abs_m * prod(2*k - 1 for k in 1:abs_m; init=1) * (1 - x^2)^(abs_m / 2)
     end
 
     # P_{m+1}^m(x) = x * (2m+1) * P_m^m(x)
