@@ -1593,7 +1593,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                 else
                     return 0.0
                 end
-                return 0.0
+#                return 0.0
             end
         end
     end
@@ -1625,7 +1625,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             else
                 return 0.0
             end
-            return 0.0
+#            return 0.0
         end
     end
     
