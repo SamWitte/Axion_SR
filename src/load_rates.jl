@@ -6,7 +6,7 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true)
     rP = 1 + sqrt.(1 - a^2)
     faFac = (M_pl ./ f_a)^4
     
-    rate_list = readdlm("rate_sve/load_rate_input_Nmax_$(Nmax).txt")
+    rate_list = readdlm(joinpath(@__DIR__, "rate_sve/load_rate_input_Nmax_$(Nmax).txt"))
     cnt = 1
     
     kill_lvls = []
@@ -171,7 +171,7 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true)
         # rates computed for fixed rP(a=0.9)
         rP_ratio = rP / (1 + sqrt.(1.0 - 0.9^2))
         
-        dirN = "rate_sve/"
+        dirN = joinpath(@__DIR__, "rate_sve/")
         ftag = "_LvrHc_"
         
         for i in 1:length(rate_list[:,1])
