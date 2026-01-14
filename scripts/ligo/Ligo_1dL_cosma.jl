@@ -124,7 +124,7 @@ println("Fa max : ", fa_max)
 
 # Random.seed!(2084339465932781399)
 
-data = open(readdlm, "../../BH_data/"*dataname*".dat")
+data = open(readdlm, "../../src/BH_data/"*dataname*".dat")
    
 Fname = "LIGO_"*dataname*"_TauMax_"*string(round(tau_max, sigdigits=2))
 Fname *= "_M_ax_"*string(round(ax_mass, sigdigits=4))
