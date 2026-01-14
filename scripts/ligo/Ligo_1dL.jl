@@ -126,7 +126,7 @@ dont_over_run = false
 
 # Random.seed!(2084339465932781399)
 
-data = open(readdlm, "../../BH_data/"*dataname*".dat")
+data = open(readdlm, "../../src/BH_data/"*dataname*".dat")
    
    
 Fname = "LIGO_"*dataname*"_TauMax_"*string(round(tau_max, sigdigits=2))
@@ -168,7 +168,7 @@ else
     high_spin_cut = nothing
 end
 
-check_exists = "../../output_mcmc/"*Fname*"_mcmc.dat"
+check_exists = "../../src/output_mcmc/"*Fname*"_mcmc.dat"
 if (!dont_over_run || !isfile(check_exists))
     time0=Dates.now()
     if !spinone

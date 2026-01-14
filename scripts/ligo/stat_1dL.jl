@@ -84,7 +84,7 @@ function profileL_func_minimize(data, mass_ax, Fname, Nsamples; fa_min=1e11, fa_
     
     samples = Array(chain)
     
-    fout = "../../output_mcmc/"*Fname*"_mcmc.dat"
+    fout = "../../src/output_mcmc/"*Fname*"_mcmc.dat"
     if isfile(fout) && over_run
         fin = readdlm(fout)
         fnew = cat(fin, samples, dims=1)
@@ -264,7 +264,7 @@ function profileL_func_minimize_spinone(data, Fname, Nsamples; minmass=1e-15, ma
     
     samples = Array(chain)
     
-    fout = "../../output_mcmc/"*Fname*"_mcmc.dat"
+    fout = "../../src/output_mcmc/"*Fname*"_mcmc.dat"
     if isfile(fout) && over_run
         fin = readdlm(fout)
         fnew = cat(fin, samples, dims=1)
