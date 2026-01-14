@@ -155,7 +155,7 @@ for i in 1:length(fileList)
     if kde_test
         print(i, "\t", value)
         faL = LinRange(log10.(fa_min), log10.(fa_max), 50)
-        writedlm("../../output_mcmc/KDE_"*string(i)*".dat", cat(faL, f_interp(faL), dims=2))
+        writedlm("../../src/output_mcmc/KDE_"*string(i)*".dat", cat(faL, f_interp(faL), dims=2))
     end
     
     f_low = log10.(fa_min)
@@ -209,4 +209,4 @@ else
 end
 
 sorted_out = sort(collect(eachrow(output_lim)), by = x -> x[1])
-writedlm("../../output_mcmc/Lim_"*Fname*".dat", sorted_out)
+writedlm("../../src/output_mcmc/Lim_"*Fname*".dat", sorted_out)
