@@ -54,7 +54,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     default_reltol, reltol_Thres = initialize_solver_tolerances(non_rel, high_p)
 
     # Override for testing (lines 93-95 in original)
-    default_reltol = 1e-7
+    # default_reltol = 1e-7
 
     # ============================================================================
     # QUANTUM LEVEL SETUP (spinone vs standard mode)
@@ -478,7 +478,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # BUILD CALLBACK SET
     # ============================================================================
     def_spin_tol = 1e-3
-    dt_guess = (maximum(SR_rates) ./ hbar .* 3.15e7)^(-1) ./ 5.0
+    dt_guess = abs.((maximum(SR_rates) ./ hbar .* 3.15e7)^(-1) ./ 5.0)
 
     if spinone
         # Spinone: minimal callbacks
@@ -502,9 +502,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         # Standard uses adaptive reltol array
         prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=reltol, abstol=1e-10)
     end
-
     sol = solve(prob, TRBDF2(autodiff=false), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e6)
-
     # ============================================================================
     # EXTRACT AND PROCESS OUTPUT
     # ============================================================================
