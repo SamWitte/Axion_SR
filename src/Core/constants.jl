@@ -31,9 +31,9 @@ These values control convergence, boundary condition enforcement, and energy tra
 const SOLVER_TOLERANCES = (
     bosenova_threshold = 1e-2,      # Bosenova detection: log-space tolerance for binding energy
     energy_floor = 1e-75,           # Minimum energy threshold to avoid underflow
-    ode_absolute_tight = 1e-30,     # Tight absolute tolerance for sensitive regions
-    ode_absolute_default = 1e-10,   # Default absolute tolerance
-    ode_relative_default = 1e-5,    # Default relative tolerance
+    ode_absolute_tight = 1e-35,     # Tight absolute tolerance for sensitive regions (increased from 1e-30)
+    ode_absolute_default = 1e-12,   # Default absolute tolerance (increased from 1e-10)
+    ode_relative_default = 1e-7,    # Default relative tolerance (increased from 1e-5)
     ode_relative_high = 1e-3,       # High-speed integration tolerance
     spin_mismatch = 1e-2,           # Spin boundary condition tolerance
 )
