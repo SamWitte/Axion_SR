@@ -54,7 +54,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     default_reltol, reltol_Thres = initialize_solver_tolerances(non_rel, high_p)
 
     # Override for testing (lines 93-95 in original)
-    default_reltol = 1e-7
+    default_reltol = 1e-4
 
     # ============================================================================
     # QUANTUM LEVEL SETUP (spinone vs standard mode)
