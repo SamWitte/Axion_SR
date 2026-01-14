@@ -124,36 +124,25 @@ function log_likelihood(theta, data, mass_ax; tau_max=1e4, non_rel=true, debug=f
         end
     end
     # Now convert M2 to q = M2/M1
-    data_q = copy(data_transformed)
-    data_q[:, 2] = data_q[:, 2] ./ data_q[:, 1]  # q = M2/M1
+    kde_data = copy(data_transformed)
+    kde_data[:, 2] = kde_data[:, 2] ./ kde_data[:, 1]  # q = M2/M1
 
-    # Now sample from the transformed data
-    maxI = size(data_q)[1]
-    idx_hold = rand(1:maxI, Nsamples)
-    sampled_data = data_q[idx_hold, :]
+    # Define prior ranges from the data
+    M1_min = minimum(kde_data[:, 1])
+    M1_max = maximum(kde_data[:, 1])
+    q_min = minimum(kde_data[:, 2])
+    q_max = 1.0  # By definition, q <= 1
 
-    ## note to self: check if strong correlations in mass/spin, could be something to think about putting Mf on cut
+    ## Sample M1 and q from uniform priors
     for i in 1:Nsamples
-        # Now sampled_data is in (M1, q, chi1, chi2) format
-        M1 = sampled_data[i, 1]
-        q_sample = sampled_data[i, 2]
+        # Sample M1 uniformly from [M1_min, M1_max]
+        M1 = rand(Uniform(M1_min, M1_max))
+
+        # Sample q uniformly from [q_min, q_max]
+        q_sample = rand(Uniform(q_min, q_max))
+
+        # Calculate M2 from q
         M2 = q_sample * M1
-
-        delt_M_use = delt_M
-        kde_data = []
-        N_min_kde = 50
-        if length(data_q[:,1]) <= N_min_kde
-            N_min_kde = length(data_q[:,1]) ./ 2
-        end
-
-        # Filter data based on M1 and q
-        while length(kde_data) < N_min_kde
-            kde_data = data_q[(data_q[:, 1] .>= M1 .* (1.0 .- delt_M_use)) .&
-                              (data_q[:, 1] .<= M1 .* (1.0 .+ delt_M_use)) .&
-                              (data_q[:, 2] .>= q_sample .* (1.0 .- delt_M_use)) .&
-                              (data_q[:, 2] .<= q_sample .* (1.0 .+ delt_M_use)), :]
-            delt_M_use *= 1.1
-        end
 
         if isnothing(high_spin_cut)
             s1 = sample_spin()
@@ -284,36 +273,25 @@ function log_likelihood_spinone(theta, data; tau_max=1e4, debug=false, Nsamples=
         end
     end
     # Now convert M2 to q = M2/M1
-    data_q = copy(data_transformed)
-    data_q[:, 2] = data_q[:, 2] ./ data_q[:, 1]  # q = M2/M1
+    kde_data = copy(data_transformed)
+    kde_data[:, 2] = kde_data[:, 2] ./ kde_data[:, 1]  # q = M2/M1
 
-    # Now sample from the transformed data
-    maxI = size(data_q)[1]
-    idx_hold = rand(1:maxI, Nsamples)
-    sampled_data = data_q[idx_hold, :]
+    # Define prior ranges from the data
+    M1_min = minimum(kde_data[:, 1])
+    M1_max = maximum(kde_data[:, 1])
+    q_min = minimum(kde_data[:, 2])
+    q_max = 1.0  # By definition, q <= 1
 
-    ## note to self: check if strong correlations in mass/spin, could be something to think about putting Mf on cut
+    ## Sample M1 and q from uniform priors
     for i in 1:Nsamples
-        # Now sampled_data is in (M1, q, chi1, chi2) format
-        M1 = sampled_data[i, 1]
-        q_sample = sampled_data[i, 2]
+        # Sample M1 uniformly from [M1_min, M1_max]
+        M1 = rand(Uniform(M1_min, M1_max))
+
+        # Sample q uniformly from [q_min, q_max]
+        q_sample = rand(Uniform(q_min, q_max))
+
+        # Calculate M2 from q
         M2 = q_sample * M1
-
-        delt_M_use = delt_M
-        kde_data = []
-        N_min_kde = 50
-        if length(data_q[:,1]) <= N_min_kde
-            N_min_kde = length(data_q[:,1]) ./ 2
-        end
-
-        # Filter data based on M1 and q
-        while length(kde_data) < N_min_kde
-            kde_data = data_q[(data_q[:, 1] .>= M1 .* (1.0 .- delt_M_use)) .&
-                              (data_q[:, 1] .<= M1 .* (1.0 .+ delt_M_use)) .&
-                              (data_q[:, 2] .>= q_sample .* (1.0 .- delt_M_use)) .&
-                              (data_q[:, 2] .<= q_sample .* (1.0 .+ delt_M_use)), :]
-            delt_M_use *= 1.1
-        end
 
         s1 = sample_spin()
         s2 = sample_spin()
