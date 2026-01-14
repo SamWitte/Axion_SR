@@ -7,12 +7,12 @@ using Dates
 using Interpolations
 # Include constants only if not already defined (avoid double-include when called from AxionSR module)
 if !@isdefined(GNew)
-    include("Core/constants.jl")
+    include("../src/Core/constants.jl")
 end
-include("Core/evolution_helpers.jl")
-include("Numerics/rate_computation.jl")
-include("solve_sr_rates.jl")
-include("load_rates.jl")
+include("../src/Core/evolution_helpers.jl")
+include("../src/Numerics/rate_computation.jl")
+include("../src/solve_sr_rates.jl")
+include("../src/load_rates.jl")
 using Printf
 using .RateComputation
 
