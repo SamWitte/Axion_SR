@@ -5,7 +5,7 @@ using Turing
 using StatsPlots
 using DelimitedFiles
 using Suppressor
-@suppress include("super_rad.jl")
+@suppress include("../../src/super_rad.jl")
 using MCMCDiagnosticTools
 using Dates
 using KernelDensity
