@@ -112,10 +112,6 @@ function log_likelihood(theta, data, mass_ax; tau_max=1e4, non_rel=true, debug=f
 
     log_f = theta
     sum_loglike = 0.0
-    maxI = size(data)[1]
-    idx_hold = rand(1:maxI, Nsamples)
-
-    sampled_data = data[idx_hold, :]
 
     # Convert data to (M1, q, chi1, chi2) format where M1 >= M2 and q = M2/M1
     # Ensure M1 is the larger mass by swapping if needed
@@ -131,20 +127,17 @@ function log_likelihood(theta, data, mass_ax; tau_max=1e4, non_rel=true, debug=f
     data_q = copy(data_transformed)
     data_q[:, 2] = data_q[:, 2] ./ data_q[:, 1]  # q = M2/M1
 
+    # Now sample from the transformed data
+    maxI = size(data_q)[1]
+    idx_hold = rand(1:maxI, Nsamples)
+    sampled_data = data_q[idx_hold, :]
+
     ## note to self: check if strong correlations in mass/spin, could be something to think about putting Mf on cut
     for i in 1:Nsamples
-        M1_orig = sampled_data[i, 1]
-        M2_orig = sampled_data[i, 2]
-
-        # Ensure M1 >= M2, swap if needed
-        if M2_orig > M1_orig
-            M1 = M2_orig
-            M2 = M1_orig
-        else
-            M1 = M1_orig
-            M2 = M2_orig
-        end
-        q_sample = M2 / M1
+        # Now sampled_data is in (M1, q, chi1, chi2) format
+        M1 = sampled_data[i, 1]
+        q_sample = sampled_data[i, 2]
+        M2 = q_sample * M1
 
         delt_M_use = delt_M
         kde_data = []
@@ -279,10 +272,6 @@ function log_likelihood_spinone(theta, data; tau_max=1e4, debug=false, Nsamples=
 
     mass_ax = 10 .^theta
     sum_loglike = 0.0
-    maxI = size(data)[1]
-    idx_hold = rand(1:maxI, Nsamples)
-
-    sampled_data = data[idx_hold, :]
 
     # Convert data to (M1, q, chi1, chi2) format where M1 >= M2 and q = M2/M1
     # Ensure M1 is the larger mass by swapping if needed
@@ -298,20 +287,17 @@ function log_likelihood_spinone(theta, data; tau_max=1e4, debug=false, Nsamples=
     data_q = copy(data_transformed)
     data_q[:, 2] = data_q[:, 2] ./ data_q[:, 1]  # q = M2/M1
 
+    # Now sample from the transformed data
+    maxI = size(data_q)[1]
+    idx_hold = rand(1:maxI, Nsamples)
+    sampled_data = data_q[idx_hold, :]
+
     ## note to self: check if strong correlations in mass/spin, could be something to think about putting Mf on cut
     for i in 1:Nsamples
-        M1_orig = sampled_data[i, 1]
-        M2_orig = sampled_data[i, 2]
-
-        # Ensure M1 >= M2, swap if needed
-        if M2_orig > M1_orig
-            M1 = M2_orig
-            M2 = M1_orig
-        else
-            M1 = M1_orig
-            M2 = M2_orig
-        end
-        q_sample = M2 / M1
+        # Now sampled_data is in (M1, q, chi1, chi2) format
+        M1 = sampled_data[i, 1]
+        q_sample = sampled_data[i, 2]
+        M2 = q_sample * M1
 
         delt_M_use = delt_M
         kde_data = []
