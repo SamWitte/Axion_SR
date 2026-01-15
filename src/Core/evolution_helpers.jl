@@ -139,8 +139,8 @@ Non-relativistic mode uses tighter tolerances (1e-5 vs 1e-3).
 High-precision mode uses much tighter threshold (1e-3 vs 0.1).
 """
 function initialize_solver_tolerances(non_rel::Bool, high_p::Bool)::Tuple{Float64, Float64}
-    default_reltol = non_rel ? 1e-5 : 1e-3
-    reltol_Thres = high_p ? 1e-3 : 0.1
+    default_reltol = non_rel ? 1e-8 : 1e-7
+    reltol_Thres = high_p ? 1e-7 : 1e-6
     return (default_reltol, reltol_Thres)
 end
 
@@ -179,7 +179,7 @@ function setup_state_vectors(idx_lvl::Int, aBH::Real, M_BH::Real, e_init::Real, 
     y0 = log.(y0)
 
     # Tighter tolerance for spin and mass
-    def_spin_tol = 1e-3
+    def_spin_tol = 1e-10
     append!(reltol, def_spin_tol)
     append!(reltol, def_spin_tol)
 
