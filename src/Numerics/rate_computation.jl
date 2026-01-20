@@ -35,10 +35,11 @@ export compute_sr_rates, pre_computed_sr_rates
 # This is a local implementation that the compute_sr_rates function depends on
 function pre_computed_sr_rates(n, l, m, alph, M; n_high=20, n_low=20, delt_a=0.001, cheby=true)
     state_str = format_state_for_filename(n, l, m)
+    rate_sve_dir = joinpath(@__DIR__, "..", "rate_sve")
     if !cheby
-        fn = "rate_sve/Imag_zero_$(state_str).dat"
+        fn = joinpath(rate_sve_dir, "Imag_zero_$(state_str).dat")
     else
-        fn = "rate_sve/Imag_zeroC_$(state_str).dat"
+        fn = joinpath(rate_sve_dir, "Imag_zeroC_$(state_str).dat")
     end
     if isfile(fn)
         zerolist = readdlm(fn)
@@ -66,9 +67,9 @@ function pre_computed_sr_rates(n, l, m, alph, M; n_high=20, n_low=20, delt_a=0.0
     if run_high
         a_list_high = LinRange(a_mid + delt_a, maxSpin, n_high)
         if !cheby
-            fn = "rate_sve/Imag_erg_pos_$(state_str).npz"
+            fn = joinpath(rate_sve_dir, "Imag_erg_pos_$(state_str).npz")
         else
-            fn = "rate_sve/Imag_ergC_pos_$(state_str).npz"
+            fn = joinpath(rate_sve_dir, "Imag_ergC_pos_$(state_str).npz")
         end
         if isfile(fn)
             file_in = npzread(fn)
@@ -92,9 +93,9 @@ function pre_computed_sr_rates(n, l, m, alph, M; n_high=20, n_low=20, delt_a=0.0
     if run_low
         a_list_low = LinRange(minSpin, a_mid - delt_a, n_low)
         if !cheby
-            fn = "rate_sve/Imag_erg_neg_$(state_str).npz"
+            fn = joinpath(rate_sve_dir, "Imag_erg_neg_$(state_str).npz")
         else
-            fn = "rate_sve/Imag_ergC_neg_$(state_str).npz"
+            fn = joinpath(rate_sve_dir, "Imag_ergC_neg_$(state_str).npz")
         end
         if isfile(fn)
             file_in = npzread(fn)
