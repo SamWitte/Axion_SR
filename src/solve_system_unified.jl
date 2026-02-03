@@ -105,8 +105,8 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         rates = Dict()  # Not used in spinone mode
         interp_funcs = []
     else
-        # Standard: Compute interpolated rates
-        SR_rates, interp_funcs, interp_dict = compute_sr_rates(modes, M_BH, aBH, alph, cheby=cheby)
+        # Standard: Compute interpolated rates using smooth symlog interpolation
+        SR_rates, interp_funcs, interp_dict = compute_sr_rates_smooth(modes, M_BH, aBH, alph, cheby=cheby)
         rates = load_rate_coeffs(mu, M_BH, aBH, fa, Nmax, SR_rates; non_rel=non_rel)
         Mvars = [mu, fa, Emax2, aBH, M_BH, impose_low_cut]
     end
