@@ -11,10 +11,12 @@ if !@isdefined(GNew)
 end
 include("Core/evolution_helpers.jl")
 include("Numerics/rate_computation.jl")
+include("Numerics/rate_interpolation.jl")
 include("solve_sr_rates.jl")
 include("load_rates.jl")
 using Printf
 using .RateComputation
+using .RateInterpolation
 
 function super_rad_check(M_BH, aBH, massB, f_a; tau_max=1e4, alpha_max_cut=100.0, debug=false, impose_low_cut=0.01, stop_on_a=0, eq_threshold=1e-120, abstol=1e-35, non_rel=true, high_p=true, N_pts_interp=100, N_pts_interpL=100, Nmax=3, cheby=true, spinone=false)
 
