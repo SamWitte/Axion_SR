@@ -77,8 +77,8 @@ function extract_valid_rates_at_alpha(data_3d, alph, M; floor_threshold=RATE_FLO
     rates = reshape(data_3d[:, :, 3], n_alpha, n_spin)
 
     # Apply scale factor and normalize
-    rates .*= 2.0
-    rates ./= (GNew * M)
+    rates = rates .* 2.0
+    rates = rates ./ (GNew * M)
 
     # Create 2D interpolator to get rates at our specific alpha
     itp_2d = LinearInterpolation((alpha_vals, spin_vals), rates, extrapolation_bc=Line())
@@ -98,8 +98,8 @@ end
 Build a smooth interpolation that:
 1. Uses valid (non-floored) positive rates from the positive file
 2. Uses valid (non-floored) negative rates from the negative file
-3. Lets the interpolation naturally cross zero where the data dictates
-4. No artificial forcing - just smooth interpolation through real data
+3. Computes linthresh dynamically from the smallest rate values
+4. Uses linear interpolation in symlog space
 """
 function pre_computed_sr_rates_unified(n, l, m, alph, M; cheby::Bool=true)
     state_str = format_state_for_filename(n, l, m)
@@ -185,20 +185,12 @@ function pre_computed_sr_rates_unified(n, l, m, alph, M; cheby::Bool=true)
         return a_mid, interp_func, (minSpin, maxSpin)
     end
 
-    # Transform to symlog space for interpolation
-    # Set linthresh to the smallest non-zero rate value
-    # This ensures smooth linear behavior through zero at the scale of real data
-    nonzero_rates = abs.(unique_rates[unique_rates .!= 0])
-    linthresh = isempty(nonzero_rates) ? 1e-30 : minimum(nonzero_rates)
-    rates_symlog = symlog.(unique_rates, linthresh)
-
-    # Create interpolation in symlog space
-    itp = LinearInterpolation(unique_spins, rates_symlog, extrapolation_bc=Line())
+    # Create linear interpolation directly on rates (no symlog transformation)
+    itp = LinearInterpolation(unique_spins, unique_rates, extrapolation_bc=Line())
 
     # Create the final interpolation function
     function interp_func(aspin)
-        val_symlog = itp(aspin)
-        return inverse_symlog(val_symlog, linthresh)
+        return itp(aspin)
     end
 
     return a_mid, interp_func, (minimum(unique_spins), maximum(unique_spins))
@@ -208,6 +200,7 @@ end
     compute_sr_rates_smooth(qtm_cfigs, M_BH, aBH, alph; cheby=true)
 
 Drop-in replacement for compute_sr_rates() with smooth interpolation.
+Uses linear interpolation in symlog space with dynamically computed linthresh.
 """
 function compute_sr_rates_smooth(qtm_cfigs, M_BH, aBH, alph; cheby::Bool=true)
     SR_rates = zeros(length(qtm_cfigs))
