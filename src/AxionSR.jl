@@ -100,6 +100,9 @@ include("Core/load_rates_structured.jl")
 
 # Numerics modules
 include("Numerics/rate_computation.jl")
+include("Numerics/rate_interpolation.jl")
+using .RateComputation
+using .RateInterpolation
 include("Numerics/eigenvalue_computation.jl")
 include("Numerics/scattering_rates.jl")
 
@@ -116,6 +119,7 @@ export solve_system
 
 # Public exports - Rate computation
 export RateComputation
+export RateInterpolation
 export RateCoefficients
 
 # Public exports - Eigenvalue computation
