@@ -25,7 +25,7 @@ function super_rad_check(M_BH, aBH, massB, f_a; tau_max=1e4, alpha_max_cut=100.0
     elseif alph .< impose_low_cut
         return aBH, M_BH
     end
-
+    # println("running.... ", massB * M_BH * GNew)
     # Use unified solve_system with spinone parameter
     if !spinone
         final_spin, final_BH = solve_system(massB, f_a, aBH, M_BH, tau_max, debug=debug, impose_low_cut=impose_low_cut, stop_on_a=stop_on_a, eq_threshold=eq_threshold, abstol=abstol, non_rel=non_rel, high_p=high_p, N_pts_interp=N_pts_interp, N_pts_interpL=N_pts_interpL, Nmax=Nmax, cheby=cheby, spinone=false)
