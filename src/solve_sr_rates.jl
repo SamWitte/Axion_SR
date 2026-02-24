@@ -1021,7 +1021,8 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=5000, iter=5000
                 SR211_g = sr_rates(n, l, m, alph ./ (GNew * M), M, a)
                 
                 if SR211_g == 0
-                    SR211_g = -1e-10 .* mu
+		    println("here.... \n")
+                    SR211_g = 1e-20 .* mu
                 end
                 w0 = (ergL(n, l, m, alph ./ (GNew * M), M, a; full=false) .+ im * SR211_g) .* GNew * M
                 # print("test \t ", w0, "\n")
