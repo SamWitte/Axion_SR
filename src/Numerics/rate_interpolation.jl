@@ -207,19 +207,6 @@ function compute_sr_rates_smooth(qtm_cfigs, M_BH, aBH, alph; cheby::Bool=true)
     interp_functions = []
 
     for (idx, (n, l, m, alph_threshold)) in enumerate(qtm_cfigs)
-        if m > 5
-            interp_func = aspin -> 1e-100
-            push!(interp_functions, interp_func)
-            SR_rates[idx] = interp_func(aBH)
-            continue
-        end
-
-        if alph >= alph_threshold
-            interp_func = aspin -> 1e-100
-            push!(interp_functions, interp_func)
-            SR_rates[idx] = interp_func(aBH)
-            continue
-        end
 
         a_mid, interp_func, a_range = pre_computed_sr_rates_unified(n, l, m, alph, M_BH; cheby=cheby)
         push!(interp_functions, interp_func)
