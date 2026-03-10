@@ -31,7 +31,7 @@ function assoc_legendre_P(l::Int, m::Int, x::Float64)::Float64
 
     # P_m^m(x) = (-1)^m * (2m-1)!! * (1-x²)^(m/2)
     if l == abs_m
-        return (-1)^abs_m * prod(2*k - 1 for k in 1:abs_m; init=1) * (1 - x^2)^(abs_m / 2)
+        return (-1)^abs_m * prod(2*k - 1 for k in 1:abs_m; init=1.0) * (1 - x^2)^(abs_m / 2)
     end
 
     # P_{m+1}^m(x) = x * (2m+1) * P_m^m(x)
@@ -1501,7 +1501,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         
         
         kk_pxy = real(sqrt.(erg_pxy.^2 .- alph.^2))
-        rmax = 1/kk_pxy .* 20.0 # Need prefactor here i think...
+        rmax = 1/kk_pxy .* 30.0 # Need prefactor here i think...
         
         val, iszero = integral4(l1, m1, l2, m2, l3, -m3, l, -m)
         tcnt = 0
@@ -1689,7 +1689,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     Z3 = spheroidals(l3, m3, a, erg_3)
     Z4 = spheroidals(l, m, a, erg)
 
-    function compute_angular_integral_adaptive(Z1, Z2, Z3, Z4, use_spherical_fallback=false, timeout_seconds=30.0)
+    function compute_angular_integral_adaptive(Z1, Z2, Z3, Z4, use_spherical_fallback=false, timeout_seconds=180.0, nang_max=Nang)
         """
         Adaptive Monte Carlo integration with timeout and fallback to spherical harmonics.
         Returns (CG, CG_2, used_fallback) where CG and CG_2 are the integrated values.
@@ -1698,7 +1698,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         # Simple cache for spheroidal evaluations (key = (theta, phi) rounded to grid, value = product)
         cache = Dict{Tuple{Float64, Float64}, Tuple{Float64, Float64}}()
         CACHE_GRID = 1000  # Round to ~3 decimal places for caching
-
+        
         function cache_key(theta::Float64, phi::Float64)
             return (round(theta * CACHE_GRID) / CACHE_GRID, round(phi * CACHE_GRID) / CACHE_GRID)
         end
@@ -1739,13 +1739,14 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         CG_2 = 0.0
         ang_cvrg = false
         idx = 0
-        check_interval = 100  # Check convergence every 100 samples
+        check_interval = 1000  # Check convergence every 1000 samples
         CG_old = 0.0
         CG_2_old = 0.0
+        first_check = true  # Prevent false convergence on first check when CG_old=0 by init
         max_iterations = 100000  # Safeguard against infinite loops
         tol = 1e-4
-        min_samples = 200  # Require minimum samples before checking convergence
-        max_samples = 50000  # Stop if we exceed this many samples
+        min_samples = 5000  # Require minimum samples before checking convergence
+        max_samples = max(nang_max, 50000)  # Use Nang if larger than default
 
         # Track time to implement timeout
         start_time = time()
@@ -1764,7 +1765,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                 end
                 # Fallback to spherical harmonics
                 if !use_spherical_fallback
-                    return compute_angular_integral_adaptive(Z1, Z2, Z3, Z4, true, timeout_seconds)
+                    return compute_angular_integral_adaptive(Z1, Z2, Z3, Z4, true, timeout_seconds, nang_max)
                 else
                     # Already tried fallback, return best estimate with warning
                     if idx > 0
@@ -1803,7 +1804,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                     test2 = abs(CG_2_avg - CG_2_old)
                 end
 
-                if (test1 < tol) && (test2 < tol)
+                if !first_check && (test1 < tol) && (test2 < tol)
                     ang_cvrg = true
                 elseif idx > max_samples
                     # Force convergence if we've reached max samples
@@ -1811,6 +1812,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                 else
                     CG_old = CG_avg
                     CG_2_old = CG_2_avg
+                    first_check = false
                 end
             end
         end
