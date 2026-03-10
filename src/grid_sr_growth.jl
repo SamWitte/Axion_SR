@@ -244,11 +244,13 @@ function main_gg(run_leaver, run_analytic, solve_for_zeros, solve_gridded)
                             e_imgP = find_im_part(10 .^ alphList[i] ./ (GNew .* M), M, alistP[j], n, l, m; Ntot_force=Ntot_safe, return_both=false, for_s_rates=true)
                         else
                             if j == 1
+
                                 wR, e_imgP = eigensys_Cheby(M, alistP[j], 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=npts_use, Iter=Iter, cvg_acc=cvg_acc, prec=prec, sfty_run=true, L=Lcheb)
                                 erg_store = wR + im .* e_imgP
                             else
 
                                 wR, e_imgP = eigensys_Cheby(M, alistP[j], 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=npts_use, Iter=Iter, cvg_acc=cvg_acc, prec=prec, sfty_run=true, L=Lcheb, nu_guess=erg_store)
+
                                 erg_store = wR + im .* e_imgP .* (1.0 .+ a_diff)
                             end
                         end
