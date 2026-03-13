@@ -329,7 +329,9 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         du = get_du(integrator)
         u_real = exp.(u)
         rate_keys = collect(keys(rates))
-
+        
+        SR_rates_local = [func(u_real[spinI]) for func in interp_funcs]
+        
         all_contribs = zeros(idx_lvl)
         test = zeros(idx_lvl)
         u_fake = u_real * 1.1
@@ -341,12 +343,12 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
                 u_real[i] = bn_list[i]
                 du[i] *= 0
             end
-            all_contribs[i] = SR_rates[i] .* u_real[i] ./ mu
-            test[i] = SR_rates[i] .* u_fake[i] ./ mu
+            all_contribs[i] = SR_rates_local[i] .* u_real[i] ./ mu
+            test[i] = SR_rates_local[i] .* u_fake[i] ./ mu
         end
 
         for i in 1:idx_lvl
-            if (u[i] .< log(1e-75)) && (SR_rates[i] < 0)
+            if (u[i] .< log(1e-75)) && (SR_rates_local[i] < 0)
                 turn_off[i] = true
             end
         end
