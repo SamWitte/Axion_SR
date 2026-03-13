@@ -56,6 +56,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # Override for testing (lines 93-95 in original)
     # default_reltol = 1e-7
 
+
     # ============================================================================
     # QUANTUM LEVEL SETUP (spinone vs standard mode)
     # ============================================================================
@@ -192,8 +193,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         else
             # Standard: Interpolated rates
             SR_rates_local = [func(u_real[spinI]) for func in interp_funcs]
-
-            # Emax2 cutoff for 211 level
+	    # Emax2 cutoff for 211 level
             if (u_real[1] .> Emax2) && (SR_rates_local[1] > 0)
                 SR_rates_local[1] *= 0.0
             end
@@ -515,7 +515,6 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
 
     spinBH = [exp(sol.u[i][spinI]) for i in 1:length(sol.u)]
     MassB = [exp(sol.u[i][massI]) for i in 1:length(sol.u)]
-
     if return_all_info
         return sol.t, state_out, modes, spinBH, MassB
     end

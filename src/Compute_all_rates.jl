@@ -73,14 +73,15 @@ check_err = parsed_args["check_err"];
 
 print(S1, "\t", S2, "\t", S3, "\t", S4, "\n")
 
-function main(;kpts=14, rpts=1000, rmaxT=100, Nang=5000000, Npts_Bnd=500)
+function main(;kpts=14, rpts=1500, rmaxT=100, Nang=5000000, Npts_Bnd=1000)
     a = 0.95
     M = 1.0
-    Ntot_safe=20000
+    Ntot_safe=30000
     NON_REL = false
     
     prec=200
     cvg_acc=1e-20
+
     NptsCh_Min=40
     NptsCh_Max=70
     iterC=10
