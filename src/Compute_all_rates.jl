@@ -19,15 +19,15 @@ function parse_commandline()
             
         "--S1"
             arg_type = String
-            default = "322"
+            default = "988"
             
         "--S2"
             arg_type = String
-            default = "322"
+            default = "988"
             
         "--S3"
             arg_type = String
-            default = "211"
+            default = "544"
             
         "--S4"
             arg_type = String
@@ -80,7 +80,7 @@ function main(;kpts=14, rpts=1000, rmaxT=100, Nang=5000000, Npts_Bnd=500)
     NON_REL = false
     
     prec=200
-    cvg_acc=1e-10
+    cvg_acc=1e-20
     NptsCh_Min=40
     NptsCh_Max=70
     iterC=10
