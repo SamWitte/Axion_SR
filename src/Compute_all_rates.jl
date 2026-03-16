@@ -88,7 +88,7 @@ function main(;kpts=14, rpts=1500, rmaxT=100, Nang=5000000, Npts_Bnd=1000)
     Lcheb=4
     der_acc=1e-20
     
-    debug=false
+    debug=true
     overwrite_file = false
     
     flag_file = "fishy_rates.dat"
@@ -98,20 +98,13 @@ function main(;kpts=14, rpts=1500, rmaxT=100, Nang=5000000, Npts_Bnd=1000)
     n2, l2, m2 = parse_state_from_args(S2)
     n3, l3, m3 = parse_state_from_args(S3)
 
-    min_m = minimum([m1, m2, m3])
+    min_m = minimum([m1, m2])
     alpha_max = a .* min_m ./ (2 .* (1 .+ sqrt.(1 .- a.^2))) .* 1.03
 
     alpha_list = LinRange(alpha_min, alpha_max, alpha_pts)
     NptsCh_list = Int.(round.(LinRange(NptsCh_Min, NptsCh_Max, alpha_pts)))
 
     output_sve = zeros(alpha_pts)
-
-    # Handle special case where states are equal and m values sum to > 9
-    if (n1 == n2) && (l1 == l2) && (m1 == m2) && (m1 + m2 > 9)
-        n3 = l1 + l2 + 1
-        l3 = l1 + l2
-        m3 = m1 + m2
-    end
 
     if S4 == "BH"
         to_inf = false
@@ -134,8 +127,8 @@ function main(;kpts=14, rpts=1500, rmaxT=100, Nang=5000000, Npts_Bnd=1000)
 
            
             h_mve = (0.2) ./ rmax_ratio
-           
-            output_sve[i] = gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, Npts_Bnd=Npts_Bnd, eps_fac=1e-3, Ntot_safe=Ntot_safe, Nang=Nang, NON_REL=NON_REL, h_mve=h_mve, to_inf=to_inf, rmaxT=rmaxT, run_leaver=run_leaver, NptsCh=NptsCh_list[i], cvg_acc=cvg_acc, prec=prec, iterC=iterC, debug=debug, der_acc=der_acc, Lcheb=Lcheb, use_heunc=use_heunc)
+	    println("h_mve \t", h_mve)           
+            output_sve[i] = gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, Npts_Bnd=Npts_Bnd, eps_fac=1e-3, Ntot_safe=Ntot_safe, Nang=Nang, NON_REL=NON_REL, h_mve=h_mve, to_inf=to_inf, rmaxT=rmaxT, run_leaver=run_leaver, NptsCh=NptsCh_list[i], cvg_acc=cvg_acc, prec=prec, iterC=iterC, debug=debug, der_acc=der_acc, Lcheb=Lcheb, use_heunc=false)
             
             if (i > 5)&&(i < (alpha_pts - 4))&&(output_sve[i] > 0.0)
                 itp = LinearInterpolation(log10.(alpha_list[1:i-1]), log10.(output_sve[1:i-1]), extrapolation_bc=Line())
