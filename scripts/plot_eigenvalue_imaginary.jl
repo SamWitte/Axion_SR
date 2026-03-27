@@ -27,12 +27,12 @@ include(joinpath(src_dir, "solve_sr_rates.jl"))
     adaptive_alpha_sampling_simple(mu_min, mu_max, M_BH, a, n, l, m,
                                    alpha_coarse_spacing, alpha_fine_spacing)
 
-Generate adaptive alpha sampling with manual spacing control.
+Generate adaptive alpha sampling by detecting zero crossings in derivatives.
 
 Strategy:
-1. Sparse coarse sampling (e.g., 0.05 spacing in log-alpha) across full range to probe for transition
-2. Fine sampling (e.g., 0.001 spacing in alpha) in detected transition region
-3. Minimal computation, user controls spacing directly
+1. Coarse run: sparse log-spaced sampling across full range to probe for zero-crossing point
+2. Fine run: linear-spaced grid from 80% of zero-crossing alpha to larger values
+3. Stop fine run when eigenvalue becomes negative
 
 Arguments:
 - mu_min, mu_max: bounds of mu range
@@ -42,7 +42,7 @@ Arguments:
 - alpha_coarse_spacing: spacing for coarse points (e.g., 0.05 in log10 scale)
 - alpha_fine_spacing: spacing for fine points (e.g., 0.001 in linear alpha)
 
-Returns: sorted array of alpha values with specified density
+Returns: tuple (alpha_values, imag_values) - sorted alpha array and corresponding imaginary parts
 """
 function adaptive_alpha_sampling_simple(mu_min, mu_max, M_BH, a, n, l, m,
                                         alpha_coarse_spacing=0.05, alpha_fine_spacing=0.001)
@@ -53,37 +53,76 @@ function adaptive_alpha_sampling_simple(mu_min, mu_max, M_BH, a, n, l, m,
     log_alpha_coarse = range(log10(alpha_min), log10(alpha_max), step=alpha_coarse_spacing)
     alpha_coarse = 10 .^ log_alpha_coarse
 
-    # Phase 2: Probe coarse points to find transition
-    # Transition is where imaginary part starts to decay significantly
-    max_imag = 0.0
-    transition_idx = 1
-    for (i, alpha) in enumerate(alpha_coarse)
+    # Phase 2: Probe coarse points to find where derivative of imaginary part is zero
+    # This identifies the transition point from growth to decay
+    coarse_imag = Float64[]
+    alpha_erg_pairs = Tuple{Float64, Complex}[]  # Store (alpha, erg) pairs to reuse
+    for alpha in alpha_coarse
         try
             mu = alpha / (M_BH * GNew)
             erg_r, erg = find_im_part(mu, M_BH, a, n, l, m; return_both=true, for_s_rates=true, Ntot_force=3000, debug=false)
-            imag_val = imag(erg)
-            if imag_val > max_imag
-                max_imag = imag_val
-                transition_idx = i
-            end
+            imag_part = imag(erg)
+            push!(coarse_imag, imag_part)
+            push!(alpha_erg_pairs, (alpha, erg))
         catch
+            push!(coarse_imag, NaN)
         end
     end
 
-    # Phase 3: Find where decay starts (roughly 80% of max, or within transition region)
-    decay_start_idx = max(1, transition_idx - 2)
-    alpha_decay_start = alpha_coarse[decay_start_idx]
+    # Phase 3: Find first point where derivative changes sign (zero crossing)
+    zero_crossing_idx = 1
+    for i in 2:length(coarse_imag)-1
+        if !isnan(coarse_imag[i-1]) && !isnan(coarse_imag[i]) && !isnan(coarse_imag[i+1])
+            deriv_before = coarse_imag[i] - coarse_imag[i-1]
+            deriv_after = coarse_imag[i+1] - coarse_imag[i]
+            # Check for zero crossing: derivative changes from positive to negative
+            if deriv_before > 0 && deriv_after < 0
+                zero_crossing_idx = i
+                break
+            end
+        end
+    end
 
-    # Phase 4: Generate fine linear-spaced sampling in transition region
-    # Use linear spacing in alpha (not log) for fine resolution
-    alpha_fine = alpha_decay_start:alpha_fine_spacing:alpha_max
-    alpha_fine = collect(alpha_fine)
+    # Phase 4: Define fine grid starting at 80% of the zero-crossing alpha value
+    alpha_zero_crossing = alpha_coarse[zero_crossing_idx]
+    alpha_fine_start = 0.8 * alpha_zero_crossing
 
-    # Phase 5: Combine coarse + fine, keeping only those in proper range
-    alpha_all = vcat(alpha_coarse, alpha_fine)
-    alpha_adaptive = sort(unique(round.(alpha_all, digits=8)))
+    # Phase 5: Generate fine linear-spaced sampling, stopping when eigenvalue becomes negative
+    alpha_erg_fine_pairs = Tuple{Float64, Complex}[]
+    alpha = alpha_fine_start
+    while alpha <= alpha_max
+        try
+            mu = alpha / (M_BH * GNew)
+            erg_r, erg = find_im_part(mu, M_BH, a, n, l, m; return_both=true, for_s_rates=true, Ntot_force=3000, debug=false)
+            imag_part = imag(erg)
 
-    return alpha_adaptive
+            # Stop if eigenvalue becomes negative
+            if imag_part < 0
+                break
+            end
+            push!(alpha_erg_fine_pairs, (alpha, erg))
+        catch
+            # If computation fails, try to continue
+        end
+        alpha += alpha_fine_spacing
+    end
+
+    # Phase 6: Combine coarse + fine pairs, deduplicate, and sort
+    all_pairs = vcat(alpha_erg_pairs, alpha_erg_fine_pairs)
+    # Deduplicate by alpha values rounded to 8 decimals
+    unique_pairs = Dict{Float64, Complex}()
+    for (alpha, erg) in all_pairs
+        alpha_key = round(alpha, digits=8)
+        if !haskey(unique_pairs, alpha_key)
+            unique_pairs[alpha_key] = erg
+        end
+    end
+
+    # Sort by alpha
+    sorted_alphas = sort(collect(keys(unique_pairs)))
+    sorted_ergs = [unique_pairs[alpha] for alpha in sorted_alphas]
+
+    return sorted_alphas, sorted_ergs
 end
 
 println("="^80)
@@ -92,16 +131,16 @@ println("System: 1 solar mass black hole at various spins")
 println("="^80)
 
 # Physical parameters
-M_BH = 1.0  # Solar masses (all calculations in these units)
+M_BH = 10.0  # Solar masses (all calculations in these units)
 @printf "\n[SETUP] Black hole mass: M = %.1f M☉\n" M_BH
 
 # Spin parameters to explore
-spins = [0.0, 0.5, 0.7, 0.9, 0.95, 0.99]
+spins = [0.95]
 @printf "[SETUP] Spin parameters: %s\n" join(spins, ", ")
 
 # Physical constraint: 0.03 ≤ α = μ * M * G_N ≤ 1
 alpha_min = 0.03
-alpha_max = 1.0
+alpha_max = 1.5
 mu_min = alpha_min / (M_BH * GNew)
 mu_max = alpha_max / (M_BH * GNew)
 
@@ -112,12 +151,13 @@ mu_max = alpha_max / (M_BH * GNew)
 # Quantum levels to consider: (n, l, m)
 quantum_levels = [
     (2, 1, 1),
-    (3, 1, 1),
-    (3, 2, 1),
     (3, 2, 2),
-    (4, 1, 1),
-    (4, 3, 1),
     (4, 3, 3),
+    (5, 4, 4),
+    (6, 5, 5),
+    (7, 6, 6),
+    (8, 7, 7),
+    
 ]
 @printf "[SETUP] Quantum levels: %d\n" length(quantum_levels)
 
@@ -135,7 +175,7 @@ for (n, l, m) in quantum_levels
     for a in spins
         # Compute adaptive alpha sampling for this quantum state
         @printf "\nComputing adaptive sampling for (n,l,m,a) = (%d,%d,%d,%.2f)...\n" n l m a
-        alpha_values = adaptive_alpha_sampling_simple(mu_min, mu_max, M_BH, a, n, l, m, 0.05, 0.002)
+        alpha_values, erg_values = adaptive_alpha_sampling_simple(mu_min, mu_max, M_BH, a, n, l, m, 0.15, 0.01)
         mu_values = alpha_values ./ (M_BH * GNew)
         n_alpha = length(alpha_values)
         @printf "  Sampled %d alpha points\n" n_alpha
@@ -143,26 +183,22 @@ for (n, l, m) in quantum_levels
             @printf "    Spacing: min = %.2e, max = %.2e\n" minimum(diff(alpha_values)) maximum(diff(alpha_values))
         end
 
-        for (i, mu) in enumerate(mu_values)
+        if !haskey(eigenvalue_data, (n, l, m, a))
+            eigenvalue_data[(n, l, m, a)] = (Float64[], Float64[], Float64[])
+        end
+
+        mu_arr, alpha_arr, imag_arr = eigenvalue_data[(n, l, m, a)]
+        for (i, (alpha, erg)) in enumerate(zip(alpha_values, erg_values))
             if i % max(1, div(n_alpha, 5)) == 0
                 @printf "  State (%d,%d,%d,%.2f): %d / %d points\n" n l m a i n_alpha
             end
 
-            try
-                erg_r, erg = find_im_part(mu, M_BH, a, n, l, m; return_both=true, for_s_rates=true, Ntot_force=5000, debug=false)
-
-                if !haskey(eigenvalue_data, (n, l, m, a))
-                    eigenvalue_data[(n, l, m, a)] = (Float64[], Float64[], Float64[])
-                end
-
-                mu_arr, alpha_arr, imag_arr = eigenvalue_data[(n, l, m, a)]
-                push!(mu_arr, mu)
-                push!(alpha_arr, mu * M_BH * GNew)
-                push!(imag_arr, imag(erg))
-
-            catch e
-                @warn "Failed: (n=$n, l=$l, m=$m, a=$a, μ=$mu)"
-            end
+            mu = alpha / (M_BH * GNew)
+            push!(mu_arr, mu)
+            push!(alpha_arr, alpha)
+            # Normalize to physical rate in eV: same convention as rate_interpolation.jl
+            # find_im_part returns Im(G*M*omega) [dimensionless]; multiply by 2/(G*M) to get eV
+            push!(imag_arr, 2.0 * Float64(erg) / (M_BH * GNew))
         end
     end
 end

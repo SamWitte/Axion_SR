@@ -2,16 +2,16 @@ import numpy as np
 import os
 
 massL = np.logspace(-14, -12, 10)
-chainsN = 5
+chainsN = 2
 arr_text = np.empty(len(massL), dtype=object)
 
 for i in range(len(massL)):
     arr_text[i] = "#!/bin/bash \n"
     arr_text[i] += "source /mnt/users/switte/.bashrc \n"
     arr_text[i] += "cd .. \n"
-    arr_text[i] += "dataname=\"LIGO_test\" \n"
+    arr_text[i] += "dataname=\"GW231123_NRSur\" \n"
     arr_text[i] += "ax_mass={:.3e} \n".format(massL[i])
-    arr_text[i] += "tau_max_override=4.5e7 \n"
+    arr_text[i] += "tau_max_override=1e5 \n"
     arr_text[i] += "delt_M=0.05 \n"
     arr_text[i] += "Nmax=3 \n"
     arr_text[i] += "numsamples_perwalker=1000 \n"

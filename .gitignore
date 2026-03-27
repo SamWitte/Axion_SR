@@ -1,3 +1,5 @@
+Thomas_script/
+
 # Directories - Analysis and output
 n5_paper_plts/
 old_stuff/
@@ -21,7 +23,8 @@ scripts/plts/
 src/scripts/*txt
 src/rate_sve/.ipynb_checkpoints/*
 src/rate_sve/Old_dontuse/
-rc/.ipynb_checkpoints/*
+src/rate_sve/*LvrHc*
+src/.ipynb_checkpoints/*
 # LaTeX files
 *.tex
 

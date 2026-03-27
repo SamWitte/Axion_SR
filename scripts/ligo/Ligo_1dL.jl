@@ -130,7 +130,7 @@ data = open(readdlm, "../../src/BH_data/"*dataname*".dat")
    
    
 Fname = "LIGO_"*dataname*"_TauMax_"*string(round(tau_max, sigdigits=2))
-Fname *= "_M_ax_"*string(round(ax_mass, sigdigits=4))
+Fname *= "_M_ax_"*string(round(ax_mass, sigdigits=4)) * Ftag
 if spinone
     Fname *= "_SPINONE_"
 else
