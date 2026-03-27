@@ -1,4 +1,4 @@
-include("solve_sr_rates.jl")
+include("../solve_sr_rates.jl")
 using DelimitedFiles
 
 mu = 1e-12
@@ -9,7 +9,7 @@ Num_samps = 50000
 avals = rand(Num_samps)
 Mvals = 10.0 .^ (rand(Num_samps) .* (log10.(Mmax) .- log10.(Mmin)) .+ log10.(Mmin) ) # rand(Num_samps) * (Mmax - Mmin) .+ Mmin
 
-tscale = 1e10
+tscale = 1e7
 ftag = "_tau_1e10_"
 
 nmax=7

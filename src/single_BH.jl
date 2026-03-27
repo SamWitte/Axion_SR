@@ -6,15 +6,15 @@ using Suppressor
 include("tde_input.jl")
 using Dates
 
-fout = "_HERE_"
-sve = false
+fout = "_TEST_"
+sve = true
 
 
-f_a = 1e18
-m_a = 2e-12
+f_a = 1.0e20
+m_a = 5e-12
 SpinBH = 0.99
-MassBH = 20
-tau_max = 5e7 # 5.0e7, 4.8e6
+MassBH = 5.00
+tau_max = 1e8 # 5.0e7, 4.8e6
 
 alpha_max_cut = 10.0
 impose_low_cut = 1e-100
@@ -28,7 +28,7 @@ N_pts_interp=100
 N_pts_interpL=100
 
 
-Nmax = 5
+Nmax = 3
 cheby=false
 
 non_rel = false

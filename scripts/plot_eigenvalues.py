@@ -3,243 +3,298 @@
 Plot eigenvalue data from HDF5 files using matplotlib.
 
 Reads computed eigenvalue data from HDF5 files and creates publication-quality
-plots with log y-scale using matplotlib and seaborn styling.
+plots. States can be plotted individually (default) or grouped onto a single
+set of axes with --combine.
 
 Usage:
+    # One plot per state (default):
     python scripts/plot_eigenvalues.py --input data/eigenvalues_full.h5 --output plts/
-    python scripts/plot_eigenvalues.py --input data/eigenvalues_quick.h5 --output plts/ --quick
+
+    # All states on one plot:
+    python scripts/plot_eigenvalues.py --input data/eigenvalues_full.h5 --output plts/ --combine
+
+    # Only selected states on one plot:
+    python scripts/plot_eigenvalues.py --input data/eigenvalues_full.h5 --output plts/ \
+        --combine --states 211 322 321
 """
 
 import argparse
 import h5py
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.patches as mpatches
+import matplotlib.ticker as ticker
 from pathlib import Path
-from itertools import cycle
 
-# Set up matplotlib style
-plt.style.use('seaborn-v0_8-darkgrid')
-plt.rcParams['figure.figsize'] = (12, 7)
-plt.rcParams['font.size'] = 11
-plt.rcParams['axes.labelsize'] = 12
-plt.rcParams['axes.titlesize'] = 13
-plt.rcParams['xtick.labelsize'] = 10
-plt.rcParams['ytick.labelsize'] = 10
-plt.rcParams['legend.fontsize'] = 10
-plt.rcParams['lines.linewidth'] = 2
-plt.rcParams['lines.markersize'] = 6
+# ---------------------------------------------------------------------------
+# Physical constants
+# ---------------------------------------------------------------------------
+HBAR_EV_S      = 6.582119e-16   # ħ in eV·s
+AGE_UNIVERSE_S = 13.8e9 * 3.15e7  # 13.8 Gyr in seconds
+# Superradiance rate (in eV) corresponding to one Hubble time
+GAMMA_UNIVERSE = HBAR_EV_S / AGE_UNIVERSE_S         # ≈ 1.51e-33 eV  (1/τ_U)
+GAMMA_YMIN     = GAMMA_UNIVERSE / 10.0              # 10× age of universe (y-axis floor)
+GAMMA_1YR      = HBAR_EV_S / 3.15e7                 # 1/yr ≈ 2.09e-23 eV
+
+# ---------------------------------------------------------------------------
+# Global style
+# ---------------------------------------------------------------------------
+plt.rcParams['text.usetex']       = True
+plt.rcParams['font.family']       = 'serif'
+plt.rcParams['font.serif']        = ['Computer Modern']
+plt.rcParams['figure.figsize']    = (8, 6)
+plt.rcParams['font.size']         = 12
+plt.rcParams['axes.labelsize']    = 14
+plt.rcParams['axes.titlesize']    = 16
+plt.rcParams['xtick.labelsize']   = 12
+plt.rcParams['ytick.labelsize']   = 12
+plt.rcParams['legend.fontsize']   = 11
+plt.rcParams['lines.linewidth']   = 1.0
+plt.rcParams['axes.facecolor']    = 'white'
+plt.rcParams['figure.facecolor']  = 'white'
+plt.rcParams['axes.edgecolor']    = 'black'
+plt.rcParams['axes.grid']         = False
+plt.rcParams['xtick.direction']   = 'in'
+plt.rcParams['ytick.direction']   = 'in'
+
+# Publication-quality color cycle (colorblind-friendly)
+STATE_COLORS = [
+    '#1f77b4',  # blue
+    '#d62728',  # red
+    '#2ca02c',  # green
+    '#9467bd',  # purple
+    '#e377c2',  # pink
+    '#8c564b',  # brown
+    '#17becf',  # cyan
+    '#ff7f0e',  # orange
+    '#bcbd22',  # olive
+    '#7f7f7f',  # grey
+]
+# Line styles cycle across spins within a state
+SPIN_STYLES = ['-', '--', ':', '-.']
+
+
+def _apply_tick_style(ax):
+    """Major and minor ticks on all four sides, both pointing inward."""
+    ax.minorticks_on()
+    for which, length in [('major', 6), ('minor', 3)]:
+        ax.tick_params(which=which, direction='in', length=length,
+                       top=True, right=True, bottom=True, left=True)
+    ax.spines['top'].set_visible(True)
+    ax.spines['right'].set_visible(True)
 
 
 def parse_arguments():
-    """Parse command line arguments."""
     parser = argparse.ArgumentParser(
-        description='Plot eigenvalue data from HDF5 files with matplotlib'
+        description='Plot eigenvalue data from HDF5 files'
     )
-    parser.add_argument(
-        '--input', '-i',
-        type=str,
-        required=True,
-        help='Path to input HDF5 file'
-    )
-    parser.add_argument(
-        '--output', '-o',
-        type=str,
-        default='plts/',
-        help='Output directory for plots (default: plts/)'
-    )
-    parser.add_argument(
-        '--quick',
-        action='store_true',
-        help='Quick mode (skip some plots for speed)'
-    )
-    parser.add_argument(
-        '--format',
-        type=str,
-        default='png',
-        choices=['png', 'pdf', 'svg'],
-        help='Output image format (default: png)'
-    )
-    parser.add_argument(
-        '--dpi',
-        type=int,
-        default=150,
-        help='DPI for raster formats (default: 150)'
-    )
+    parser.add_argument('--input',   '-i', type=str, required=True,
+                        help='Path to input HDF5 file')
+    parser.add_argument('--output',  '-o', type=str, default='plts/',
+                        help='Output directory for plots (default: plts/)')
+    parser.add_argument('--format',        type=str, default='png',
+                        choices=['png', 'pdf', 'svg'],
+                        help='Output image format (default: png)')
+    parser.add_argument('--dpi',           type=int, default=150,
+                        help='DPI for raster formats (default: 150)')
+    parser.add_argument('--combine',       action='store_true',
+                        help='Plot all selected states on a single set of axes')
+    parser.add_argument('--states', nargs='*', metavar='NLM',
+                        help='States to include, e.g. --states 211 322 321. '
+                             'Omit to include all states in the file.')
     return parser.parse_args()
 
 
-def load_data(h5_file):
-    """Load all data from HDF5 file and organize by quantum level.
+def parse_state_filter(states_arg):
+    """Convert ['211', '322'] -> {(2,1,1), (3,2,2)} or None for all."""
+    if states_arg is None:
+        return None
+    result = set()
+    for s in states_arg:
+        s = s.strip()
+        if len(s) == 3:
+            result.add((int(s[0]), int(s[1]), int(s[2])))
+        else:
+            raise ValueError(f"Cannot parse state '{s}' — expected 3-digit string like '211'")
+    return result
+
+
+def load_data(h5_file, state_filter=None):
+    """Load all data from HDF5 file, organised by quantum level.
 
     Returns:
-        Dict mapping (n,l,m) -> {spin -> (mu, alpha, imag_eigenvalue)}
+        dict: (n,l,m) -> {spin_float -> {'mu', 'alpha', 'imag_eigenvalue'}}
     """
     data_by_level = {}
-
     with h5py.File(h5_file, 'r') as f:
         for group_key in f.keys():
-            if group_key.startswith('level_'):
-                # Parse group name: level_n_l_m
-                parts = group_key.split('_')
-                n, l, m = int(parts[1]), int(parts[2]), int(parts[3])
-                quantum_level = (n, l, m)
-
-                if quantum_level not in data_by_level:
-                    data_by_level[quantum_level] = {}
-
-                # Load each spin subgroup
-                level_group = f[group_key]
-                for spin_key in level_group.keys():
-                    if spin_key.startswith('spin_'):
-                        spin_val = float(spin_key.split('_')[1])
-                        spin_group = level_group[spin_key]
-
-                        mu = np.array(spin_group['mu'])
-                        alpha = np.array(spin_group['alpha'])
-                        imag_erg = np.array(spin_group['imag_eigenvalue'])
-
-                        data_by_level[quantum_level][spin_val] = {
-                            'mu': mu,
-                            'alpha': alpha,
-                            'imag_eigenvalue': imag_erg
-                        }
-
+            if not group_key.startswith('level_'):
+                continue
+            parts = group_key.split('_')
+            n, l, m = int(parts[1]), int(parts[2]), int(parts[3])
+            if state_filter is not None and (n, l, m) not in state_filter:
+                continue
+            if (n, l, m) not in data_by_level:
+                data_by_level[(n, l, m)] = {}
+            level_group = f[group_key]
+            for spin_key in level_group.keys():
+                if not spin_key.startswith('spin_'):
+                    continue
+                spin_val   = float(spin_key.split('_')[1])
+                spin_group = level_group[spin_key]
+                data_by_level[(n, l, m)][spin_val] = {
+                    'mu':              np.array(spin_group['mu']),
+                    'alpha':           np.array(spin_group['alpha']),
+                    'imag_eigenvalue': np.array(spin_group['imag_eigenvalue']),
+                }
     return data_by_level
 
 
-def create_plots(data_by_level, output_dir, output_format='png', dpi=150):
-    """Create plots for each quantum level.
+ALPHA_XMIN = 0.06  # fixed x-axis lower cutoff
 
-    Args:
-        data_by_level: Dictionary of data organized by quantum level
-        output_dir: Directory to save plots
-        output_format: Image format (png, pdf, svg)
-        dpi: DPI for raster formats
-    """
-    output_path = Path(output_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
 
-    # Color palette for different spins
-    colors = plt.cm.tab10(np.linspace(0, 1, 10))
+def _plot_state_on_ax(ax, spin_data, color, label_prefix='', alpha_lower=ALPHA_XMIN):
+    """Draw all spin curves for one state onto *ax*."""
+    for j, (spin, data) in enumerate(sorted(spin_data.items())):
+        alpha    = data['alpha']
+        imag_erg = data['imag_eigenvalue']
+        mask     = (alpha >= alpha_lower) & (imag_erg >= GAMMA_YMIN)
+        if not np.any(mask):
+            continue
+        spin_label = f'{label_prefix}$a={spin:.2f}$' if label_prefix else f'$a={spin:.2f}$'
+        ax.semilogy(
+            alpha[mask], imag_erg[mask],
+            linestyle=SPIN_STYLES[j % len(SPIN_STYLES)],
+            color=color,
+            linewidth=1.0,
+            label=spin_label,
+        )
 
-    for (n, l, m), spin_data in sorted(data_by_level.items()):
-        print(f"\nCreating plot for (n,l,m) = ({n},{l},{m})...")
 
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+def _apply_axis_limits(ax):
+    """Enforce fixed x/y limits and draw age-of-universe and 1-yr reference lines."""
+    ax.set_xlim(left=ALPHA_XMIN)
+    ax.set_ylim(bottom=GAMMA_YMIN)
+    ax.axhline(GAMMA_UNIVERSE, color='k', linestyle='--', linewidth=0.8, alpha=0.4,
+               label=r'$\tau_{\rm U}^{-1}$')
+    ax.axhline(GAMMA_1YR, color='k', linestyle=':', linewidth=0.8, alpha=0.4,
+               label=r'$1\,\mathrm{yr}^{-1}$')
 
-        # Plot 1: vs mu
-        for i, (spin, data) in enumerate(sorted(spin_data.items())):
-            mu = data['mu']
-            imag_erg = (data['imag_eigenvalue'])  # Use absolute value for log scale
 
-            ax1.semilogy(
-                mu, imag_erg,
-                marker='o',
-                label=f'a = {spin:.2f}',
-                color=colors[i % len(colors)],
-                alpha=0.8
-            )
+def _savefig(fig, path, fmt, dpi):
+    if fmt in ('png', 'jpg', 'jpeg'):
+        fig.savefig(path, dpi=dpi, bbox_inches='tight')
+    else:
+        fig.savefig(path, bbox_inches='tight')
+    print(f"  Saved: {path.name}")
 
-        ax1.set_xlabel(r'Boson mass $\mu$ (GeV)', fontsize=12)
-        ax1.set_ylabel(r'$|\mathrm{Im}(\omega)|$ (log scale)', fontsize=12)
-        ax1.set_title(f'Eigenvalue Im(ω) vs Boson Mass\n(n,l,m) = ({n},{l},{m})', fontsize=13)
-        ax1.grid(True, which='both', alpha=0.3)
-        ax1.legend(loc='best', framealpha=0.95)
-        ax1.set_xscale('log')
 
-        # Plot 2: vs alpha
-        for i, (spin, data) in enumerate(sorted(spin_data.items())):
-            alpha = data['alpha']
-            imag_erg = (data['imag_eigenvalue'])
+# ---------------------------------------------------------------------------
+# Per-state plots (default mode)
+# ---------------------------------------------------------------------------
+def create_individual_plots(data_by_level, output_path, output_format, dpi):
+    for i, ((n, l, m), spin_data) in enumerate(sorted(data_by_level.items())):
+        print(f"  Plotting ({n},{l},{m})...")
+        fig, ax = plt.subplots()
 
-            ax2.semilogy(
-                alpha, imag_erg,
-                marker='s',
-                label=f'a = {spin:.2f}',
-                color=colors[i % len(colors)],
-                alpha=0.8
-            )
+        _plot_state_on_ax(ax, spin_data, color=STATE_COLORS[i % len(STATE_COLORS)])
 
-        ax2.set_xlabel(r'Dimensionless parameter $\alpha = \mu M G_N$', fontsize=12)
-        ax2.set_ylabel(r'$|\mathrm{Im}(\omega)|$ (log scale)', fontsize=12)
-        ax2.set_title(f'Eigenvalue Im(ω) vs α\n(n,l,m) = ({n},{l},{m})', fontsize=13)
-        ax2.grid(True, which='both', alpha=0.3)
-        ax2.legend(loc='best', framealpha=0.95)
-        ax2.set_xscale('log')
-
+        ax.set_xlabel(r'$\alpha$')
+        ax.set_ylabel(r'$\Gamma\ [\mathrm{eV}]$')
+        ax.set_title(f'$({n},{l},{m})$')
+        ax.set_xscale('log')
+        _apply_axis_limits(ax)
+        ax.legend(loc='best', framealpha=0.95)
+        _apply_tick_style(ax)
         plt.tight_layout()
 
-        # Save plot
-        filename = f"eigenvalue_{n:d}{l:d}{m:d}.{output_format}"
-        filepath = output_path / filename
-
-        if output_format in ['png', 'jpg', 'jpeg']:
-            plt.savefig(filepath, dpi=dpi, bbox_inches='tight')
-        else:
-            plt.savefig(filepath, bbox_inches='tight')
-
-        print(f"  ✓ Saved: {filename}")
+        _savefig(fig, output_path / f"eigenvalue_{n}{l}{m}.{output_format}",
+                 output_format, dpi)
         plt.close(fig)
 
 
+# ---------------------------------------------------------------------------
+# Combined plot (--combine mode)
+# ---------------------------------------------------------------------------
+def create_combined_plot(data_by_level, output_path, output_format, dpi):
+    fig, ax = plt.subplots()
+
+    for i, ((n, l, m), spin_data) in enumerate(sorted(data_by_level.items())):
+        color = STATE_COLORS[i % len(STATE_COLORS)]
+        label_prefix = f'$({n},{l},{m}),\\ $'
+        _plot_state_on_ax(ax, spin_data, color=color, label_prefix=label_prefix)
+
+    ax.set_xlabel(r'$\alpha$')
+    ax.set_ylabel(r'$\Gamma\ [\mathrm{eV}]$')
+    ax.set_xscale('log')
+    _apply_axis_limits(ax)
+    ax.legend(loc='best', framealpha=0.95, fontsize=9)
+    _apply_tick_style(ax)
+    plt.tight_layout()
+
+    state_tag = '_'.join(f'{n}{l}{m}' for (n, l, m) in sorted(data_by_level))
+    _savefig(fig, output_path / f"eigenvalue_{state_tag}.{output_format}",
+             output_format, dpi)
+    plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# Summary
+# ---------------------------------------------------------------------------
 def print_summary(data_by_level):
-    """Print summary statistics."""
     print("\n" + "="*80)
     print("EIGENVALUE DATA SUMMARY")
     print("="*80)
-    print(f"{'Level':<12} {'Spin':<8} {'N pts':<8} {'Im(ω) range':<25} {'Mean Im(ω)':<15}")
+    print(f"{'Level':<12} {'Spin':<8} {'N pts':<8} {'Im(ω) range':<25}")
     print("-"*80)
-
     for (n, l, m), spin_data in sorted(data_by_level.items()):
         for spin, data in sorted(spin_data.items()):
-            imag_erg = data['imag_eigenvalue']
-            n_points = len(imag_erg)
-            im_min = np.min(imag_erg)
-            im_max = np.max(imag_erg)
-            im_mean = np.mean(imag_erg)
-
-            level_str = f"({n},{l},{m})"
-            range_str = f"[{im_min:.3e}, {im_max:.3e}]"
-            print(f"{level_str:<12} {spin:<8.2f} {n_points:<8} {range_str:<25} {im_mean:<15.3e}")
+            erg = data['imag_eigenvalue']
+            print(f"({n},{l},{m}){'':<7} {spin:<8.2f} {len(erg):<8} "
+                  f"[{erg.min():.3e}, {erg.max():.3e}]")
 
 
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
 def main():
-    """Main function."""
     args = parse_arguments()
 
     h5_file = Path(args.input)
     if not h5_file.exists():
-        print(f"Error: Input file not found: {h5_file}")
+        print(f"Error: input file not found: {h5_file}")
         return 1
+
+    state_filter = parse_state_filter(args.states)
 
     print("="*80)
     print("EIGENVALUE PLOTTING SCRIPT")
     print("="*80)
-    print(f"Input file: {h5_file}")
-    print(f"Output directory: {args.output}")
-    print(f"Output format: {args.format}")
+    print(f"Input : {h5_file}")
+    print(f"Output: {args.output}  format={args.format}")
+    if state_filter:
+        print(f"States: {sorted(state_filter)}")
+    if args.combine:
+        print("Mode  : combined (all selected states on one axes)")
+    else:
+        print("Mode  : individual (one plot per state)")
 
-    print("\n[LOADING] Reading HDF5 data...")
-    data_by_level = load_data(str(h5_file))
-    print(f"  ✓ Loaded {len(data_by_level)} quantum levels")
+    print("\n[LOADING]")
+    data_by_level = load_data(str(h5_file), state_filter)
+    print(f"  Loaded {len(data_by_level)} quantum levels")
 
-    # Print summary
     print_summary(data_by_level)
 
-    print(f"\n[PLOTTING] Creating {len(data_by_level)} plots...")
-    create_plots(
-        data_by_level,
-        args.output,
-        output_format=args.format,
-        dpi=args.dpi
-    )
+    output_path = Path(args.output)
+    output_path.mkdir(parents=True, exist_ok=True)
+
+    print("\n[PLOTTING]")
+    if args.combine:
+        create_combined_plot(data_by_level, output_path, args.format, args.dpi)
+    else:
+        create_individual_plots(data_by_level, output_path, args.format, args.dpi)
 
     print("\n" + "="*80)
-    print("PLOTTING COMPLETE")
-    print("="*80)
-    print(f"Plots saved to: {args.output}")
-
+    print(f"Done. Plots in: {args.output}")
     return 0
 
 

@@ -69,9 +69,6 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     else
         # STANDARD MODE: Multiple quantum levels
         fa = fa_or_nothing  # Unpack the fa parameter
-        if !(3 <= Nmax <= 8)
-            error("Nmax must be between 3 and 8 for standard mode, got $Nmax")
-        end
         idx_lvl, m_list, bn_list, modes = setup_quantum_levels_standard(Nmax, fa, M_pl, alph, aBH)
 
         # Compute Emax2 cutoff for 211 level

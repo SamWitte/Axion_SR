@@ -207,9 +207,6 @@ Also adds truncation modes for high-m states.
 Bosenova binding energy: e_bn = e2_maxBN * (n/2)^4 with e2_maxBN = 1024π(fa/M_Pl)²/(9α³)
 """
 function setup_quantum_levels_standard(Nmax::Int, fa::Float64, M_Pl::Float64, alph::Float64, aBH::Float64)::Tuple{Int, Vector, Vector, Vector}
-    if !(3 <= Nmax <= 8)
-        error("Nmax must be between 3 and 8, got $Nmax")
-    end
 
     idx_lvl = 0
     m_list = []
