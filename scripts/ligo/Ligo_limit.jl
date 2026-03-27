@@ -124,7 +124,7 @@ else
     Fname *= "_GA_"
 end
 
-fileList = Glob.glob("output_mcmc/"*Fname*"_mcmc.dat")
+fileList = Glob.glob("../../src/output_mcmc/"*Fname*"_mcmc.dat")
 
 
 output_lim = zeros(length(fileList), 2)
