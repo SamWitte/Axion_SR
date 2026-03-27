@@ -565,7 +565,7 @@ function s_rate_inf(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3, lF_min; rpts=4
     
 end
 
-function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=500, xtol=1e-50, ftol=1e-90, sve=false, fnm="test_store/WF_", return_erg=false, Ntot_safe=5000, eps_r=1e-10, QNM=false, QNM_ergs=nothing, pre_compute_erg=nothing, prec=300, use_heunc=true)
+function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=2000, xtol=1e-50, ftol=1e-90, sve=false, fnm="test_store/WF_", return_erg=false, Ntot_safe=5000, eps_r=1e-10, QNM=false, QNM_ergs=nothing, pre_compute_erg=nothing, prec=300, use_heunc=true)
     ### dolan 2007
     
     
@@ -1095,9 +1095,9 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=5000, iter=5000
         
         # sol = nlsolve(wrapper!, [BigFloat(log10.(real(w0))), BigFloat(imag(w0))], autodiff = :forward, xtol=xtol, ftol=ftol, iterations=iter)
         if !QNM
-            sol = nlsolve(wrapper!, [BigFloat((real(w0))), BigFloat(imag(w0))], autodiff = :forward, xtol=xtol, ftol=ftol, iterations=iter)
+            sol = nlsolve(wrapper!, [BigFloat((real(w0))), BigFloat(imag(w0))], autodiff = :forward, xtol=xtol, ftol=1e-50, iterations=iter)
         else
-            sol = nlsolve(wrapper!, [BigFloat((real(w0))), BigFloat(imag(w0))], autodiff = :forward, xtol=xtol, ftol=ftol, iterations=iter)
+            sol = nlsolve(wrapper!, [BigFloat((real(w0))), BigFloat(imag(w0))], autodiff = :forward, xtol=xtol, ftol=1e-50, iterations=iter)
             outSend = [n sol.zero[1] sol.zero[2]] # n, real, im
             
             nmax = n + max_n_qnm
@@ -1110,7 +1110,7 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=5000, iter=5000
                 found_it = false
                 trialF = 0
                 while !found_it
-                    sol = nlsolve(wrapper!, [BigFloat((real(guess))), BigFloat(imag(guess))], autodiff = :forward, xtol=(xtol ./ 1e10) , ftol=ftol, iterations=iter)
+                    sol = nlsolve(wrapper!, [BigFloat((real(guess))), BigFloat(imag(guess))], autodiff = :forward, xtol=(xtol ./ 1e10) , ftol=1e-50, iterations=iter)
                     # print("guess \t", guess, "\t", trialF, "\n")
                     # print("trial \t ", sol.zero, "\n\n")
                     if (!isapprox(sol.zero[1], outSend[end, 2]; atol = 0.0001)&&!isapprox(sol.zero[2], outSend[end, 3]; atol = 0.0001))&&(sol.zero[1] > 0)&&(sol.zero[2] < outSend[end, 3])&&(sol.zero[1] > 1e-3)

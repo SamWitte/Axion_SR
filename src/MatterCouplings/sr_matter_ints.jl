@@ -1818,7 +1818,7 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=100, L=4, Npoints=60, Iter
                    clebschgordan(j, 0, 2, 0, l, 0) +
                    (8/35) * sqrt((2j + 1)/(2l + 1)) *
                    clebschgordan(j, m, 4, 0, l, m) *
-                   clebschgordan(j, 0, 5, 0, l, 0)
+                   clebschgordan(j, 0, 4, 0, l, 0)
         else
             return (1/3) * kronecker_delta(l, j)
         end
@@ -2538,7 +2538,9 @@ function (mf::Malpha_0)(r)
         function del_mu_r(r) ## arbitrary function of r... Can generalize to functional input if we want
             return 0.1
         end
-        out = sqrt.(mf.alph.^2 .+ mf.r_star.^2 ./ r.^2 .* del_mu_r(r).^2)
+        cr = 0.0
+        out = sqrt.(cr .* alph.^2 .* sqrt.(mf.r_star ./ r))
+        # out = sqrt.(mf.alph.^2 .+ mf.r_star.^2 ./ r.^2 .* del_mu_r(r).^2)
         return out
     elseif mf.mode == 2 # Model 1 of Enrico paper
         if r .> mf.r_star
@@ -2554,7 +2556,8 @@ end
 
 function (mf::Malpha_r)(r)
     if mf.mode == 1
-        out = sqrt.(mf.mu_star.^2 .* mf.r_star.^2 ./ r.^2)
+        # out = sqrt.(mf.mu_star.^2 .* mf.r_star.^2 ./ r.^2)
+        
         return out
     elseif mf.mode == 2
         return 0.0
@@ -2580,9 +2583,9 @@ end
 
         
 # test run of system
-r_star=1.5
-mu_star=0.1
-modelN=2
+r_star=100.0
+mu_star=0.1 .* 0.0
+modelN=1
 
 wR, wI, rl, r3 = eigensys_Cheby(1, 0.8, 0.1 ./ GNew, 2, 1, 1, debug=true, return_wf=true, L=8, Npoints = 80, Iter = 50, der_acc=1e-20, cvg_acc=1e-10, prec=300, Npts_r=2000, sfty_run=true, modelN=modelN, mu_star=mu_star, r_star=r_star)
 println(wR, "\t", wI)

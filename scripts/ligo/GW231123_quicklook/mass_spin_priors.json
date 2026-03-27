@@ -1,0 +1,69 @@
+{
+  "mass_priors": {
+    "chirp_mass": {
+      "type": "UniformInComponentsChirpMass",
+      "minimum": 68.25578738484073,
+      "maximum": 194.62307527305077,
+      "unit": "solar_mass"
+    },
+    "mass_ratio": {
+      "type": "UniformInComponentsMassRatio",
+      "minimum": 0.1087,
+      "maximum": 1.0
+    },
+    "mass_1": {
+      "type": "Constraint",
+      "minimum": 1,
+      "maximum": 1000,
+      "note": "derived parameter"
+    },
+    "mass_2": {
+      "type": "Constraint",
+      "minimum": 1,
+      "maximum": 1000,
+      "note": "derived parameter"
+    }
+  },
+  "spin_magnitude_priors": {
+    "a_1": {
+      "type": "Uniform",
+      "minimum": 0.0,
+      "maximum": 0.99
+    },
+    "a_2": {
+      "type": "Uniform",
+      "minimum": 0.0,
+      "maximum": 0.99
+    }
+  },
+  "spin_orientation_priors": {
+    "tilt_1": {
+      "type": "Sine",
+      "minimum": 0.0,
+      "maximum": 3.141592653589793,
+      "unit": "radians",
+      "note": "isotropic on sphere"
+    },
+    "tilt_2": {
+      "type": "Sine",
+      "minimum": 0.0,
+      "maximum": 3.141592653589793,
+      "unit": "radians",
+      "note": "isotropic on sphere"
+    },
+    "phi_12": {
+      "type": "Uniform",
+      "minimum": 0.0,
+      "maximum": 6.283185307179586,
+      "unit": "radians",
+      "boundary": "periodic"
+    },
+    "phi_jl": {
+      "type": "Uniform",
+      "minimum": 0.0,
+      "maximum": 6.283185307179586,
+      "unit": "radians",
+      "boundary": "periodic"
+    }
+  }
+}
