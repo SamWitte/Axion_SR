@@ -160,9 +160,9 @@ for n1 in n_levels:
             l2 = l1
             m2 = m1
 
-            m3 = m1 + m2
-            l3 = m3
-            n3 = l3 + 1
+            m3 = 2 * m1
+            l3 = 2 * l1
+            n3 = 2 * l1 + 1
 
             # Check validity of computed values
             if (m2>l2) or (m3>l3) or (l2 >= n2) or (l3 >= n3):
