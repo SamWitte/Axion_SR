@@ -169,7 +169,7 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true)
         
         
         # rates computed for fixed rP(a=0.9)
-        rP_ratio = rP / (1 + sqrt.(1.0 - 0.9^2))
+        rP_ratio = rP / (1 + sqrt.(1.0 - 0.95^2))
         
         dirN = joinpath(@__DIR__, "rate_sve/")
         ftag = "_LvrHc_"
