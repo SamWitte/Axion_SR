@@ -3,9 +3,9 @@ import os
 import time
 
 
-runL=False
-zeroS=True
-gridD=False
+runL=True
+zeroS=False
+gridD=True
 
 if runL and zeroS:
     fnOut= "../rate_sve/Imag_zero_"
@@ -25,7 +25,9 @@ for nn in range(2, nmax+1):
     for ll in range(1, nn):
         for mm in range(1, ll+1):
             listnlm.append(str(nn)+str(ll)+str(mm))
-            
+
+# listnlm = ["877"]
+listnlm = ["766", "876", "877"]
 arr_text = np.empty(len(listnlm), dtype=object)
 for i in range(len(listnlm)):
     arr_text[i] = "#!/bin/bash \n"

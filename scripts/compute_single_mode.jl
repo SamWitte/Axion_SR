@@ -14,7 +14,7 @@ include(joinpath(src_dir, "solve_sr_rates.jl"))
 # ── Parameters ──────────────────────────────────────────────────────────────
 n, l, m = 8, 7, 7          # quantum numbers (877 mode)
 alpha    = 0.3              # dimensionless gravitational coupling α = μ M G_N
-a        = 0.01              # dimensionless BH spin
+a        = 0.72              # dimensionless BH spin
 M_BH     = 1.0              # BH mass in solar masses
 
 # Chebyshev solver settings
