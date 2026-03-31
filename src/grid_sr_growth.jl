@@ -51,7 +51,7 @@ function main_gg(run_leaver, run_analytic, solve_for_zeros, solve_gridded)
     ftol=1e-50
     iter=60
 
-    Npoints = 90
+    Npoints = 110
     Iter = 30
     cvg_acc = 1e-10
     der_acc=1e-20
@@ -62,7 +62,7 @@ function main_gg(run_leaver, run_analytic, solve_for_zeros, solve_gridded)
 
     Lcheb=8
     aPts = 12
-    alpha_pts = 15
+    alpha_pts = 10
     a_max = 0.998
     atemp = 10 .^LinRange(-3, log10.(0.99), aPts)
     
@@ -153,7 +153,7 @@ function main_gg(run_leaver, run_analytic, solve_for_zeros, solve_gridded)
                         testF = sr_rates(n, l, m, 10 .^ alphList[i] ./ (GNew .* M), M, a_guess) .* GNew .* M
                     else
                         if run_leaver
-                            testF = find_im_part(10 .^ alphList[i] ./ (GNew .* M), M, a_guess, n, l, m; Ntot_force=Ntot_safe, return_both=false, for_s_rates=true, der_acc=der_acc)
+                            testF = find_im_part(10 .^ alphList[i] ./ (GNew .* M), M, a_guess, n, l, m; Ntot_force=Ntot_safe, return_both=false, for_s_rates=true)
                         else
                             if a_guess > 0.95
                                 npts_use = 120
@@ -226,11 +226,13 @@ function main_gg(run_leaver, run_analytic, solve_for_zeros, solve_gridded)
             # alistP = a_max .- atemp
             # alistP = reverse(alistP)
             alistP = LinRange(0.01, a_max, aPts)
-            a_diff = alistP[2] .- alistP[1]
+	    a_diff = alistP[2] .- alistP[1]
             
             for i in 1:alpha_pts
                 a_mid = itp(10 .^ alphList[i])
                 erg_store = nothing
+                erg_store_prev = nothing
+                cvg_thresh = 10.0  # max relative change in Re(ω) between spin steps before retrying (failures jump by orders of magnitude)
                 for j in 1:length(alistP)
                     if alistP[j] > 0.925
                         npts_use = 120
@@ -247,11 +249,28 @@ function main_gg(run_leaver, run_analytic, solve_for_zeros, solve_gridded)
 
                                 wR, e_imgP = eigensys_Cheby(M, alistP[j], 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=npts_use, Iter=Iter, cvg_acc=cvg_acc, prec=prec, sfty_run=true, L=Lcheb)
                                 erg_store = wR + im .* e_imgP
+                                erg_store_prev = nothing
                             else
+                                # Linear extrapolation from last two good points if available, else last point
+                                if !isnothing(erg_store_prev)
+                                    nu_extrap = 2 .* erg_store .- erg_store_prev
+                                else
+                                    nu_extrap = erg_store
+                                end
 
-                                wR, e_imgP = eigensys_Cheby(M, alistP[j], 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=npts_use, Iter=Iter, cvg_acc=cvg_acc, prec=prec, sfty_run=true, L=Lcheb, nu_guess=erg_store)
+                                wR, e_imgP = eigensys_Cheby(M, alistP[j], 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=npts_use, Iter=Iter, cvg_acc=cvg_acc, prec=prec, sfty_run=true, L=Lcheb, nu_guess=nu_extrap)
 
-                                erg_store = wR + im .* e_imgP .* (1.0 .+ a_diff)
+                                # Validate: if result is non-finite or Re(ω) jumps too far, retry with analytic guess
+                                if !isfinite(wR) || !isfinite(e_imgP) || abs(wR - real(erg_store)) > cvg_thresh * abs(real(erg_store))
+                                    println("Continuation failed at j=$j a=$(alistP[j]), retrying with analytic guess")
+                                    wR, e_imgP = eigensys_Cheby(M, alistP[j], 10 .^ alphList[i] ./ (GNew .* M), n, l, m, debug=false, return_wf=false, Npoints=npts_use, Iter=Iter, cvg_acc=cvg_acc, prec=prec, sfty_run=true, L=Lcheb)
+                                end
+
+                                # Update history only if result is valid
+                                if isfinite(wR) && isfinite(e_imgP)
+                                    erg_store_prev = erg_store
+                                    erg_store = wR + im .* e_imgP
+                                end
                             end
                         end
                     end
