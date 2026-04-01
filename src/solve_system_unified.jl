@@ -1,3 +1,24 @@
+using DelimitedFiles
+using Interpolations
+
+"""
+    eval_rate_smooth(func, a0; N=7, da=1e-2)
+
+Evaluate the interpolated SR rate at spin `a0`.
+- If all N sampled values in [a0-da, a0+da] share the same sign, return func(a0) directly.
+- If there is a sign change (we are near the zero crossing), fit a cubic spline through
+  the N points and return its value at a0 for a smooth crossing.
+"""
+function eval_rate_smooth(func, a0; N=7, da=1e-1)
+    pts = range(a0 - da, a0 + da, length=N)
+    vals = [func(a) for a in pts]
+    if all(v >= 0 for v in vals) || all(v <= 0 for v in vals)
+        return func(a0)
+    else
+        itp = CubicSplineInterpolation(pts, vals, extrapolation_bc=Line())
+        return itp(a0)
+    end
+end
 """
     solve_system(mu, fa_or_nothing, aBH, M_BH, t_max; spinone=false, ...)
 
@@ -107,6 +128,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         SR_rates, interp_funcs, interp_dict = compute_sr_rates_smooth(modes, M_BH, aBH, alph, cheby=cheby)
         rates = load_rate_coeffs(mu, M_BH, aBH, fa, Nmax, SR_rates; non_rel=non_rel)
         Mvars = [mu, fa, Emax2, aBH, M_BH, impose_low_cut]
+        rP_initial = 1.0 + sqrt(1.0 - aBH^2)
     end
 
     # ============================================================================
@@ -119,6 +141,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     wait = 0
     turn_off = fill(false, idx_lvl)
     turn_off_M = false
+
 
     # ============================================================================
     # RHS FUNCTION (shared logic with mode-specific branches)
@@ -188,8 +211,10 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
                 SR_rates_local = [0.0]
             end
         else
-            # Standard: Interpolated rates
             SR_rates_local = [func(u_real[spinI]) for func in interp_funcs]
+            # SR_rates_local, interp_funcs, interp_dict = compute_sr_rates_smooth(modes, u_real[massI], u_real[spinI], u_real[massI] .* GNew .* mu, cheby=cheby)
+            
+            # println(t, SR_rates_local)
 	    # Emax2 cutoff for 211 level
             if (u_real[1] .> Emax2) && (SR_rates_local[1] > 0)
                 SR_rates_local[1] *= 0.0
@@ -201,6 +226,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         # ====================================================================
         du[spinI] = 0.0
         du[massI] = 0.0
+ 
         for i in 1:idx_lvl
             du[i] = SR_rates_local[i] .* u_real[i] ./ mu
             du[spinI] += -m_list[i] * SR_rates_local[i] .* u_real[i] ./ mu
@@ -212,6 +238,8 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         # ====================================================================
         if !spinone
             rate_keys = collect(keys(rates))
+            rP_now = 1.0 + sqrt(1.0 - u_real[spinI]^2)
+            rP_ratio_now = rP_now / rP_initial
             for i in 1:length(rate_keys)
                 idxV, sgn = key_to_indx(rate_keys[i], Nmax)
                 u_term_tot = 1.0
@@ -222,6 +250,9 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
                     end
                 end
 
+                is_bh_final = any(idxV .== -1)
+                rate_val = rates[rate_keys[i]] * (is_bh_final ? rP_ratio_now : 1.0)
+
                 for j in 1:length(sgn)
                     if idxV[j] == 0
                         continue
@@ -230,7 +261,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
                         idxV[j] = massI
                     end
 
-                    du[idxV[j]] += sgn[j] * rates[rate_keys[i]] * u_term_tot
+                    du[idxV[j]] += sgn[j] * rate_val * u_term_tot
                 end
             end
         end
@@ -327,8 +358,8 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         u_real = exp.(u)
         rate_keys = collect(keys(rates))
         
-        SR_rates_local = [func(u_real[spinI]) for func in interp_funcs]
-        
+        SR_rates_local = [eval_rate_smooth(func, u_real[spinI]) for func in interp_funcs]
+
         all_contribs = zeros(idx_lvl)
         test = zeros(idx_lvl)
         u_fake = u_real * 1.1
@@ -390,7 +421,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
             end
         end
 
-        def_spin_tol = 1e-3
+        
         append!(tlist, def_spin_tol ./ du[spinI])
         tmin = minimum(abs.(tlist))
 
@@ -417,7 +448,6 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
             end
         end
 
-        def_spin_tol = 1e-3
         append!(tlist, def_spin_tol ./ du[spinI])
         tmin = minimum(abs.(tlist))
 
@@ -500,6 +530,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-7, abstol=1e-10)
     else
         # Standard uses adaptive reltol array
+        println(reltol)
         prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=reltol, abstol=1e-10)
     end
     sol = solve(prob, TRBDF2(autodiff=false), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e6)
@@ -510,6 +541,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     for j in 1:idx_lvl
         push!(state_out, [exp(sol.u[i][j]) for i in 1:length(sol.u)])
     end
+
 
     spinBH = [exp(sol.u[i][spinI]) for i in 1:length(sol.u)]
     MassB = [exp(sol.u[i][massI]) for i in 1:length(sol.u)]
