@@ -25,10 +25,7 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true)
     
     Drate = Dict()
     
-    Drate["211_322^GW"] = 0.0 * alph^16
-    
-    
-    ### EDITING ##
+    Drate["211_322^GW"] = 0.0
     
     if non_rel
         include_m1 = true
@@ -181,10 +178,13 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true)
                 data = open(readdlm, fileT)
                 data = data[data[:,2] .!= 0.0, :]
                 
-                itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
-                rate_out = 10 .^itp(log10.(alph)) .* faFac
-                if string(rate_list[i, 4]) == "BH"
-                    rate_out *= rP_ratio
+                rate_out = 0.0
+                if alph .<= maximum(data[:,1])
+                    itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
+                    rate_out = 10 .^itp(log10.(alph)) .* faFac
+                    if string(rate_list[i, 4]) == "BH"
+                        rate_out *= rP_ratio
+                    end
                 end
                 Drate[nm_tag] = rate_out
             end
@@ -290,24 +290,20 @@ function get_state_idx(str_nlm, Nmax)
 
     if out_idx == -1
         seen_truncation_modes = Set()
-        for nn in 1:Nmax, l in 1:(nn - 1)
-            m_new = (2 * l)
-            if m_new < Nmax
-                continue # already included
-            else
-                truncation_key = (m_new + 1, m_new, m_new)
-                if !(truncation_key in seen_truncation_modes)
-                    # Support both old format and new format
-                    state_str_new = format_state_string(m_new + 1, m_new, m_new)
-                    state_str_old = (m_new < 9) ? format_state_string_legacy(m_new + 1, m_new, m_new) : ""
-
-                    if str_nlm == state_str_new || str_nlm == state_str_old
-                        out_idx = cnt
-                        break
-                    end
-                    push!(seen_truncation_modes, truncation_key)
-                    cnt += 1
+        for nn in 1:Nmax, l in 1:(nn - 1), m in 1:l
+            n_end = 2 * l + 1
+            l_end = 2 * l
+            m_end = 2 * m
+            trunc_key = (n_end, l_end, m_end)
+            if n_end > Nmax && !(trunc_key in seen_truncation_modes)
+                state_str_new = format_state_string(n_end, l_end, m_end)
+                state_str_old = (n_end < 10 && l_end < 10 && m_end < 10) ? format_state_string_legacy(n_end, l_end, m_end) : ""
+                if str_nlm == state_str_new || str_nlm == state_str_old
+                    out_idx = cnt
+                    break
                 end
+                push!(seen_truncation_modes, trunc_key)
+                cnt += 1
             end
         end
     end
