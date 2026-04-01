@@ -456,7 +456,8 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     end
 
     # Shared: time limit callback
-    max_real_time = 20.0 * 60  # Convert to seconds
+    # max_real_time = 20.0 * 60  # Convert to seconds
+    max_real_time = 10.0 .* 24.0 .* 60.0 .* 60.0
     start_time = Dates.now()
 
     function time_limit_callback(u, t, integrator)
