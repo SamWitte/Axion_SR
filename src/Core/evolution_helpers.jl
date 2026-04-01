@@ -226,20 +226,26 @@ function setup_quantum_levels_standard(Nmax::Int, fa::Float64, M_Pl::Float64, al
         push!(bn_list, e2_maxBN * (nn / 2)^4)
     end
 
-    # Truncation modes for high-m states
-    for nn in 1:Nmax, l in 1:(nn - 1)
-        m = l
-        m_new = 2 * m
-        if (m_new >= Nmax) && !any(mode -> mode[1:3] == (m_new + 1, m_new, m_new), truncation_modes)
+    # Truncation modes: for each (nn, l, m) with nn <= Nmax, add end state (2l+1, 2l, 2m)
+    # if that state falls outside the standard levels (n_end > Nmax)
+    seen_truncation_modes = Set()
+    for nn in 1:Nmax, l in 1:(nn - 1), m in 1:l
+        n_end = 2 * l + 1
+        l_end = 2 * l
+        m_end = 2 * m
+        trunc_key = (n_end, l_end, m_end)
+        if n_end > Nmax && !(trunc_key in seen_truncation_modes)
             idx_lvl += 1
-            max_alph = aBH * m_new / (2 * (1 + sqrt(1 - aBH^2))) * 1.1
-            push!(modes, (m_new + 1, m_new, m_new, max_alph))
-            push!(truncation_modes, (m_new + 1, m_new, m_new, max_alph))
-            push!(m_list, m_new)
-            push!(bn_list, e2_maxBN * ((m_new + 1) / 2)^4)
+            max_alph = aBH * m_end / (2 * (1 + sqrt(1 - aBH^2))) * 1.1
+            push!(modes, (n_end, l_end, m_end, max_alph))
+            push!(m_list, m_end)
+            push!(bn_list, e2_maxBN * (n_end / 2)^4)
+            push!(seen_truncation_modes, trunc_key)
         end
     end
-
+    println(idx_lvl)
+    println(m_list)
+    println(modes)
     return (idx_lvl, m_list, bn_list, modes)
 end
 

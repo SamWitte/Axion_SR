@@ -1,24 +1,7 @@
 using DelimitedFiles
 using Interpolations
 
-"""
-    eval_rate_smooth(func, a0; N=7, da=1e-2)
 
-Evaluate the interpolated SR rate at spin `a0`.
-- If all N sampled values in [a0-da, a0+da] share the same sign, return func(a0) directly.
-- If there is a sign change (we are near the zero crossing), fit a cubic spline through
-  the N points and return its value at a0 for a smooth crossing.
-"""
-function eval_rate_smooth(func, a0; N=7, da=1e-1)
-    pts = range(a0 - da, a0 + da, length=N)
-    vals = [func(a) for a in pts]
-    if all(v >= 0 for v in vals) || all(v <= 0 for v in vals)
-        return func(a0)
-    else
-        itp = CubicSplineInterpolation(pts, vals, extrapolation_bc=Line())
-        return itp(a0)
-    end
-end
 """
     solve_system(mu, fa_or_nothing, aBH, M_BH, t_max; spinone=false, ...)
 
@@ -212,9 +195,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
             end
         else
             SR_rates_local = [func(u_real[spinI]) for func in interp_funcs]
-            # SR_rates_local, interp_funcs, interp_dict = compute_sr_rates_smooth(modes, u_real[massI], u_real[spinI], u_real[massI] .* GNew .* mu, cheby=cheby)
             
-            # println(t, SR_rates_local)
 	    # Emax2 cutoff for 211 level
             if (u_real[1] .> Emax2) && (SR_rates_local[1] > 0)
                 SR_rates_local[1] *= 0.0
@@ -252,7 +233,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
 
                 is_bh_final = any(idxV .== -1)
                 rate_val = rates[rate_keys[i]] * (is_bh_final ? rP_ratio_now : 1.0)
-
+                
                 for j in 1:length(sgn)
                     if idxV[j] == 0
                         continue
@@ -260,7 +241,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
                     if idxV[j] == -1
                         idxV[j] = massI
                     end
-
+                    
                     du[idxV[j]] += sgn[j] * rate_val * u_term_tot
                 end
             end
@@ -302,7 +283,6 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
                 du[i] *= 0.0
             end
         end
-
         return
     end
 
@@ -358,7 +338,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         u_real = exp.(u)
         rate_keys = collect(keys(rates))
         
-        SR_rates_local = [eval_rate_smooth(func, u_real[spinI]) for func in interp_funcs]
+        SR_rates_local = [func(u_real[spinI]) for func in interp_funcs]
 
         all_contribs = zeros(idx_lvl)
         test = zeros(idx_lvl)
@@ -378,6 +358,8 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         for i in 1:idx_lvl
             if (u[i] .< log(1e-75)) && (SR_rates_local[i] < 0)
                 turn_off[i] = true
+            elseif turn_off[i] && (SR_rates_local[i] > 0)
+                turn_off[i] = false
             end
         end
         if u_real[massI] > (1.4 * M_BH)
@@ -429,7 +411,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
             return true
         elseif (integrator.dt ./ tmin .<= 0.001)
             return true
-        elseif (integrator.dt .<= 1e-10)
+        elseif (integrator.dt .<= 1e-12)
             return true
         else
             return false
@@ -509,7 +491,6 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # ============================================================================
     def_spin_tol = 1e-3
     dt_guess = abs.((maximum(SR_rates) ./ hbar .* 3.15e7)^(-1) ./ 5.0)
-
     if spinone
         # Spinone: minimal callbacks
         cbackspin = DiscreteCallback(check_spin, affect_spin!, save_positions=(false, true))
@@ -520,6 +501,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         cbackdt = DiscreteCallback(check_timescale, affect_timescale!, save_positions=(false, true))
         cbackspin = DiscreteCallback(check_spin, affect_spin!, save_positions=(false, true))
         cbset = CallbackSet(cbackspin, cbackdt, callbackTIME)
+        
     end
 
     # ============================================================================
@@ -530,7 +512,8 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=1e-7, abstol=1e-10)
     else
         # Standard uses adaptive reltol array
-        println(reltol)
+        # println(reltol)
+        # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=reltol, abstol=1e-10)
         prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=reltol, abstol=1e-10)
     end
     sol = solve(prob, TRBDF2(autodiff=false), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e6)
