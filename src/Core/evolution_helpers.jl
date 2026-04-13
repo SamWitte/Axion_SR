@@ -164,8 +164,8 @@ Creates state vector [log(e1), ..., log(e_idx_lvl), log(aBH), log(M_BH)].
 Applies default_reltol to energy components and def_spin_tol=1e-3 to spin/mass.
 """
 function setup_state_vectors(idx_lvl::Int, aBH::Real, M_BH::Real, e_init::Real, default_reltol::Real)::Tuple{Vector, Vector}
-    y0 = []
-    reltol = []
+    y0 = Float64[]
+    reltol = Float64[]
 
     # Energy levels initialization
     for i in 1:idx_lvl
