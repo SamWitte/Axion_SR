@@ -115,6 +115,21 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     end
 
     # ============================================================================
+    # PRE-COMPUTE RATE INDEX CACHE (Fix 1: avoid O(N_modes × N_rates) per RHS call)
+    # ============================================================================
+    # key_to_indx is O(N_modes) with string allocations per call. For Nmax=15 with
+    # ~22k rate keys × 560 modes this was ~18 min/Jacobian. Cache it once here.
+    rate_cache = if !spinone
+        map(collect(keys(rates))) do k
+            idxV, sgn = key_to_indx(k, Nmax)
+            is_bh = any(idxV .== -1)
+            (idxV, sgn, is_bh, rates[k])
+        end
+    else
+        Vector{Tuple{Vector{Int}, Vector{Int}, Bool, Float64}}()
+    end
+
+    # ============================================================================
     # ODE SETUP
     # ============================================================================
     tspan = (0.0, t_max)
@@ -218,31 +233,25 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         # SCATTERING TERMS (standard mode only)
         # ====================================================================
         if !spinone
-            rate_keys = collect(keys(rates))
             rP_now = 1.0 + sqrt(1.0 - u_real[spinI]^2)
             rP_ratio_now = rP_now / rP_initial
-            for i in 1:length(rate_keys)
-                idxV, sgn = key_to_indx(rate_keys[i], Nmax)
+            for (idxV, sgn, is_bh_final, base_rate) in rate_cache
                 u_term_tot = 1.0
-
                 for j in 1:length(sgn)
                     if (idxV[j] <= idx_lvl) && (idxV[j] > 0)
                         u_term_tot *= u_real[idxV[j]]
                     end
                 end
-
-                is_bh_final = any(idxV .== -1)
-                rate_val = rates[rate_keys[i]] * (is_bh_final ? rP_ratio_now : 1.0)
-                
+                rate_val = base_rate * (is_bh_final ? rP_ratio_now : 1.0)
                 for j in 1:length(sgn)
-                    if idxV[j] == 0
+                    idx_j = idxV[j]
+                    if idx_j == 0
                         continue
                     end
-                    if idxV[j] == -1
-                        idxV[j] = massI
+                    if idx_j == -1
+                        idx_j = massI
                     end
-                    
-                    du[idxV[j]] += sgn[j] * rate_val * u_term_tot
+                    du[idx_j] += sgn[j] * rate_val * u_term_tot
                 end
             end
         end
@@ -336,8 +345,6 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     function check_timescale(u, t, integrator)
         du = get_du(integrator)
         u_real = exp.(u)
-        rate_keys = collect(keys(rates))
-        
         SR_rates_local = [func(u_real[spinI]) for func in interp_funcs]
 
         all_contribs = zeros(idx_lvl)
@@ -366,9 +373,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
             turn_off_M = true
         end
 
-        for i in 1:length(rate_keys)
-            idxV, sgn = key_to_indx(rate_keys[i], Nmax)
-
+        for (idxV, sgn, _, base_rate) in rate_cache
             u_term_tot = 1.0
             u_term_tot_fake = 1.0
             for j in 1:length(sgn)
@@ -382,13 +387,12 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
                     end
                 end
             end
-
             for j in 1:length(sgn)
                 if (idxV[j] <= 0)
                     continue
                 end
-                all_contribs[idxV[j]] += sgn[j] * rates[rate_keys[i]] * u_term_tot
-                test[idxV[j]] += sgn[j] * rates[rate_keys[i]] * u_term_tot_fake
+                all_contribs[idxV[j]] += sgn[j] * base_rate * u_term_tot
+                test[idxV[j]] += sgn[j] * base_rate * u_term_tot_fake
             end
         end
 
@@ -490,7 +494,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # BUILD CALLBACK SET
     # ============================================================================
     def_spin_tol = 1e-3
-    dt_guess = abs.((maximum(SR_rates) ./ hbar .* 3.15e7)^(-1) ./ 5.0)
+    dt_guess = min(abs.((maximum(SR_rates) ./ hbar .* 3.15e7)^(-1) ./ 5.0), saveat)
     if spinone
         # Spinone: minimal callbacks
         cbackspin = DiscreteCallback(check_spin, affect_spin!, save_positions=(false, true))
