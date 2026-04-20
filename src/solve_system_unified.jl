@@ -105,7 +105,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         end
         Mvars = [mu, aBH, M_BH]
         rates = Dict()  # Not used in spinone mode
-        interp_funcs = []
+        interp_funcs = Function[]
     else
         # Standard: Compute interpolated rates using smooth symlog interpolation
         SR_rates, interp_funcs, interp_dict = compute_sr_rates_smooth(modes, M_BH, aBH, alph, cheby=cheby)
@@ -140,98 +140,73 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     turn_off = fill(false, idx_lvl)
     turn_off_M = false
 
+    # ============================================================================
+    # SHARED HELPERS: used by both RHS and check_timescale to keep logic identical
+    # ============================================================================
+    function sanitize_state!(u_real)
+        if u_real[spinI] > maxSpin
+            u_real[spinI] = maxSpin
+        elseif u_real[spinI] < 0.0
+            u_real[spinI] = 0.0
+        end
+
+        for i in 1:idx_lvl
+            if u_real[i] < e_init
+                u_real[i] = e_init
+            end
+            if !spinone && u_real[i] > bn_list[i]
+                u_real[i] = bn_list[i]
+            end
+        end
+    end
+
+    function compute_SR_rates_local(u_real)
+        if spinone
+            OmegaH = u_real[spinI] ./ (2 .* (GNew .* u_real[massI]) .* (1 .+ sqrt.(1 .- u_real[spinI].^2)))
+            wR, wI = precomputed_spin1(alph, u_real[spinI], u_real[massI])
+            if wR .> OmegaH
+                return [0.0], true
+            end
+            SR_rates_local = [2 .* wI]
+            if u_real[1] .>= u_real[spinI]
+                SR_rates_local[1] = 0.0
+            end
+            return SR_rates_local, false
+        else
+            spin_val = clamp(u_real[spinI], 0.0, maxSpin)
+            SR_rates_local = [func(spin_val) for func in interp_funcs]
+            if (u_real[1] .> Emax2) && (SR_rates_local[1] > 0)
+                SR_rates_local[1] = 0.0
+            end
+            return SR_rates_local, false
+        end
+    end
 
     # ============================================================================
-    # RHS FUNCTION (shared logic with mode-specific branches)
+    # RHS FUNCTION
     # ============================================================================
     function RHS_ax!(du, u, Mvars, t)
         u_real = exp.(u)
+        sanitize_state!(u_real)
 
-        # Unpack Mvars based on mode
-        if spinone
-            mu, aBH_i, M_BH_i = Mvars
-        else
-            mu, fa, Emax2, aBH_i, M_BH_i, impose_low_cut = Mvars
+        SR_rates_local, should_zero = compute_SR_rates_local(u_real)
+
+        if spinone && should_zero
+            du .*= 0.0
+            return
         end
 
-        # ====================================================================
-        # SPIN BOUNDARY CONDITION
-        # ====================================================================
-        if spinone
-            # Spinone: Simple hard cutoff
-            if u_real[spinI] > maxSpin
-                u_real[spinI] = maxSpin
-            end
-        else
-            # Standard: Compute rP factor (used elsewhere)
-            if u_real[spinI] .> maxSpin
-                u_real[spinI] = maxSpin
-            elseif u_real[spinI] .< 0.0
-                u_real[spinI] = 0.0
-            end
-        end
-
-        # ====================================================================
-        # BOSENOVA BOUNDARY (standard mode only)
-        # ====================================================================
-        if !spinone
-            for i in 1:idx_lvl
-                if u_real[i] < e_init
-                    u_real[i] = e_init
-                    u[i] = log(e_init)
-                end
-
-                if (abs(u[i] - log(bn_list[i])) < SOLVER_TOLERANCES.bosenova_threshold) ||
-                   (u[i] > log(bn_list[i]))
-                    u[i] = log(bn_list[i])
-                    u_real[i] = bn_list[i]
-                end
-            end
-        end
-
-        # ====================================================================
-        # RATE COMPUTATION (mode-specific)
-        # ====================================================================
-        OmegaH = u_real[spinI] ./ (2 .* (GNew .* u_real[massI]) .* (1 .+ sqrt.(1 .- u_real[spinI].^2)))
-
-        if spinone
-            wR, wI = precomputed_spin1(alph, u_real[spinI], u_real[massI])
-            if wR .> OmegaH
-                du .*= 0.0
-                return
-            end
-            SR_rates_local = [2 .* wI]
-
-            # Spinone saturation condition
-            if u_real[1] .>= u_real[spinI]
-                u[1] = log(u_real[spinI])
-                u_real[1] = u_real[spinI]
-                SR_rates_local = [0.0]
-            end
-        else
-            SR_rates_local = [func(u_real[spinI]) for func in interp_funcs]
-            
-	    # Emax2 cutoff for 211 level
-            if (u_real[1] .> Emax2) && (SR_rates_local[1] > 0)
-                SR_rates_local[1] *= 0.0
-            end
-        end
-
-        # ====================================================================
-        # SUPERRADIANCE (SR) TERMS
-        # ====================================================================
+        # Superradiance terms
         du[spinI] = 0.0
         du[massI] = 0.0
- 
+
         for i in 1:idx_lvl
             du[i] = SR_rates_local[i] .* u_real[i] ./ mu
             du[spinI] += -m_list[i] * SR_rates_local[i] .* u_real[i] ./ mu
             du[massI] += -SR_rates_local[i] .* u_real[i] ./ mu
         end
 
-        # ====================================================================
-        # SCATTERING TERMS (standard mode only)
-        # ====================================================================
+        # Scattering terms (standard mode only)
         if !spinone
             rP_now = 1.0 + sqrt(1.0 - u_real[spinI]^2)
             rP_ratio_now = rP_now / rP_initial
@@ -245,51 +220,41 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
                 rate_val = base_rate * (is_bh_final ? rP_ratio_now : 1.0)
                 for j in 1:length(sgn)
                     idx_j = idxV[j]
-                    if idx_j == 0
-                        continue
-                    end
-                    if idx_j == -1
-                        idx_j = massI
-                    end
+                    if idx_j == 0; continue; end
+                    if idx_j == -1; idx_j = massI; end
                     du[idx_j] += sgn[j] * rate_val * u_term_tot
                 end
             end
         end
 
-        # ====================================================================
-        # UNIT CORRECTIONS & BOUNDARY CHECKS
-        # ====================================================================
+        # Unit corrections
         for i in 1:idx_lvl
             if spinone
-                # Spinone: simpler energy floor check
                 if u_real[i] < e_init
-                    u_real[i] = e_init
-                    u[i] = log(e_init)
+                    du[i] = 0.0
+                else
+                    du[i] *= mu ./ hbar .* 3.15e7
                 end
-                du[i] *= mu ./ hbar .* 3.15e7
             else
-                # Standard: bosenova boundary checks
                 if ((abs(u[i] - log(bn_list[i])) < SOLVER_TOLERANCES.bosenova_threshold) ||
                     (u[i] > log(bn_list[i]))) && (du[i] > 0)
-                    du[i] *= 0.0
+                    du[i] = 0.0
                 elseif (abs(u[i] - log(e_init)) < SOLVER_TOLERANCES.bosenova_threshold) && (du[i] < 0)
-                    du[i] *= 0.0
+                    du[i] = 0.0
                 else
                     du[i] *= mu ./ hbar .* 3.15e7
                 end
             end
         end
 
-        # Spin and mass unit corrections (shared)
         du[spinI] *= mu ./ hbar .* 3.15e7
         du[massI] *= (mu .* u_real[massI]) .* (mu .* GNew .* u_real[massI]) ./ hbar .* 3.15e7
 
         du ./= u_real
 
-        # Apply turn_off flags
         for i in 1:idx_lvl
             if turn_off[i]
-                du[i] *= 0.0
+                du[i] = 0.0
             end
         end
         return
@@ -343,98 +308,64 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
 
     # Standard mode only: check_timescale and affect_timescale!
     function check_timescale(u, t, integrator)
-        du = get_du(integrator)
         u_real = exp.(u)
-        SR_rates_local = [func(u_real[spinI]) for func in interp_funcs]
-
-        all_contribs = zeros(idx_lvl)
-        test = zeros(idx_lvl)
-        u_fake = u_real * 1.1
+        sanitize_state!(u_real)
+        SR_rates_local, _ = compute_SR_rates_local(u_real)
 
         for i in 1:idx_lvl
-            if (abs(u[i] - log(bn_list[i])) < SOLVER_TOLERANCES.bosenova_threshold) ||
-               (u[i] > log(bn_list[i]))
-                u[i] = log(bn_list[i])
-                u_real[i] = bn_list[i]
-                du[i] *= 0
-            end
-            all_contribs[i] = SR_rates_local[i] .* u_real[i] ./ mu
-            test[i] = SR_rates_local[i] .* u_fake[i] ./ mu
-        end
-
-        for i in 1:idx_lvl
-            if (u[i] .< log(1e-75)) && (SR_rates_local[i] < 0)
+            if (u[i] < log(1e-75)) && (SR_rates_local[i] < 0)
                 turn_off[i] = true
             elseif turn_off[i] && (SR_rates_local[i] > 0)
                 turn_off[i] = false
             end
         end
+
         if u_real[massI] > (1.4 * M_BH)
             turn_off_M = true
         end
 
-        for (idxV, sgn, _, base_rate) in rate_cache
-            u_term_tot = 1.0
-            u_term_tot_fake = 1.0
-            for j in 1:length(sgn)
-                if (idxV[j] <= idx_lvl) && (idxV[j] > 0)
-                    if j == 3
-                        u_term_tot *= (u_real[idxV[j]] .+ e_init)
-                        u_term_tot_fake *= (u_fake[idxV[j]] .+ e_init)
-                    else
-                        u_term_tot *= u_real[idxV[j]]
-                        u_term_tot_fake *= u_fake[idxV[j]]
-                    end
-                end
-            end
-            for j in 1:length(sgn)
-                if (idxV[j] <= 0)
-                    continue
-                end
-                all_contribs[idxV[j]] += sgn[j] * base_rate * u_term_tot
-                test[idxV[j]] += sgn[j] * base_rate * u_term_tot_fake
-            end
-        end
-
         integrator.opts.reltol = reltol
+        du = get_du(integrator)
 
-        tlist = []
+        tlist = Float64[]
         for i in 1:idx_lvl
             condBN = (abs(u[i] - log(bn_list[i])) < SOLVER_TOLERANCES.bosenova_threshold)
-
             if (u[i] > log(e_init)) && condBN && (du[i] != 0.0)
-                append!(tlist, abs(1.0 ./ du[i]))
+                push!(tlist, abs(1.0 ./ du[i]))
             end
         end
 
-        
-        append!(tlist, def_spin_tol ./ du[spinI])
-        tmin = minimum(abs.(tlist))
+        if du[spinI] != 0.0
+            push!(tlist, abs(def_spin_tol ./ du[spinI]))
+        end
 
-        if (integrator.dt ./ tmin .>= 0.1)
-            return true
-        elseif (integrator.dt ./ tmin .<= 0.001)
-            return true
-        elseif (integrator.dt .<= 1e-12)
-            return true
-        else
-            return false
+        if isempty(tlist); return false; end
+        tmin = minimum(tlist)
+
+        if (integrator.dt ./ tmin .>= 0.1); return true
+        elseif (integrator.dt ./ tmin .<= 0.001); return true
+        elseif (integrator.dt .<= 1e-12); return true
+        else; return false
         end
     end
 
     function affect_timescale!(integrator)
         du = get_du(integrator)
-        tlist = []
-        indx_list = []
+        tlist = Float64[]
+        indx_list = Int[]
         for i in 1:idx_lvl
             condBN = (abs(integrator.u[i] - log(bn_list[i])) < SOLVER_TOLERANCES.bosenova_threshold)
-            if (integrator.u[i] > log(e_init)) && condBN
-                append!(tlist, (1.0 ./ du[i]))
-                append!(indx_list, i)
+            if (integrator.u[i] > log(e_init)) && condBN && (du[i] != 0.0)
+                push!(tlist, 1.0 ./ du[i])
+                push!(indx_list, i)
             end
         end
 
-        append!(tlist, def_spin_tol ./ du[spinI])
+        if du[spinI] != 0.0
+            push!(tlist, def_spin_tol ./ du[spinI])
+        end
+
+        if isempty(tlist); return; end
         tmin = minimum(abs.(tlist))
 
         if (integrator.dt ./ integrator.t < 1e-6) && (wait % 1000 == 0) && (wait > 10000)
