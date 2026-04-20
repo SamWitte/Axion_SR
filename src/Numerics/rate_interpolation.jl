@@ -66,29 +66,40 @@ end
 
 Extract rate vs spin at a specific alpha, filtering out floored values.
 Returns (spin_array, rate_array) with only valid (non-floored) data.
+
+Interpolates/extrapolates in log(alpha)–log(rate) space per spin column so
+that extrapolation below the data range follows a power law in alpha rather
+than going linearly negative.
 """
 function extract_valid_rates_at_alpha(data_3d, alph, M; floor_threshold=RATE_FLOOR)
-    alpha_vals = unique(data_3d[:, :, 1])
-    spin_vals = unique(data_3d[:, :, 2])
-    n_alpha = length(alpha_vals)
-    n_spin = length(spin_vals)
+    alpha_vals = sort(unique(data_3d[:, :, 1]))
+    spin_vals  = sort(unique(data_3d[:, :, 2]))
+    n_alpha    = length(alpha_vals)
+    n_spin     = length(spin_vals)
 
-    # Reshape rate data: (n_alpha, n_spin)
-    rates = reshape(data_3d[:, :, 3], n_alpha, n_spin)
+    # Reshape rate data: (n_alpha, n_spin) and apply scale factor
+    rates = reshape(data_3d[:, :, 3], n_alpha, n_spin) .* 2.0 ./ (GNew * M)
 
-    # Apply scale factor and normalize
-    rates = rates .* 2.0
-    rates = rates ./ (GNew * M)
+    # For each spin value, interpolate in log(alpha)–log(rate) space so that
+    # extrapolation below/above the data range is a power law in alpha.
+    rates_at_alpha = zeros(n_spin)
+    for j in 1:n_spin
+        col        = rates[:, j]
+        valid      = col .> floor_threshold
+        n_valid    = sum(valid)
+        if n_valid < 2
+            rates_at_alpha[j] = 0.0
+            continue
+        end
+        va = alpha_vals[valid]
+        vr = col[valid]
+        # Linear interpolation in log–log space → power-law extrapolation
+        itp_1d = LinearInterpolation(log.(va), log.(vr), extrapolation_bc=Line())
+        log_rate = itp_1d(log(alph))
+        rates_at_alpha[j] = exp(log_rate)
+    end
 
-    # Create 2D interpolator to get rates at our specific alpha
-    itp_2d = LinearInterpolation((alpha_vals, spin_vals), rates, extrapolation_bc=Line())
-
-    # Extract 1D slice at our alpha
-    rates_at_alpha = [itp_2d(alph, a) for a in spin_vals]
-
-    # Filter out floored values
-    valid_mask = abs.(rates_at_alpha) .> floor_threshold
-
+    valid_mask = rates_at_alpha .> floor_threshold
     return spin_vals[valid_mask], rates_at_alpha[valid_mask]
 end
 
