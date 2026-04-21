@@ -82,7 +82,7 @@ mkpath(outdir)
 # Fixed numerical parameters -- taken from single_BH.jl
 impose_low_cut   = 1e-100
 return_all_info  = true
-n_times          = 100000
+n_times          = 1000000
 eq_threshold     = 1e-100
 stop_on_a        = 0.0
 abstol           = 1e-30
