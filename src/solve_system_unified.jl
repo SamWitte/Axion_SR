@@ -421,22 +421,42 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         terminate!(integrator)
     end
 
+    # Shared: enforce occupation numbers >= initial value
+    log_e_init = log(e_init)
+    function check_lower_bound(u, t, integrator)
+        for i in 1:idx_lvl
+            if u[i] < log_e_init
+                return true
+            end
+        end
+        return false
+    end
+
+    function affect_lower_bound!(integrator)
+        for i in 1:idx_lvl
+            if integrator.u[i] < log_e_init
+                integrator.u[i] = log_e_init
+            end
+        end
+    end
+
     # ============================================================================
     # BUILD CALLBACK SET
     # ============================================================================
     def_spin_tol = 1e-3
     dt_guess = min(abs.((maximum(SR_rates) ./ hbar .* 3.15e7)^(-1) ./ 5.0), saveat)
+    cback_lower = DiscreteCallback(check_lower_bound, affect_lower_bound!, save_positions=(false, false))
     if spinone
         # Spinone: minimal callbacks
         cbackspin = DiscreteCallback(check_spin, affect_spin!, save_positions=(false, true))
-        cbset = CallbackSet(cbackspin)
+        cbset = CallbackSet(cbackspin, cback_lower)
     else
         # Standard: full callback set
         callbackTIME = DiscreteCallback(time_limit_callback, affect_time!, save_positions=(false, false))
         cbackdt = DiscreteCallback(check_timescale, affect_timescale!, save_positions=(false, true))
         cbackspin = DiscreteCallback(check_spin, affect_spin!, save_positions=(false, true))
-        cbset = CallbackSet(cbackspin, cbackdt, callbackTIME)
-        
+        cbset = CallbackSet(cbackspin, cbackdt, callbackTIME, cback_lower)
+
     end
 
     # ============================================================================
