@@ -88,7 +88,7 @@ stop_on_a        = 0.0
 abstol           = 1e-30
 N_pts_interp     = 100
 N_pts_interpL    = 100
-cheby            = false
+cheby            = true
 non_rel          = false
 high_p           = true
 
