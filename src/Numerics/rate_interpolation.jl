@@ -65,11 +65,9 @@ end
     extract_valid_rates_at_alpha(data_3d, alph, M; floor_threshold=RATE_FLOOR)
 
 Extract rate vs spin at a specific alpha, filtering out floored values.
-Returns (spin_array, rate_array) with only valid (non-floored) data.
-
-Interpolates/extrapolates in log(alpha)–log(rate) space per spin column so
-that extrapolation below the data range follows a power law in alpha rather
-than going linearly negative.
+Returns (spin_array, rate_array, alpha_min) where alpha_min is the smallest
+alpha in the dataset. If alph < alpha_min the interpolation is evaluated at
+alpha_min; the caller is responsible for applying any power-law rescaling.
 """
 function extract_valid_rates_at_alpha(data_3d, alph, M; floor_threshold=RATE_FLOOR)
     alpha_vals = sort(unique(data_3d[:, :, 1]))
@@ -77,30 +75,16 @@ function extract_valid_rates_at_alpha(data_3d, alph, M; floor_threshold=RATE_FLO
     n_alpha    = length(alpha_vals)
     n_spin     = length(spin_vals)
 
-    # Reshape rate data: (n_alpha, n_spin) and apply scale factor
     rates = reshape(data_3d[:, :, 3], n_alpha, n_spin) .* 2.0 ./ (GNew * M)
 
-    # For each spin value, interpolate in log(alpha)–log(rate) space so that
-    # extrapolation below/above the data range is a power law in alpha.
-    rates_at_alpha = zeros(n_spin)
-    for j in 1:n_spin
-        col        = rates[:, j]
-        valid      = col .> floor_threshold
-        n_valid    = sum(valid)
-        if n_valid < 2
-            rates_at_alpha[j] = 0.0
-            continue
-        end
-        va = alpha_vals[valid]
-        vr = col[valid]
-        # Linear interpolation in log–log space → power-law extrapolation
-        itp_1d = LinearInterpolation(log.(va), log.(vr), extrapolation_bc=Line())
-        log_rate = itp_1d(log(alph))
-        rates_at_alpha[j] = exp(log_rate)
-    end
+    alpha_min = alpha_vals[1]
+    alpha_eff = max(alph, alpha_min)
 
-    valid_mask = rates_at_alpha .> floor_threshold
-    return spin_vals[valid_mask], rates_at_alpha[valid_mask]
+    itp_2d = LinearInterpolation((alpha_vals, spin_vals), rates, extrapolation_bc=Line())
+    rates_at_alpha = [itp_2d(alpha_eff, a) for a in spin_vals]
+
+    valid_mask = abs.(rates_at_alpha) .> floor_threshold
+    return spin_vals[valid_mask], rates_at_alpha[valid_mask], alpha_min
 end
 
 """
@@ -137,12 +121,15 @@ function pre_computed_sr_rates_unified(n, l, m, alph, M; cheby::Bool=true)
     # Add positive rate data (these are growth rates, keep as positive)
     if isfile(pos_file)
         pos_data = npzread(pos_file)
-        spins_pos, rates_pos = extract_valid_rates_at_alpha(pos_data, alph, M)
+        spins_pos, rates_pos, alpha_min_pos = extract_valid_rates_at_alpha(pos_data, alph, M)
+        if alph < alpha_min_pos
+            rates_pos = rates_pos .* (alph / alpha_min_pos)^(4*l + 5)
+        end
 
         for (a, r) in zip(spins_pos, rates_pos)
-            if r > 0  # Valid non-floored data
+            if r > 0
                 push!(all_spins, a)
-                push!(all_rates, r)  # Positive rates
+                push!(all_rates, r)
             end
         end
     end
@@ -150,12 +137,15 @@ function pre_computed_sr_rates_unified(n, l, m, alph, M; cheby::Bool=true)
     # Add negative rate data (these are damping rates, make negative)
     if isfile(neg_file)
         neg_data = npzread(neg_file)
-        spins_neg, rates_neg = extract_valid_rates_at_alpha(neg_data, alph, M)
+        spins_neg, rates_neg, alpha_min_neg = extract_valid_rates_at_alpha(neg_data, alph, M)
+        if alph < alpha_min_neg
+            rates_neg = rates_neg .* (alph / alpha_min_neg)^(4*l + 5)
+        end
 
         for (a, r) in zip(spins_neg, rates_neg)
-            if r > 0  # Valid non-floored data (stored as positive)
+            if r > 0
                 push!(all_spins, a)
-                push!(all_rates, -r)  # Negative (damping) rates
+                push!(all_rates, -r)
             end
         end
     end
@@ -195,7 +185,8 @@ function pre_computed_sr_rates_unified(n, l, m, alph, M; cheby::Bool=true)
         interp_func = aspin -> 0.0
         return a_mid, interp_func, (minSpin, maxSpin)
     end
-
+    
+    
     # Create linear interpolation directly on rates (no symlog transformation)
     itp = LinearInterpolation(unique_spins, unique_rates, extrapolation_bc=Line())
 
