@@ -243,9 +243,9 @@ function setup_quantum_levels_standard(Nmax::Int, fa::Float64, M_Pl::Float64, al
             push!(seen_truncation_modes, trunc_key)
         end
     end
-    println(idx_lvl)
-    println(m_list)
-    println(modes)
+    # println(idx_lvl)
+    # println(m_list)
+    # println(modes)
     return (idx_lvl, m_list, bn_list, modes)
 end
 
