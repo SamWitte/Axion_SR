@@ -800,7 +800,6 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
         imax = argmin(abs.(r_vals .- r_vals[imax] .* 1.0))
         
         r_max_new = r_vals[imax]
-        println(rpts, "\t", imax, "\t", "HERE")
         
         for i in 1:rpts
             if r_vals[i] <= r_max_new
