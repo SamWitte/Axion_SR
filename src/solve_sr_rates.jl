@@ -758,7 +758,7 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
         nuN = (alpha_other .+ beta .+ gam .+ alpha_other .* gam  .+ beta .* gam) ./ 2 .+ eta .+ deltt
         
         ### choose r values i want...
-        r_max_shrt = 2.0 .^(2.0 .* n .- 2 .* (1 .+ n)) .* gamma(2 .+ 2 .* n) ./ alph.^2 ./ factorial(big(2 .* n - 1)) .* 3.0
+        r_max_shrt = 2.0 .^(2.0 .* n .- 2 .* (1 .+ n)) .* gamma(2 .+ 2 .* n) ./ alph.^2 ./ factorial(big(2 .* n - 1)) .* 5.0
         r_max = n ./ alph.^2 .* 100.0
         r_vals = rlist = 10 .^(range(log10.(rplus  .* (1.0 .+ 1e-3)), log10.(r_max), rpts))
         
@@ -797,8 +797,10 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
             end
         end
         # now go a little further back because you didn't go far enough
-        imax = argmin(abs.(r_vals .- r_vals[imax] .* 0.9))
+        imax = argmin(abs.(r_vals .- r_vals[imax] .* 1.0))
+        
         r_max_new = r_vals[imax]
+        println(rpts, "\t", imax, "\t", "HERE")
         
         for i in 1:rpts
             if r_vals[i] <= r_max_new
@@ -1659,9 +1661,9 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     end
     
     
-    # writedlm("test_store/test1.dat", hcat(real(rlist), real(rf_1 .* conj.(rf_1))))
+    writedlm("test_store/test1.dat", hcat(real(rlist), real(rf_1 .* conj.(rf_1))))
     # writedlm("test_store/test2.dat", hcat(real(rlist), real(rf_2 .* conj.(rf_2))))
-    # writedlm("test_store/test3.dat", hcat(real(rlist), real(rf_3 .* conj.(rf_3))))
+    writedlm("test_store/test3.dat", hcat(real(rlist), real(rf_3 .* conj.(rf_3))))
     erg = (erg_1 + erg_2 - erg_3) + 0 * im # leave the 0 im for NR case
     
     ### recheck if to inf holds...
@@ -2663,7 +2665,7 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=200, L=4, Npoints=60, Iter
         end
     end
     # now go a little further back because you didn't go far enough
-    imax = argmin(abs.(r_vals .- r_vals[imax] .* 0.9))
+    imax = argmin(abs.(r_vals .- r_vals[imax] .* 1.0))
     r_max_new = r_vals[imax]
     
     for i in 1:Npts_r
@@ -2884,9 +2886,9 @@ end
 # @time wR, wI, rl, r3 = eigensys_Cheby(1, 0.9, 0.8557577459790169 ./ GNew, 4, 3, 3, debug=true, return_wf=true, L=4, Npoints = 70, Iter = 20,  der_acc=1e-20, cvg_acc=1e-10, prec=200, Npts_r=2000, sfty_run=false)
 
 # @time wR, wI, rl, r3 = eigensys_Cheby(1, 0.9, 0.03 ./ GNew, 2, 1, 1, debug=true, return_wf=true, L=4, Npoints = 70, Iter = 20,  der_acc=1e-20, cvg_acc=1e-10, prec=200, Npts_r=200, sfty_run=false)
-
-# @time wR, wI = find_im_part(0.3 ./ GNew, 1, 0.99, 2, 1, 1; debug=true, return_both=true, for_s_rates=true, Ntot_force=20000)
-# println(wR ./ 0.3, "\t", wI ./ 0.3)
+# GNew = 7484169213.942707      # Gravitational constant (1/(M_⊙·eV))
+# @time wR, wI = find_im_part(1.3 ./ GNew, 1, 0.95, 5, 4, 4; debug=true, return_both=true, for_s_rates=true, Ntot_force=20000)
+# println(wR ./ 1.3, "\t", wI ./ 1.3)
 # println(wI)
 # writedlm("test.dat", cat(real.(rl), real.(abs.(r3 .* conj(r3))), dims=2))
 
