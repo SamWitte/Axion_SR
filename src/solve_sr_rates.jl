@@ -2623,7 +2623,7 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=200, L=4, Npoints=60, Iter
     nuN = (alpha_other .+ beta .+ gam .+ alpha_other .* gam  .+ beta .* gam) ./ 2 .+ eta .+ deltt
     
     ### choose r values i want...
-    r_max_shrt = 2.0 .^(2.0 .* n .- 2 .* (1 .+ n)) .* gamma(2 .+ 2 .* n) ./ alph.^2 ./ factorial(big(2 .* n - 1)) .* 3.0
+    r_max_shrt = 2.0 .^(2.0 .* n .- 2 .* (1 .+ n)) .* gamma(2 .+ 2 .* n) ./ alph.^2 ./ factorial(big(2 .* n - 1)) .* 5.0
     r_max = n ./ alph.^2 .* 100.0
     if (R(r_max, Nν_values[final_idx]) ./ R(rplus  .* (1.0 .+ 1e-3), Nν_values[final_idx])) .> 1
         r_max *= 10
