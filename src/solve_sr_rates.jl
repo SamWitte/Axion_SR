@@ -1531,6 +1531,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     end
     
     
+        
     rlist = 10 .^range(log10(rp .* (1.0 .+ eps_fac)), log10.(rmax), rpts)
     
     # simplify_radial = check_slv_rad(alph, m1)
@@ -1660,10 +1661,11 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     end
     
     
-    writedlm("test_store/test1.dat", hcat(real(rlist), real(rf_1 .* conj.(rf_1))))
+    # writedlm("test_store/test1.dat", hcat(real(rlist), real(rf_1 .* conj.(rf_1))))
     # writedlm("test_store/test2.dat", hcat(real(rlist), real(rf_2 .* conj.(rf_2))))
-    writedlm("test_store/test3.dat", hcat(real(rlist), real(rf_3 .* conj.(rf_3))))
+    # writedlm("test_store/test3.dat", hcat(real(rlist), real(rf_3 .* conj.(rf_3))))
     erg = (erg_1 + erg_2 - erg_3) + 0 * im # leave the 0 im for NR case
+
     
     ### recheck if to inf holds...
     if (abs.(erg) .> alph)&&!to_inf
@@ -1879,8 +1881,17 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     outWF = []
     rvals = []
     # set D to 1
-    
-    append!(outWF,  exp.(-sqrt.(alph.^2 .- erg.^2) .* rr) .* sqrt.(itp_rrstar.(rr).^2 .+ a.^2) ./ itp_rrstar.(rr)) ##
+     
+    testhold =  exp.(-sqrt.(alph.^2 .- erg.^2) .* rr) .* sqrt.(itp_rrstar.(rr).^2 .+ a.^2) ./ itp_rrstar.(rr)
+    if abs.(testhold) .> 1e-200
+        append!(outWF, testhold)
+    else
+        while abs.(testhold) .<= 1e-200
+            rr /= 2.0
+            testhold =  exp.(-sqrt.(alph.^2 .- erg.^2) .* rr) .* sqrt.(itp_rrstar.(rr).^2 .+ a.^2) ./ itp_rrstar.(rr)
+        end
+        append!(outWF, testhold)
+    end
     append!(rvals, rr)
     rr -= h_step
     append!(outWF,  exp.(-sqrt.(alph.^2 .- erg.^2) .* rr) .* sqrt.(itp_rrstar.(rr).^2 .+ a.^2) ./ itp_rrstar.(rr))
@@ -1906,7 +1917,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         append!(outWF, newV_r + im * newV_i)
             
         append!(rvals, rr)
-
+        
         rr -= h_step
         idx += 1
         
@@ -1963,9 +1974,26 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         return 0.0
     end
     wronk  = (outWF_fw[midP] .* (outWF[midP+1] .- outWF[midP-1]) .-  outWF[midP] .* (outWF_fw[midP+1] .- outWF_fw[midP-1]) )./ (itp_rrstar.(rvals[midP+1]) .- itp_rrstar.(rvals[midP-1]))
-    wronk *= (itp_rrstar.(rvals[midP]).^2 .- 2 .* itp_rrstar.(rvals[midP]) .+ a.^2) .* (GNew .* M)
+    
+    if isnan.(wronk)
+        goback = true
+        while goback
+            midP -= 1
+            wronk  = (outWF_fw[midP] .* (outWF[midP+1] .- outWF[midP-1]) .-  outWF[midP] .* (outWF_fw[midP+1] .- outWF_fw[midP-1]) )./ (itp_rrstar.(rvals[midP+1]) .- itp_rrstar.(rvals[midP-1]))
+            if !isnan.(wronk)&&(abs.(wronk) .> 0.0)
+                goback=false
+            end
+            if midP < 3
+                goback=false
+                println("ran out of space in wronk...")
+            end
+        end
+    end
 
+    
+    wronk *= (itp_rrstar.(rvals[midP]).^2 .- 2 .* itp_rrstar.(rvals[midP]) .+ a.^2) .* (GNew .* M)
     Tmm = (itpG(log10.(itp_rrstar.(rvals))) + im * itpGI(log10.(itp_rrstar.(rvals)))) .* (CG .* itp_rrstar.(rvals).^2 .+ CG_2 .* a.^2)
+    
     
     ####
     if to_inf
@@ -1981,7 +2009,8 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     else
         idx_hold = itp_rrstar.(rvals) .> 1.01 .* rp
         rnew_rp = trapz(outWF[idx_hold] .* Tmm[idx_hold] , itp_rrstar.(rvals[idx_hold])) .* outWF_fw[idx_hold][1] ./ wronk
-
+        
+        
         maxV = real(rnew_rp.* conj.(rnew_rp))
 
         lam = (mu ./ (M_pl .* 1e9))^2
