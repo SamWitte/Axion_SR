@@ -452,7 +452,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # BUILD CALLBACK SET
     # ============================================================================
     def_spin_tol = 1e-3
-    dt_guess = min(abs.((maximum(SR_rates) ./ hbar .* 3.15e7)^(-1) ./ 5.0), saveat)
+    dt_guess = abs.((maximum(SR_rates) ./ hbar .* 3.15e7)^(-1) ./ 5.0)
     cback_lower = DiscreteCallback(check_lower_bound, affect_lower_bound!, save_positions=(false, false))
     if spinone
         # Spinone: minimal callbacks
