@@ -133,7 +133,10 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # ODE SETUP
     # ============================================================================
     tspan = (0.0, t_max)
-    saveat = (tspan[2] .- tspan[1]) ./ n_times
+    # Log-spaced save points so that early-time dynamics are resolved on the log x-axis.
+    # t_start avoids log(0); the floor at 1.0 is arbitrary but safe for all tau_max values.
+    t_log_start = max(1.0, tspan[2] * 1e-9)
+    saveat = exp10.(range(log10(t_log_start), log10(tspan[2]), length=n_times))
 
     # Trackers for callbacks
     wait = 0
