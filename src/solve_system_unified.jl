@@ -121,6 +121,9 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # ~22k rate keys × 560 modes this was ~18 min/Jacobian. Cache it once here.
     rate_cache = if !spinone
         map(collect(keys(rates))) do k
+            if abs.(rates[k]) .> 1e20
+                rates[k] = 0.0
+            end
             idxV, sgn = key_to_indx(k, Nmax)
             is_bh = any(idxV .== -1)
             (idxV, sgn, is_bh, rates[k])
@@ -188,9 +191,10 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     function RHS_ax!(du, u, Mvars, t)
         u_real = exp.(u)
         sanitize_state!(u_real)
+        
 
         SR_rates_local, should_zero = compute_SR_rates_local(u_real)
-
+        
         if spinone && should_zero
             du .*= 0.0
             return
@@ -325,6 +329,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         end
 
         integrator.opts.reltol = reltol
+        
         du = get_du(integrator)
 
         tlist = Float64[]
