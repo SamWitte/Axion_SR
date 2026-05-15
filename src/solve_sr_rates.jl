@@ -1520,8 +1520,16 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         end
 
     else
+        
         l = 0
         m = 0
+        if (l1 + l2 - l3) != 0
+            l = (l1 + l2 - l3)
+        end
+        if (m1 + m2 - m3) != 0
+            m = (m1 + m2 - m3)
+        end
+        
         # rmax = Float64.(100 ./ alph.^2 .* (minN ./ 2.0) )
         if maxN < 10
             rmax = 2.0 .^(2.0 .* maxN .- 2 .* (1 .+ maxN)) .* gamma(2 .+ 2 .* maxN) ./ alph.^2 ./ factorial(2 .* maxN - 1) .* 10.0
@@ -1555,7 +1563,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                 println("Issue with one of the energy eigenstates....")
                 println("ERG 1\t", erg_1)
             end
-            if (erg_1G .< 0.8 .* m1 .* OmegaH) # if fail is deep in superradiant regime, catch
+            if (erg_1G .< 0.8 .* m1 .* OmegaH)&&(m1 > 0) # if fail is deep in superradiant regime, catch
                 rf_1 = radial_bound_NR(n1, l1, m1, mu, M, rlist)
                 erg_1 = erg_1G
             else
@@ -1601,7 +1609,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                     println("Issue with one of the energy eigenstates....")
                     println("ERG 2\t", erg_2)
                 end
-                if (erg_2G .< 0.8 .* m2 .* OmegaH) # if fail is deep in superradiant regime, catch
+                if (erg_2G .< 0.8 .* m2 .* OmegaH)&&(m2 > 0) # if fail is deep in superradiant regime, catch
                     rf_2 = radial_bound_NR(n2, l2, m2, mu, M, rlist)
                     erg_2 = erg_2G
                 else
@@ -1642,7 +1650,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                 println("Issue with one of the energy eigenstates....")
                 println("ERG 3\t", erg_3)
             end
-            if (erg_3G .< 0.8 .* m3 .* OmegaH) # if fail is deep in superradiant regime, catch
+            if (erg_3G .< 0.8 .* m3 .* OmegaH)&&(m3 > 0) # if fail is deep in superradiant regime, catch
                 rf_3 = radial_bound_NR(n3, l3, m3, mu, M, rlist)
                 erg_3 = erg_3G
             else
@@ -1683,8 +1691,8 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     elseif (abs.(erg) .< alph)&&to_inf
         println("Flipping from inf to bnd")
         to_inf = false
-        l = 0
-        m = 0
+        m = (m1 + m2 - m3)
+        l = l1 + l2 - l3
     end
     
     Z1 = spheroidals(l1, m1, a, erg_1)
