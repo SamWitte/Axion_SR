@@ -121,6 +121,9 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # ~22k rate keys × 560 modes this was ~18 min/Jacobian. Cache it once here.
     rate_cache = if !spinone
         map(collect(keys(rates))) do k
+            if abs.(rates[k]) .> 1e20
+                rates[k] = 0.0
+            end
             idxV, sgn = key_to_indx(k, Nmax)
             is_bh = any(idxV .== -1)
             (idxV, sgn, is_bh, rates[k])
@@ -133,7 +136,10 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # ODE SETUP
     # ============================================================================
     tspan = (0.0, t_max)
-    saveat = (tspan[2] .- tspan[1]) ./ n_times
+    # Log-spaced save points so that early-time dynamics are resolved on the log x-axis.
+    # t_start avoids log(0); the floor at 1.0 is arbitrary but safe for all tau_max values.
+    t_log_start = max(1.0, tspan[2] * 1e-9)
+    saveat = exp10.(range(log10(t_log_start), log10(tspan[2]), length=n_times))
 
     # Trackers for callbacks
     wait = 0
@@ -188,9 +194,10 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     function RHS_ax!(du, u, Mvars, t)
         u_real = exp.(u)
         sanitize_state!(u_real)
+        
 
         SR_rates_local, should_zero = compute_SR_rates_local(u_real)
-
+        
         if spinone && should_zero
             du .*= 0.0
             return
@@ -325,6 +332,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         end
 
         integrator.opts.reltol = reltol
+        
         du = get_du(integrator)
 
         tlist = Float64[]
@@ -444,7 +452,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # BUILD CALLBACK SET
     # ============================================================================
     def_spin_tol = 1e-3
-    dt_guess = min(abs.((maximum(SR_rates) ./ hbar .* 3.15e7)^(-1) ./ 5.0), saveat)
+    dt_guess = abs.((maximum(SR_rates) ./ hbar .* 3.15e7)^(-1) ./ 5.0)
     cback_lower = DiscreteCallback(check_lower_bound, affect_lower_bound!, save_positions=(false, false))
     if spinone
         # Spinone: minimal callbacks
