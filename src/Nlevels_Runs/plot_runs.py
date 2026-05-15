@@ -20,16 +20,18 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-MAX_PLOT_POINTS = 5000   # downsample to this many points before passing to matplotlib
-N_WORKERS = 10
+MAX_PLOT_POINTS = 50000   # downsample to this many points before passing to matplotlib
+N_WORKERS = 40
+
 
 
 def _log(msg):
     print(msg, flush=True)
 
-OUTPUT_ROOT  = "/mnt/users/switte/Axion_SR/src/Nlevels_Runs/output"
-FIGURES_ROOT = "/mnt/users/switte/Axion_SR/src/Nlevels_Runs/figures"
-NMAX_LIST    = [3, 4, 5, 6, 7, 8, 15]
+_HERE        = os.path.dirname(os.path.abspath(__file__))
+OUTPUT_ROOT  = os.path.join(_HERE, "output")
+FIGURES_ROOT = os.path.join(_HERE, "figures")
+NMAX_LIST    = [4, 5, 6, 7, 8, 15]
 MIN_MAX_VAL = 1e-30   # only plot states whose max exceeds this
 
 
@@ -77,11 +79,11 @@ def load_modes(directory, nmax):
 
 
 def load_states_active(directory, nmax, mask, stride, min_val):
-    """Stream States file one row (mode) at a time.
+    """Read States file in chunks via the C parser (much faster than line-by-line).
 
     Returns (active_row_indices, data) where data has shape
     (n_active, n_plot_points) — already masked to positive time and
-    downsampled.  Peak memory: O(one raw row + active downsampled rows).
+    downsampled.
     """
     path = glob_one(os.path.join(directory, f"States_*Nmax_{nmax}.dat"))
     if path is None:
@@ -90,17 +92,15 @@ def load_states_active(directory, nmax, mask, stride, min_val):
     _log(f"    Streaming States Nmax={nmax} ({size_mb:.0f} MB) ...")
     t0 = _time.time()
     active_idx, active_data = [], []
-    with open(path, "r") as fh:
-        for row_i, line in enumerate(fh):
-            line = line.rstrip("\n\r")
-            if not line:
-                continue
-            vals = np.fromstring(line, sep="\t")
-            if len(vals) == 0:
-                continue
-            if np.max(vals) > min_val:
-                active_idx.append(row_i)
-                active_data.append(vals[mask][::stride])
+    row_i = 0
+    for chunk in pd.read_csv(path, sep=r"\s+", header=None, engine="c", chunksize=10):
+        arr = chunk.values
+        row_max = arr.max(axis=1)
+        for j in range(len(arr)):
+            if row_max[j] > min_val:
+                active_idx.append(row_i + j)
+                active_data.append(arr[j][mask][::stride])
+        row_i += len(arr)
     n_active = len(active_idx)
     _log(f"    ... done in {_time.time()-t0:.1f}s  ({n_active} active modes)")
     if n_active == 0:
@@ -284,16 +284,33 @@ def _process_one(args):
 
 
 def main():
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--directory", default=None,
+                    help="Process a single leaf directory (skips zip)")
+    ap.add_argument("--no-zip", action="store_true",
+                    help="Skip zipping the figures directory")
+    args = ap.parse_args()
+
+    if args.directory:
+        d = os.path.abspath(args.directory)
+        _log(f"Single-directory mode: {d}")
+        _process_one((1, 1, d))
+        return
+
     leaves = find_leaf_dirs(OUTPUT_ROOT)
     total = len(leaves)
     _log(f"Found {total} directories to process.")
-    args = [(i, total, d) for i, d in enumerate(leaves, 1)]
+
+    job_args = [(i, total, d) for i, d in enumerate(leaves, 1)]
     workers = min(N_WORKERS, total) if total > 0 else 1
     _log(f"Using {workers} parallel workers.")
     with multiprocessing.Pool(workers) as pool:
-        pool.map(_process_one, args)
+        pool.map(_process_one, job_args)
 
-    zip_figures()
+
+    if not args.no_zip:
+        zip_figures()
 
 
 if __name__ == "__main__":
