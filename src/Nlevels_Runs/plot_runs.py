@@ -13,6 +13,7 @@ import glob
 import gc
 import time as _time
 import zipfile
+import multiprocessing
 import numpy as np
 import pandas as pd
 import matplotlib
@@ -20,6 +21,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 MAX_PLOT_POINTS = 5000   # downsample to this many points before passing to matplotlib
+N_WORKERS = 10
 
 
 def _log(msg):
@@ -268,20 +270,28 @@ def zip_figures():
     _log(f"[DONE] Archive saved: {zip_path}")
 
 
+def _process_one(args):
+    i, total, d = args
+    _log(f"\n[{i}/{total}] Processing: {d}")
+    t0 = _time.time()
+    try:
+        plot_directory(d)
+        _log(f"  Total time for this dir: {_time.time()-t0:.1f}s")
+    except Exception as e:
+        import traceback
+        _log(f"  ERROR in {d}: {e}")
+        traceback.print_exc()
+
+
 def main():
     leaves = find_leaf_dirs(OUTPUT_ROOT)
     total = len(leaves)
     _log(f"Found {total} directories to process.")
-    for i, d in enumerate(leaves, 1):
-        _log(f"\n[{i}/{total}] Processing: {d}")
-        t0 = _time.time()
-        try:
-            plot_directory(d)
-            _log(f"  Total time for this dir: {_time.time()-t0:.1f}s")
-        except Exception as e:
-            import traceback
-            _log(f"  ERROR in {d}: {e}")
-            traceback.print_exc()
+    args = [(i, total, d) for i, d in enumerate(leaves, 1)]
+    workers = min(N_WORKERS, total) if total > 0 else 1
+    _log(f"Using {workers} parallel workers.")
+    with multiprocessing.Pool(workers) as pool:
+        pool.map(_process_one, args)
 
     zip_figures()
 
