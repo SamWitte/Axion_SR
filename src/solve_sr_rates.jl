@@ -1555,8 +1555,13 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             wR, wI, rl, r1 = eigensys_Cheby(M, a, mu, n1, l1, m1, return_wf=true, Npoints=NptsCh, Iter=iterC, L=Lcheb, cvg_acc=cvg_acc, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=false, der_acc=der_acc, debug=debug)
             erg_1 = wR .+ im .* wI
         end
+        if isnan(real(erg_1)) || isnan(imag(erg_1))
+            rf_1 = radial_bound_NR(n1, l1, m1, mu, M, rlist)
+            erg_1 = erg_1G
+        else
         itp = LinearInterpolation(log10.(rl), r1, extrapolation_bc=Line())
         rf_1 = itp(log10.(rlist))
+        end
         real_diff_test = abs.((erg_1 .- erg_1G) ./ alph) # saftey net for random fail....
         imag_noise_threshold = 1e-40  # numerical noise tolerance for imaginary part
         if (imag(erg_1) < -imag_noise_threshold)||(real_diff_test .> 0.5)
@@ -1584,8 +1589,9 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                     rf_1 = radial_bound_NR(n1, l1, m1, mu, M, rlist)
                     erg_1 = erg_1G
                 else
-                    println("erg 1 failure....")
-                    return 0.0
+                    println("erg 1 failure, using NR fallback....")
+                    rf_1 = radial_bound_NR(n1, l1, m1, mu, M, rlist)
+                    erg_1 = erg_1G
                 end
             elseif (abs(imag(erg_1)) < imag_noise_threshold) && (erg_1G .> 2.0 .* m1 .* OmegaH)
                 # Essentially zero imaginary part (numerical noise) AND deep in non-relativistic regime
@@ -1626,8 +1632,13 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                 erg_2 = wR .+ im .* wI
             end
             
+            if isnan(real(erg_2)) || isnan(imag(erg_2))
+                rf_2 = radial_bound_NR(n2, l2, m2, mu, M, rlist)
+                erg_2 = erg_2G
+            else
             itp = LinearInterpolation(log10.(rl), r2, extrapolation_bc=Line())
             rf_2 = itp(log10.(rlist))
+            end
             real_diff_test = abs.((erg_2 .- erg_2G ) ./ alph) # saftey net for random fail....
             imag_noise_threshold = 1e-40  # numerical noise tolerance for imaginary part
             if (imag(erg_2) < -imag_noise_threshold)||(real_diff_test .> 0.5)
@@ -1657,8 +1668,9 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                         rf_2 = radial_bound_NR(n2, l2, m2, mu, M, rlist)
                         erg_2 = erg_2G
                     else
-                        println("erg 2 failure....")
-                        return 0.0
+                        println("erg 2 failure, using NR fallback....")
+                        rf_2 = radial_bound_NR(n2, l2, m2, mu, M, rlist)
+                        erg_2 = erg_2G
                     end
                 elseif (abs(imag(erg_2)) < imag_noise_threshold) && (erg_2G .> 2.0 .* m2 .* OmegaH)
                     # Essentially zero imaginary part (numerical noise) AND deep in non-relativistic regime
@@ -1694,8 +1706,13 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             erg_3 = wR .+ im .* wI
         end
         
+        if isnan(real(erg_3)) || isnan(imag(erg_3))
+            rf_3 = radial_bound_NR(n3, l3, m3, mu, M, rlist)
+            erg_3 = erg_3G
+        else
         itp = LinearInterpolation(log10.(rl), r3, extrapolation_bc=Line())
         rf_3 = itp(log10.(rlist))
+        end
         real_diff_test = abs.((erg_3 .- erg_3G) ./ alph) # saftey net for random fail....
         imag_noise_threshold = 1e-40  # numerical noise tolerance for imaginary part
         if (imag(erg_3) < -imag_noise_threshold)||(real_diff_test .> 0.5)
@@ -1724,8 +1741,9 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                     rf_3 = radial_bound_NR(n3, l3, m3, mu, M, rlist)
                     erg_3 = erg_3G
                 else
-                    println("erg 3 failure....")
-                    return 0.0
+                    println("erg 3 failure, using NR fallback....")
+                    rf_3 = radial_bound_NR(n3, l3, m3, mu, M, rlist)
+                    erg_3 = erg_3G
                 end
             elseif (abs(imag(erg_3)) < imag_noise_threshold) && (erg_3G .> 2.0 .* m3 .* OmegaH)
                 # Essentially zero imaginary part (numerical noise) AND deep in non-relativistic regime
