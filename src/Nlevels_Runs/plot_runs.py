@@ -24,6 +24,7 @@ MAX_PLOT_POINTS = 50000   # downsample to this many points before passing to mat
 N_WORKERS = 40
 
 
+
 def _log(msg):
     print(msg, flush=True)
 
@@ -300,11 +301,13 @@ def main():
     leaves = find_leaf_dirs(OUTPUT_ROOT)
     total = len(leaves)
     _log(f"Found {total} directories to process.")
+
     job_args = [(i, total, d) for i, d in enumerate(leaves, 1)]
     workers = min(N_WORKERS, total) if total > 0 else 1
     _log(f"Using {workers} parallel workers.")
     with multiprocessing.Pool(workers) as pool:
         pool.map(_process_one, job_args)
+
 
     if not args.no_zip:
         zip_figures()
