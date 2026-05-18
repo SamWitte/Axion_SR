@@ -1473,10 +1473,10 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         
         erg_pxy = (erg_1G + erg_2G - erg_3G)
     catch
-        erg_1G = ergL(n1, l1, m1, mu, M, a; full=true)
-        erg_2G = ergL(n2, l2, m2, mu, M, a; full=true)
-        erg_3G = ergL(n3, l3, m3, mu, M, a; full=true)
-        erg_pxy = (erg_1G + erg_2G - erg_3G) .* GNew .* M
+        erg_1G = ergL(n1, l1, m1, mu, M, a; full=true) .* GNew .* M
+        erg_2G = ergL(n2, l2, m2, mu, M, a; full=true) .* GNew .* M
+        erg_3G = ergL(n3, l3, m3, mu, M, a; full=true) .* GNew .* M
+        erg_pxy = (erg_1G + erg_2G - erg_3G)
     end
     
     OmegaH = a ./ (2 .* (GNew .* M) .* (1 .+ sqrt.(1 .- a.^2)))
