@@ -1548,7 +1548,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         rf_1 = radial_bound_NR(n1, l1, m1, mu, M, rlist)
         erg_1 = erg_1G
     else
-
+        try
         if run_leaver
             rl, r1, erg_1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe, use_heunc=use_heunc, debug=debug)
         else
@@ -1596,6 +1596,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                 rf_1 = radial_bound_NR(n1, l1, m1, mu, M, rlist)
                 erg_1 = real(erg_1)  # keep the real part from Leaver
             end
+        end
         catch e
             if debug
                 println("solve_radial threw for state 1 (n=$(n1),l=$(l1),m=$(m1)), using NR fallback: ", e)
@@ -1617,7 +1618,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             rf_2 = rf_1
             erg_2 = erg_1
         else
-
+            try
             if run_leaver
                 rl, r2, erg_2 = solve_radial(mu, M, a, n2, l2, m2; rpts=Npts_Bnd,  return_erg=true, Ntot_safe=Ntot_safe, use_heunc=use_heunc, debug=debug)
             else
@@ -1668,6 +1669,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                     rf_2 = radial_bound_NR(n2, l2, m2, mu, M, rlist)
                     erg_2 = real(erg_2)  # keep the real part from Leaver
                 end
+            end
             catch e
                 if debug
                     println("solve_radial threw for state 2 (n=$(n2),l=$(l2),m=$(m2)), using NR fallback: ", e)
@@ -1684,7 +1686,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         rf_3 = radial_bound_NR(n3, l3, m3, mu, M, rlist)
         erg_3 = erg_3G
     else
-
+        try
         if run_leaver
             rl, r3, erg_3 = solve_radial(mu, M, a, n3, l3, m3; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe, use_heunc=use_heunc, debug=debug)
         else
@@ -1734,6 +1736,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                 rf_3 = radial_bound_NR(n3, l3, m3, mu, M, rlist)
                 erg_3 = real(erg_3)  # keep the real part from Leaver
             end
+        end
         catch e
             if debug
                 println("solve_radial threw for state 3 (n=$(n3),l=$(l3),m=$(m3)), using NR fallback: ", e)
