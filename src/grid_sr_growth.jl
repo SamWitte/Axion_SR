@@ -61,7 +61,7 @@ function main_gg(run_leaver, run_analytic, solve_for_zeros, solve_gridded)
     debug=true
 
     Lcheb=8
-    aPts = 12
+    aPts = 14
     alpha_pts = 10
     a_max = 0.998
     atemp = 10 .^LinRange(-3, log10.(0.99), aPts)
@@ -117,6 +117,9 @@ function main_gg(run_leaver, run_analytic, solve_for_zeros, solve_gridded)
             n = nlm[1]; l = nlm[2]; m = nlm[3];
             
             alpha_max = a_max .* m ./ (2 .* (1 .+ sqrt.(1 .- a_max.^2))) .* 1.3
+	    if alpha_max > 2
+	       alpha_max = 2
+	    end
             alphList = LinRange(log10.(0.03), log10.(alpha_max), alpha_pts)
             state_str = format_state_for_filename(n, l, m)
             if run_leaver
@@ -198,7 +201,10 @@ function main_gg(run_leaver, run_analytic, solve_for_zeros, solve_gridded)
             n = nlm[1]; l = nlm[2]; m = nlm[3];
            
             alpha_max = a_max .* m ./ (2 .* (1 .+ sqrt.(1 .- a_max.^2))) .* 1.3
-            # alphList = LinRange(log10.(0.03), log10.(alpha_max), alpha_pts)
+	    if alpha_max > 2
+	       alpha_max = 2
+	    end
+	    # alphList = LinRange(log10.(0.03), log10.(alpha_max), alpha_pts)
 	    alphList = LinRange(log10.(0.3), log10.(alpha_max), alpha_pts)
 
             state_str = format_state_for_filename(n, l, m)
