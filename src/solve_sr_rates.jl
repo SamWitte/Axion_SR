@@ -2664,12 +2664,11 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=200, L=4, Npoints=60, Iter
             
             if debug
                 println("Iteration $i: ν = $(Nν_values[i+1])")
-                if isnan(Nν_values[i+1])
-                    println("HERE \n")
-                    prec += 50
-                    setprecision(BigFloat, prec)
-                end
-             end
+            end
+            if isnan(real(Nν_values[i+1])) || isnan(imag(Nν_values[i+1]))
+                if debug; println("NaN in ν at iteration $i, breaking early"); end
+                break
+            end
             
             if i > 1
                 erg_test_init = calc_ω(Nν_values[i])
