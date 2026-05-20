@@ -15,7 +15,7 @@ function parse_commandline()
             
         "--alpha_pts"
             arg_type = Int
-            default = 30
+            default = 12
             
         "--S1"
             arg_type = String
@@ -73,7 +73,7 @@ check_err = parsed_args["check_err"];
 
 print(S1, "\t", S2, "\t", S3, "\t", S4, "\n")
 
-function main(;kpts=14, rpts=1500, rmaxT=100, Nang=5000000, Npts_Bnd=1000)
+function main(;kpts=14, rpts=1500, rmaxT=100, Nang=5000000, Npts_Bnd=2000)
     a = 0.95
     M = 1.0
     Ntot_safe=30000
@@ -100,7 +100,9 @@ function main(;kpts=14, rpts=1500, rmaxT=100, Nang=5000000, Npts_Bnd=1000)
 
     min_m = minimum([m1, m2])
     alpha_max = a .* min_m ./ (2 .* (1 .+ sqrt.(1 .- a.^2))) .* 1.03
-
+    if alpha_max > 2
+       alpha_max = 2
+    end
     alpha_list = LinRange(alpha_min, alpha_max, alpha_pts)
     NptsCh_list = Int.(round.(LinRange(NptsCh_Min, NptsCh_Max, alpha_pts)))
 
@@ -127,6 +129,7 @@ function main(;kpts=14, rpts=1500, rmaxT=100, Nang=5000000, Npts_Bnd=1000)
 
            
             h_mve = (0.2) ./ rmax_ratio
+	    h_mve *= 10.0
 	    println("h_mve \t", h_mve)           
             output_sve[i] = gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, Npts_Bnd=Npts_Bnd, eps_fac=1e-3, Ntot_safe=Ntot_safe, Nang=Nang, NON_REL=NON_REL, h_mve=h_mve, to_inf=to_inf, rmaxT=rmaxT, run_leaver=run_leaver, NptsCh=NptsCh_list[i], cvg_acc=cvg_acc, prec=prec, iterC=iterC, debug=debug, der_acc=der_acc, Lcheb=Lcheb, use_heunc=use_heunc)
             

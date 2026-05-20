@@ -570,7 +570,9 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
     
     
     setprecision(BigFloat, prec)
-    
+    if m <= 0
+        use_heunc = false
+    end
     alph = GNew .* M .* mu
     
     if m == 1
@@ -759,7 +761,7 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
         
         ### choose r values i want...
         r_max_shrt = 2.0 .^(2.0 .* n .- 2 .* (1 .+ n)) .* gamma(2 .+ 2 .* n) ./ alph.^2 ./ factorial(big(2 .* n - 1)) .* 5.0
-        r_max = n ./ alph.^2 .* 100.0
+        r_max = n.^2 ./ alph.^2 .* 20.0
         r_vals = rlist = 10 .^(range(log10.(rplus  .* (1.0 .+ 1e-3)), log10.(r_max), rpts))
         
         rout_temp = R.(r_vals, nuV)
@@ -1473,10 +1475,10 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         
         erg_pxy = (erg_1G + erg_2G - erg_3G)
     catch
-        erg_1G = ergL(n1, l1, m1, mu, M, a; full=true)
-        erg_2G = ergL(n2, l2, m2, mu, M, a; full=true)
-        erg_3G = ergL(n3, l3, m3, mu, M, a; full=true)
-        erg_pxy = (erg_1G + erg_2G - erg_3G) .* GNew .* M
+        erg_1G = ergL(n1, l1, m1, mu, M, a; full=true) .* GNew .* M
+        erg_2G = ergL(n2, l2, m2, mu, M, a; full=true) .* GNew .* M
+        erg_3G = ergL(n3, l3, m3, mu, M, a; full=true) .* GNew .* M
+        erg_pxy = (erg_1G + erg_2G - erg_3G)
     end
     
     OmegaH = a ./ (2 .* (GNew .* M) .* (1 .+ sqrt.(1 .- a.^2)))
@@ -1529,6 +1531,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         if (m1 + m2 - m3) != 0
             m = (m1 + m2 - m3)
         end
+
         
         # rmax = Float64.(100 ./ alph.^2 .* (minN ./ 2.0) )
         if maxN < 10
@@ -1548,18 +1551,23 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         rf_1 = radial_bound_NR(n1, l1, m1, mu, M, rlist)
         erg_1 = erg_1G
     else
-
+        try
         if run_leaver
             rl, r1, erg_1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe, use_heunc=use_heunc, debug=debug)
         else
             wR, wI, rl, r1 = eigensys_Cheby(M, a, mu, n1, l1, m1, return_wf=true, Npoints=NptsCh, Iter=iterC, L=Lcheb, cvg_acc=cvg_acc, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=false, der_acc=der_acc, debug=debug)
             erg_1 = wR .+ im .* wI
         end
+        if isnan(real(erg_1)) || isnan(imag(erg_1))
+            rf_1 = radial_bound_NR(n1, l1, m1, mu, M, rlist)
+            erg_1 = erg_1G
+        else
         itp = LinearInterpolation(log10.(rl), r1, extrapolation_bc=Line())
         rf_1 = itp(log10.(rlist))
+        end
         real_diff_test = abs.((erg_1 .- erg_1G) ./ alph) # saftey net for random fail....
         imag_noise_threshold = 1e-40  # numerical noise tolerance for imaginary part
-        if (imag(erg_1) < -imag_noise_threshold)||(real_diff_test .> 0.5)
+        if ((imag(erg_1) < -imag_noise_threshold)||(real_diff_test .> 0.5))&&(m>0)
             if debug
                 println("Issue with one of the energy eigenstates....")
                 println("ERG 1\t", erg_1)
@@ -1575,17 +1583,18 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             rf_1 = itp(log10.(rlist))
             real_diff_test = abs.((erg_1 .- erg_1G) ./ alph) # saftey net for random fail....
             imag_noise_threshold = 1e-40  # numerical noise tolerance for imaginary part
-            if (imag(erg_1) < -imag_noise_threshold)||(real_diff_test .> 0.5)
+            if ((imag(erg_1) < -imag_noise_threshold)||(real_diff_test .> 0.5))&&(m>0)
                 if debug
                     println("Issue with one of the energy eigenstates....")
                     println("ERG 1\t", erg_1)
                 end
-                if (erg_1G .< 0.8 .* m1 .* OmegaH) # if fail is deep in superradiant regime, catch
+                if (erg_1G .< 0.8 .* m1 .* OmegaH)&&(m1>0) # if fail is deep in superradiant regime, catch
                     rf_1 = radial_bound_NR(n1, l1, m1, mu, M, rlist)
                     erg_1 = erg_1G
                 else
-                    println("erg 1 failure....")
-                    return 0.0
+                    println("erg 1 failure, using NR fallback....")
+                    rf_1 = radial_bound_NR(n1, l1, m1, mu, M, rlist)
+                    erg_1 = erg_1G
                 end
             elseif (abs(imag(erg_1)) < imag_noise_threshold) && (erg_1G .> 2.0 .* m1 .* OmegaH)
                 # Essentially zero imaginary part (numerical noise) AND deep in non-relativistic regime
@@ -1596,6 +1605,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                 rf_1 = radial_bound_NR(n1, l1, m1, mu, M, rlist)
                 erg_1 = real(erg_1)  # keep the real part from Leaver
             end
+        end
         catch e
             if debug
                 println("solve_radial threw for state 1 (n=$(n1),l=$(l1),m=$(m1)), using NR fallback: ", e)
@@ -1617,7 +1627,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             rf_2 = rf_1
             erg_2 = erg_1
         else
-
+            try
             if run_leaver
                 rl, r2, erg_2 = solve_radial(mu, M, a, n2, l2, m2; rpts=Npts_Bnd,  return_erg=true, Ntot_safe=Ntot_safe, use_heunc=use_heunc, debug=debug)
             else
@@ -1625,11 +1635,16 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                 erg_2 = wR .+ im .* wI
             end
             
-            itp = LinearInterpolation(log10.(rl), r2, extrapolation_bc=Line())
-            rf_2 = itp(log10.(rlist))
+            if isnan(real(erg_2)) || isnan(imag(erg_2))
+                rf_2 = radial_bound_NR(n2, l2, m2, mu, M, rlist)
+                erg_2 = erg_2G
+            else
+                itp = LinearInterpolation(log10.(rl), r2, extrapolation_bc=Line())
+                rf_2 = itp(log10.(rlist))
+            end
             real_diff_test = abs.((erg_2 .- erg_2G ) ./ alph) # saftey net for random fail....
             imag_noise_threshold = 1e-40  # numerical noise tolerance for imaginary part
-            if (imag(erg_2) < -imag_noise_threshold)||(real_diff_test .> 0.5)
+            if ((imag(erg_2) < -imag_noise_threshold)||(real_diff_test .> 0.5))&&(m>0)
                 if debug
                     println("Issue with one of the energy eigenstates....")
                     println("ERG 2\t", erg_2)
@@ -1647,17 +1662,18 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                 rf_2 = itp(log10.(rlist))
                 real_diff_test = abs.((erg_2 .- erg_2G ) ./ alph) # saftey net for random fail....
                 imag_noise_threshold = 1e-40  # numerical noise tolerance for imaginary part
-                if (imag(erg_2) < -imag_noise_threshold)||(real_diff_test .> 0.5)
+                if ((imag(erg_2) < -imag_noise_threshold)||(real_diff_test .> 0.5))&&(m>0)
                     if debug
                         println("Issue with one of the energy eigenstates....")
                         println("ERG 2\t", erg_2)
                     end
-                    if (erg_2G .< 0.8 .* m2 .* OmegaH) # if fail is deep in superradiant regime, catch
+                    if (erg_2G .< 0.8 .* m2 .* OmegaH)&&(m2>0) # if fail is deep in superradiant regime, catch
                         rf_2 = radial_bound_NR(n2, l2, m2, mu, M, rlist)
                         erg_2 = erg_2G
                     else
-                        println("erg 2 failure....")
-                        return 0.0
+                        println("erg 2 failure, using NR fallback....")
+                        rf_2 = radial_bound_NR(n2, l2, m2, mu, M, rlist)
+                        erg_2 = erg_2G
                     end
                 elseif (abs(imag(erg_2)) < imag_noise_threshold) && (erg_2G .> 2.0 .* m2 .* OmegaH)
                     # Essentially zero imaginary part (numerical noise) AND deep in non-relativistic regime
@@ -1668,6 +1684,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                     rf_2 = radial_bound_NR(n2, l2, m2, mu, M, rlist)
                     erg_2 = real(erg_2)  # keep the real part from Leaver
                 end
+            end
             catch e
                 if debug
                     println("solve_radial threw for state 2 (n=$(n2),l=$(l2),m=$(m2)), using NR fallback: ", e)
@@ -1684,7 +1701,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         rf_3 = radial_bound_NR(n3, l3, m3, mu, M, rlist)
         erg_3 = erg_3G
     else
-
+        try
         if run_leaver
             rl, r3, erg_3 = solve_radial(mu, M, a, n3, l3, m3; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe, use_heunc=use_heunc, debug=debug)
         else
@@ -1692,11 +1709,16 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             erg_3 = wR .+ im .* wI
         end
         
-        itp = LinearInterpolation(log10.(rl), r3, extrapolation_bc=Line())
-        rf_3 = itp(log10.(rlist))
+        if isnan(real(erg_3)) || isnan(imag(erg_3))
+            rf_3 = radial_bound_NR(n3, l3, m3, mu, M, rlist)
+            erg_3 = erg_3G
+        else
+            itp = LinearInterpolation(log10.(rl), r3, extrapolation_bc=Line())
+            rf_3 = itp(log10.(rlist))
+        end
         real_diff_test = abs.((erg_3 .- erg_3G) ./ alph) # saftey net for random fail....
         imag_noise_threshold = 1e-40  # numerical noise tolerance for imaginary part
-        if (imag(erg_3) < -imag_noise_threshold)||(real_diff_test .> 0.5)
+        if ((imag(erg_3) < -imag_noise_threshold)||(real_diff_test .> 0.5))&&(m>0)
             if debug
                 println("Issue with one of the energy eigenstates....")
                 println("ERG 3\t", erg_3)
@@ -1713,7 +1735,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             rf_3 = itp(log10.(rlist))
             real_diff_test = abs.((erg_3 .- erg_3G) ./ alph) # saftey net for random fail....
             imag_noise_threshold = 1e-40  # numerical noise tolerance for imaginary part
-            if (imag(erg_3) < -imag_noise_threshold)||(real_diff_test .> 0.5)
+            if ((imag(erg_3) < -imag_noise_threshold)||(real_diff_test .> 0.5))&&(m>0)
                 if debug
                     println("Issue with one of the energy eigenstates....")
                     println("ERG 3\t", erg_3)
@@ -1722,8 +1744,9 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                     rf_3 = radial_bound_NR(n3, l3, m3, mu, M, rlist)
                     erg_3 = erg_3G
                 else
-                    println("erg 3 failure....")
-                    return 0.0
+                    println("erg 3 failure, using NR fallback....")
+                    rf_3 = radial_bound_NR(n3, l3, m3, mu, M, rlist)
+                    erg_3 = erg_3G
                 end
             elseif (abs(imag(erg_3)) < imag_noise_threshold) && (erg_3G .> 2.0 .* m3 .* OmegaH)
                 # Essentially zero imaginary part (numerical noise) AND deep in non-relativistic regime
@@ -1734,6 +1757,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                 rf_3 = radial_bound_NR(n3, l3, m3, mu, M, rlist)
                 erg_3 = real(erg_3)  # keep the real part from Leaver
             end
+        end
         catch e
             if debug
                 println("solve_radial threw for state 3 (n=$(n3),l=$(l3),m=$(m3)), using NR fallback: ", e)
@@ -1744,9 +1768,9 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     end
     
     
-    # writedlm("test_store/test1.dat", hcat(real(rlist), real(rf_1 .* conj.(rf_1))))
+    # writedlm("test_store/320.dat", hcat(real(rlist), real(rf_1 .* conj.(rf_1))))
     # writedlm("test_store/test2.dat", hcat(real(rlist), real(rf_2 .* conj.(rf_2))))
-    # writedlm("test_store/test3.dat", hcat(real(rlist), real(rf_3 .* conj.(rf_3))))
+    # writedlm("test_store/540.dat", hcat(real(rlist), real(rf_3 .* conj.(rf_3))))
     erg = (erg_1 + erg_2 - erg_3) + 0 * im # leave the 0 im for NR case
 
     
@@ -2092,7 +2116,6 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     else
         idx_hold = itp_rrstar.(rvals) .> 1.01 .* rp
         rnew_rp = trapz(outWF[idx_hold] .* Tmm[idx_hold] , itp_rrstar.(rvals[idx_hold])) .* outWF_fw[idx_hold][1] ./ wronk
-        
         
         maxV = real(rnew_rp.* conj.(rnew_rp))
 
@@ -2643,12 +2666,11 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=200, L=4, Npoints=60, Iter
             
             if debug
                 println("Iteration $i: ν = $(Nν_values[i+1])")
-                if isnan(Nν_values[i+1])
-                    println("HERE \n")
-                    prec += 50
-                    setprecision(BigFloat, prec)
-                end
-             end
+            end
+            if isnan(real(Nν_values[i+1])) || isnan(imag(Nν_values[i+1]))
+                if debug; println("NaN in ν at iteration $i, breaking early"); end
+                break
+            end
             
             if i > 1
                 erg_test_init = calc_ω(Nν_values[i])
