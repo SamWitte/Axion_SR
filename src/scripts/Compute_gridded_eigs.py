@@ -26,8 +26,8 @@ for nn in range(2, nmax+1):
         for mm in range(1, ll+1):
             listnlm.append(str(nn)+str(ll)+str(mm))
 
-# listnlm = ["877"]
-listnlm = ["766", "876", "877"]
+listnlm = ["866"]
+# listnlm = ["766", "876", "877"]
 arr_text = np.empty(len(listnlm), dtype=object)
 for i in range(len(listnlm)):
     arr_text[i] = "#!/bin/bash \n"
