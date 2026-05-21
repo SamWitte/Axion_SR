@@ -11,27 +11,27 @@ function parse_commandline()
             
         "--alpha_min"
             arg_type = Float64
-            default = 0.03
+            default = 0.05
             
         "--alpha_pts"
             arg_type = Int
-            default = 30
+            default = 15
             
         "--S1"
             arg_type = String
-            default = "988"
+            default = "211"
             
         "--S2"
             arg_type = String
-            default = "988"
+            default = "211"
             
         "--S3"
             arg_type = String
-            default = "544"
+            default = "722"
             
         "--S4"
             arg_type = String
-            default = "Inf"
+            default = "BH"
             
         "--ftag"
             arg_type = String
