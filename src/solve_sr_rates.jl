@@ -571,7 +571,7 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
     
     setprecision(BigFloat, prec)
     if m <= 0
-        use_heunc = false
+        use_heunc = true
     end
     alph = GNew .* M .* mu
     
@@ -622,7 +622,11 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
     
 
     # rmax = rmaxT * 1.0 ./ abs.(real(q))
-    rmax = Float64.(100 * n ./ alph.^2)
+    _rp_leaver = 1.0 .+ sqrt.(1 .- a.^2)
+    _r_search_l = collect(10 .^ range(log10(_rp_leaver*(1.0+1e-3)), log10(max(n^2 / Float64(alph)^2 * 500.0, 300.0 * n / Float64(alph)^2)), 500))
+    _rf_nr_l = abs.(radial_bound_NR(n, l, m, Float64(alph) ./ (GNew .* M), M, _r_search_l))
+    _idx_l = findlast(_rf_nr_l .>= 1e-50)
+    rmax = isnothing(_idx_l) ? _r_search_l[end] : _r_search_l[min(_idx_l + 1, length(_r_search_l))]
     # print("Check \t", rmax, "\t", rmaxT * 1.0 ./ abs.(real(q)), "\n")
     
     if !use_heunc
@@ -640,7 +644,7 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
         LLM = l * (l + 1)
         # LLM += 2 .* cc2 .* (m.^2 .- l .* (l + 1) + 0.5) ./ ((2 * l - 1) .* (2 * l + 3)) # alternative describ 2nd order
         LLM += (-1 + 2 * l * (l + 1) - 2 * m.^2) * gam.^2 ./ (-3 + 4 * l * (l + 1))
-        LLM += ((l - m - 1 * (l - m) * (l + m) * (l + m - 1)) ./ ((-3 + 2 * l) * (2 * l - 1).^2) - (l + 1 - m) * (2 * l - m) * (l + m + 1) * (2 + l + m) ./ ((3 + 2 * l).^2 * (5 + 2 * l))) * gam.^4 ./ (2 * (1 + 2 * l))
+        LLM += ((l - abs(m) - 1 * (l - abs(m)) * (l + abs(m)) * (l + abs(m) - 1)) ./ ((-3 + 2 * l) * (2 * l - 1).^2) - (l + 1 - abs(m)) * (2 * l - abs(m)) * (l + abs(m) + 1) * (2 + l + abs(m)) ./ ((3 + 2 * l).^2 * (5 + 2 * l))) * gam.^4 ./ (2 * (1 + 2 * l))
         LLM += (4 * ((-1 + 4 * m^2) * (l * (1 + l) * (121 + l * (1 + l) * (213 + 8 * l * (1 + l) * (-37 + 10 * l * (1 + l)))) - 2 * l * (1 + l) * (-137 + 56 * l * (1 + l) * (3 + 2 * l * (1 + l))) * m^2 + (705 + 8 * l * (1 + l) * (125 + 18 * l * (1 + l))) * m^4 - 15 * (1 + 46 * m^2))) * gam^6) / ((-5 + 2 * l) * (-3 + 2 * l) * (5 + 2 * l) * (7 + 2 * l) * (-3 + 4 * l * (1 + l))^5)
         
         c0 = 1.0 .- 2.0 * im * erg - 2 * im ./ b .* (erg .- a .* m ./ 2.0)
@@ -753,15 +757,20 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
         gam_llm = im * a * sqrt.(ω.^2 .- alph.^2)
         LLM = l0 * (l0 + 1)
         LLM += (-1 + 2 * l0 * (l0 + 1) - 2 * m.^2) * gam_llm.^2 ./ (-3 + 4 * l0 * (l0 + 1))
-        LLM += ((l0 - m - 1 * (l0 - m) * (l0 + m) * (l0 + m - 1)) ./ ((-3 + 2 * l0) * (2 * l0 - 1).^2) - (l0 + 1 - m) * (2 * l0 - m) * (l0 + m + 1) * (2 + l0 + m) ./ ((3 + 2 * l0).^2 * (5 + 2 * l0))) * gam_llm.^4 ./ (2 * (1 + 2 * l0))
+        LLM += ((l0 - abs(m) - 1 * (l0 - abs(m)) * (l0 + abs(m)) * (l0 + abs(m) - 1)) ./ ((-3 + 2 * l0) * (2 * l0 - 1).^2) - (l0 + 1 - abs(m)) * (2 * l0 - abs(m)) * (l0 + abs(m) + 1) * (2 + l0 + abs(m)) ./ ((3 + 2 * l0).^2 * (5 + 2 * l0))) * gam_llm.^4 ./ (2 * (1 + 2 * l0))
         LLM += (4 * ((-1 + 4 * m^2) * (l0 * (1 + l0) * (121 + l0 * (1 + l0) * (213 + 8 * l0 * (1 + l0) * (-37 + 10 * l0 * (1 + l0)))) - 2 * l0 * (1 + l0) * (-137 + 56 * l0 * (1 + l0) * (3 + 2 * l0 * (1 + l0))) * m^2 + (705 + 8 * l0 * (1 + l0) * (125 + 18 * l0 * (1 + l0))) * m^4 - 15 * (1 + 46 * m^2))) * gam_llm^6) / ((-5 + 2 * l0) * (-3 + 2 * l0) * (5 + 2 * l0) * (7 + 2 * l0) * (-3 + 4 * l0 * (1 + l0))^5)
         eta = - (Pplus.^2 .+ Pmns.^2 .+ LLM .+ alph.^2 .* rplus.^2 .- ω.^2 .* (4 .* M.^2 .+ 2 .* M .* rplus .+ rplus.^2))
         phi = (alpha_other .- beta .- gam .+ alpha_other .* beta .- beta .* gam) ./ 2 .- eta
         nuN = (alpha_other .+ beta .+ gam .+ alpha_other .* gam  .+ beta .* gam) ./ 2 .+ eta .+ deltt
         
         ### choose r values i want...
-        r_max_shrt = 2.0 .^(2.0 .* n .- 2 .* (1 .+ n)) .* gamma(2 .+ 2 .* n) ./ alph.^2 ./ factorial(big(2 .* n - 1)) .* 5.0
-        r_max = n.^2 ./ alph.^2 .* 20.0
+        r_max_shrt = 2.0 .^(2.0 .* n .- 2 .* (1 .+ n)) .* gamma(2 .+ 2 .* n) ./ alph.^2 ./ factorial(big(2 .* n - 1)) .* 10.0
+        _r_search = collect(10 .^ range(log10(rplus*(1.0+1e-3)), log10(max(n^2 / alph^2 * 500.0, 300.0 * n / alph^2)), 500))
+        _rf_nr = abs.(radial_bound_NR(n, l, m, alph ./ (GNew .* M), M, _r_search))
+        _idx_rmax = findlast(_rf_nr .>= 1e-50)
+        r_max = isnothing(_idx_rmax) ? _r_search[end] : _r_search[min(_idx_rmax + 1, length(_r_search))]
+        
+        
         r_vals = rlist = 10 .^(range(log10.(rplus  .* (1.0 .+ 1e-3)), log10.(r_max), rpts))
         
         rout_temp = R.(r_vals, nuV)
@@ -785,7 +794,7 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
         
         y_values = []
         rmax_cut = r_vals[abs.(zz) .< r_thresh][end]
-        
+        println(r_max, "\t", r_max_shrt)
         # work backward to find where the solution fails
         imax = length(zz_short)
         if abs.(y_values_short[end]) .> abs.(y_values_short[end-1])
@@ -798,6 +807,7 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
                 end
             end
         end
+        println(r_vals[imax])
         # now go a little further back because you didn't go far enough
         imax = argmin(abs.(r_vals .- r_vals[imax] .* 1.0))
         
@@ -807,7 +817,7 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
             if r_vals[i] <= r_max_new
                 push!(y_values, y_values_short[i])
             else
-                push!(y_values, y_values_short[imax] .* exp.(im .* kk .* (r_vals[i] .- r_max_new)) .* (r_vals[i] ./ r_max_new).^2 )
+                push!(y_values, y_values_short[imax] .* exp.(- abs.(imag.(kk)) .* (r_vals[i] .- r_max_new)) .* (r_vals[i] ./ r_max_new).^2 )
             end
         end
         rlist = r_vals ./ M
@@ -850,7 +860,7 @@ function radial_inf(erg, mu, M, a, l, m; rpts=1000, rmax_val=1e4, debug=false, i
     gam2 = - a * sqrt.(erg.^2 .- alph.^2)
     LLM = l * (l + 1)
     LLM += (-1 + 2 * l * (l + 1) - 2 * m.^2) * gam2 ./ (-3 + 4 * l * (l + 1))
-    LLM += ((l - m - 1 * (l - m) * (l + m) * (l + m - 1)) ./ ((-3 + 2 * l) * (2 * l - 1).^2) - (l + 1 - m) * (2 * l - m) * (l + m + 1) * (2 + l + m) ./ ((3 + 2 * l).^2 * (5 + 2 * l))) * gam2.^2 ./ (2 * (1 + 2 * l))
+    LLM += ((l - abs(m) - 1 * (l - abs(m)) * (l + abs(m)) * (l + abs(m) - 1)) ./ ((-3 + 2 * l) * (2 * l - 1).^2) - (l + 1 - abs(m)) * (2 * l - abs(m)) * (l + abs(m) + 1) * (2 + l + abs(m)) ./ ((3 + 2 * l).^2 * (5 + 2 * l))) * gam2.^2 ./ (2 * (1 + 2 * l))
     LLM += (4 * ((-1 + 4 * m^2) * (l * (1 + l) * (121 + l * (1 + l) * (213 + 8 * l * (1 + l) * (-37 + 10 * l * (1 + l)))) - 2 * l * (1 + l) * (-137 + 56 * l * (1 + l) * (3 + 2 * l * (1 + l))) * m^2 + (705 + 8 * l * (1 + l) * (125 + 18 * l * (1 + l))) * m^4 - 15 * (1 + 46 * m^2))) * gam2^3) / ((-5 + 2 * l) * (-3 + 2 * l) * (5 + 2 * l) * (7 + 2 * l) * (-3 + 4 * l * (1 + l))^5)
     
     
@@ -1060,7 +1070,7 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=5000, iter=5000
             gam = im * a * sqrt.(erg.^2 .- alph.^2)
             LLM = l * (l + 1)
             LLM += (-1 + 2 * l * (l + 1) - 2 * m.^2) * gam.^2 ./ (-3 + 4 * l * (l + 1))
-            LLM += ((l - m - 1 * (l - m) * (l + m) * (l + m - 1)) ./ ((-3 + 2 * l) * (2 * l - 1).^2) - (l + 1 - m) * (2 * l - m) * (l + m + 1) * (2 + l + m) ./ ((3 + 2 * l).^2 * (5 + 2 * l))) * gam.^4 ./ (2 * (1 + 2 * l))
+            LLM += ((l - abs(m) - 1 * (l - abs(m)) * (l + abs(m)) * (l + abs(m) - 1)) ./ ((-3 + 2 * l) * (2 * l - 1).^2) - (l + 1 - abs(m)) * (2 * l - abs(m)) * (l + abs(m) + 1) * (2 + l + abs(m)) ./ ((3 + 2 * l).^2 * (5 + 2 * l))) * gam.^4 ./ (2 * (1 + 2 * l))
             LLM += (4 * ((-1 + 4 * m^2) * (l * (1 + l) * (121 + l * (1 + l) * (213 + 8 * l * (1 + l) * (-37 + 10 * l * (1 + l)))) - 2 * l * (1 + l) * (-137 + 56 * l * (1 + l) * (3 + 2 * l * (1 + l))) * m^2 + (705 + 8 * l * (1 + l) * (125 + 18 * l * (1 + l))) * m^4 - 15 * (1 + 46 * m^2))) * gam^6) / ((-5 + 2 * l) * (-3 + 2 * l) * (5 + 2 * l) * (7 + 2 * l) * (-3 + 4 * l * (1 + l))^5)
 
             
@@ -1218,7 +1228,7 @@ function find_im_zero(mu, M, n, l, m; debug=false, Ntot=3000, iter=1000, xtol=1e
         gam = im * a * sqrt.(Complex(erg.^2 .- alph.^2))
         LLM = l * (l + 1)
         LLM += (-1 + 2 * l * (l + 1) - 2 * m.^2) * gam.^2 ./ (-3 + 4 * l * (l + 1))
-        LLM += ((l - m - 1 * (l - m) * (l + m) * (l + m - 1)) ./ ((-3 + 2 * l) * (2 * l - 1).^2) - (l + 1 - m) * (2 * l - m) * (l + m + 1) * (2 + l + m) ./ ((3 + 2 * l).^2 * (5 + 2 * l))) * gam.^4 ./ (2 * (1 + 2 * l))
+        LLM += ((l - abs(m) - 1 * (l - abs(m)) * (l + abs(m)) * (l + abs(m) - 1)) ./ ((-3 + 2 * l) * (2 * l - 1).^2) - (l + 1 - abs(m)) * (2 * l - abs(m)) * (l + abs(m) + 1) * (2 + l + abs(m)) ./ ((3 + 2 * l).^2 * (5 + 2 * l))) * gam.^4 ./ (2 * (1 + 2 * l))
         LLM += (4 * ((-1 + 4 * m^2) * (l * (1 + l) * (121 + l * (1 + l) * (213 + 8 * l * (1 + l) * (-37 + 10 * l * (1 + l)))) - 2 * l * (1 + l) * (-137 + 56 * l * (1 + l) * (3 + 2 * l * (1 + l))) * m^2 + (705 + 8 * l * (1 + l) * (125 + 18 * l * (1 + l))) * m^4 - 15 * (1 + 46 * m^2))) * gam^6) / ((-5 + 2 * l) * (-3 + 2 * l) * (5 + 2 * l) * (7 + 2 * l) * (-3 + 4 * l * (1 + l))^5)
 
         
@@ -1455,8 +1465,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     
     
     maxN = maximum([n1 n2 n3])
-    minN = maximum([n1 n2 n3])
-    
+
     erg_pxy = 0.0
     erg_1G = 0.0
     erg_2G = 0.0
@@ -1466,11 +1475,11 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         erg_1G, erg1I = find_im_part(mu, M, a, n1, l1, m1; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
         erg_2G, erg2I = find_im_part(mu, M, a, n2, l2, m2; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
         erg_3G, erg3I = find_im_part(mu, M, a, n3, l3, m3; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
-        
+
         if erg_1G == 0 || erg_2G == 0 || erg_3G == 0
             erg_1G = ergL(n1, l1, m1, mu, M, a; full=true) .* GNew .* M
-            erg_2G = ergL(n1, l1, m1, mu, M, a; full=true) .* GNew .* M
-            erg_3G = ergL(n1, l1, m1, mu, M, a; full=true) .* GNew .* M
+            erg_2G = ergL(n2, l2, m2, mu, M, a; full=true) .* GNew .* M
+            erg_3G = ergL(n3, l3, m3, mu, M, a; full=true) .* GNew .* M
         end
         
         erg_pxy = (erg_1G + erg_2G - erg_3G)
@@ -1498,7 +1507,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         m = (m1 + m2 - m3)
         l = l1 + l2 - l3
         
-        while !((l >= m)&&(l>0))
+        while !((l >= abs(m))&&(l>0))
             l += 2
         end
         
@@ -1567,7 +1576,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         end
         real_diff_test = abs.((erg_1 .- erg_1G) ./ alph) # saftey net for random fail....
         imag_noise_threshold = 1e-40  # numerical noise tolerance for imaginary part
-        if ((imag(erg_1) < -imag_noise_threshold)||(real_diff_test .> 0.5))&&(m>0)
+        if ((imag(erg_1) < -imag_noise_threshold)||(real_diff_test .> 0.5))&&(m1>0)
             if debug
                 println("Issue with one of the energy eigenstates....")
                 println("ERG 1\t", erg_1)
@@ -1583,7 +1592,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             rf_1 = itp(log10.(rlist))
             real_diff_test = abs.((erg_1 .- erg_1G) ./ alph) # saftey net for random fail....
             imag_noise_threshold = 1e-40  # numerical noise tolerance for imaginary part
-            if ((imag(erg_1) < -imag_noise_threshold)||(real_diff_test .> 0.5))&&(m>0)
+            if ((imag(erg_1) < -imag_noise_threshold)||(real_diff_test .> 0.5))&&(m1>0)
                 if debug
                     println("Issue with one of the energy eigenstates....")
                     println("ERG 1\t", erg_1)
@@ -1616,7 +1625,6 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     end
     
     
-    
     # simplify_radial = check_slv_rad(alph, m2)
     simplify_radial = false
     if NON_REL||simplify_radial
@@ -1644,7 +1652,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             end
             real_diff_test = abs.((erg_2 .- erg_2G ) ./ alph) # saftey net for random fail....
             imag_noise_threshold = 1e-40  # numerical noise tolerance for imaginary part
-            if ((imag(erg_2) < -imag_noise_threshold)||(real_diff_test .> 0.5))&&(m>0)
+            if ((imag(erg_2) < -imag_noise_threshold)||(real_diff_test .> 0.5))&&(m2>0)
                 if debug
                     println("Issue with one of the energy eigenstates....")
                     println("ERG 2\t", erg_2)
@@ -1662,7 +1670,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                 rf_2 = itp(log10.(rlist))
                 real_diff_test = abs.((erg_2 .- erg_2G ) ./ alph) # saftey net for random fail....
                 imag_noise_threshold = 1e-40  # numerical noise tolerance for imaginary part
-                if ((imag(erg_2) < -imag_noise_threshold)||(real_diff_test .> 0.5))&&(m>0)
+                if ((imag(erg_2) < -imag_noise_threshold)||(real_diff_test .> 0.5))&&(m2>0)
                     if debug
                         println("Issue with one of the energy eigenstates....")
                         println("ERG 2\t", erg_2)
@@ -1718,7 +1726,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         end
         real_diff_test = abs.((erg_3 .- erg_3G) ./ alph) # saftey net for random fail....
         imag_noise_threshold = 1e-40  # numerical noise tolerance for imaginary part
-        if ((imag(erg_3) < -imag_noise_threshold)||(real_diff_test .> 0.5))&&(m>0)
+        if ((imag(erg_3) < -imag_noise_threshold)||(real_diff_test .> 0.5))&&(m3>0)
             if debug
                 println("Issue with one of the energy eigenstates....")
                 println("ERG 3\t", erg_3)
@@ -1735,7 +1743,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             rf_3 = itp(log10.(rlist))
             real_diff_test = abs.((erg_3 .- erg_3G) ./ alph) # saftey net for random fail....
             imag_noise_threshold = 1e-40  # numerical noise tolerance for imaginary part
-            if ((imag(erg_3) < -imag_noise_threshold)||(real_diff_test .> 0.5))&&(m>0)
+            if ((imag(erg_3) < -imag_noise_threshold)||(real_diff_test .> 0.5))&&(m3>0)
                 if debug
                     println("Issue with one of the energy eigenstates....")
                     println("ERG 3\t", erg_3)
@@ -1770,9 +1778,11 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     
     # writedlm("test_store/320.dat", hcat(real(rlist), real(rf_1 .* conj.(rf_1))))
     # writedlm("test_store/test2.dat", hcat(real(rlist), real(rf_2 .* conj.(rf_2))))
-    # writedlm("test_store/540.dat", hcat(real(rlist), real(rf_3 .* conj.(rf_3))))
+    # writedlm("test_store/322.dat", hcat(real(rlist), real(rf_3 .* conj.(rf_3))))
     erg = (erg_1 + erg_2 - erg_3) + 0 * im # leave the 0 im for NR case
-
+    if (m < 0)&&debug
+        println("erg final \t", erg)
+    end
     
     ### recheck if to inf holds...
     if (abs.(erg) .> alph)&&!to_inf
@@ -1780,7 +1790,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         to_inf = true
         m = (m1 + m2 - m3)
         l = l1 + l2 - l3
-        while l < m
+        while l < abs(m)
             l += 2
         end
         val, iszero = integral4(l1, m1, l2, m2, l3, -m3, l, -m)
@@ -1970,7 +1980,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     gam = im * a * sqrt.(erg.^2 .- alph.^2)
     LLM = l * (l + 1)
     LLM += (-1 + 2 * l * (l + 1) - 2 * m.^2) * gam.^2 ./ (-3 + 4 * l * (l + 1))
-    LLM += ((l - m - 1 * (l - m) * (l + m) * (l + m - 1)) ./ ((-3 + 2 * l) * (2 * l - 1).^2) - (l + 1 - m) * (2 * l - m) * (l + m + 1) * (2 + l + m) ./ ((3 + 2 * l).^2 * (5 + 2 * l))) * gam.^4 ./ (2 * (1 + 2 * l))
+    LLM += ((l - abs(m) - 1 * (l - abs(m)) * (l + abs(m)) * (l + abs(m) - 1)) ./ ((-3 + 2 * l) * (2 * l - 1).^2) - (l + 1 - abs(m)) * (2 * l - abs(m)) * (l + abs(m) + 1) * (2 + l + abs(m)) ./ ((3 + 2 * l).^2 * (5 + 2 * l))) * gam.^4 ./ (2 * (1 + 2 * l))
     LLM += (4 * ((-1 + 4 * m^2) * (l * (1 + l) * (121 + l * (1 + l) * (213 + 8 * l * (1 + l) * (-37 + 10 * l * (1 + l)))) - 2 * l * (1 + l) * (-137 + 56 * l * (1 + l) * (3 + 2 * l * (1 + l))) * m^2 + (705 + 8 * l * (1 + l) * (125 + 18 * l * (1 + l))) * m^4 - 15 * (1 + 46 * m^2))) * gam^6) / ((-5 + 2 * l) * (-3 + 2 * l) * (5 + 2 * l) * (7 + 2 * l) * (-3 + 4 * l * (1 + l))^5)
     
     
@@ -2016,7 +2026,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         ff = (r_input.^2 .+ a.^2)
             
         net_rescale = h_step.^2
-        Vv = delt .* alph.^2 ./ ff .+ delt .* (LLM .+ a.^2 .* (erg.^2 .- alph.^2)) ./ ff.^2 .+ delt .* (3 .* r_input.^2 .- 4 .* r_input .+ a.^2) ./ ff.^3 .- 3 .* delt.^2 .* r_input.^2 ./ ff.^4
+        Vv = delt .* alph.^2 ./ ff .+ delt .* (LLM .+ a.^2 .* (erg.^2 .- alph.^2)) ./ ff.^2 .+ delt .* (3 .* r_input.^2 .- 4 .* r_input .+ a.^2) ./ ff.^3 .- 3 .* delt.^2 .* r_input.^2 ./ ff.^4 .+ 2 .* a .* m .* erg ./ ff .- a.^2 .* m.^2 ./ ff.^2
         newV = 2 * outWF[idx] .- outWF[idx - 1] .+ net_rescale .* (Vv .- erg.^2) .* outWF[idx]
         
         newV_r = Float64.(real(newV))
@@ -2038,9 +2048,10 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     # Get solution #2
     rr += h_step
     outWF_fw = []
-    append!(outWF_fw, exp.(- im .* erg .* rr) .* sqrt.(itp_rrstar.(rr).^2 .+ a.^2)) ##
+    omega_H = Float64.(a) ./ Float64.(rp.^2 .+ a.^2)
+    append!(outWF_fw, exp.(- im .* (erg .- m .* omega_H) .* rr) .* sqrt.(itp_rrstar.(rr).^2 .+ a.^2)) ##
     rr += h_step
-    append!(outWF_fw, exp.(- im .* erg .* rr) .* sqrt.(itp_rrstar.(rr).^2 .+ a.^2))
+    append!(outWF_fw, exp.(- im .* (erg .- m .* omega_H) .* rr) .* sqrt.(itp_rrstar.(rr).^2 .+ a.^2))
     rr += h_step
     
     stop_running = false
@@ -2053,7 +2064,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         ff = (r_input.^2 .+ a.^2)
             
         net_rescale = h_step.^2
-        Vv = delt .* alph.^2 ./ ff .+ delt .* (LLM .+ a.^2 .* (erg.^2 .- alph.^2)) ./ ff.^2 .+ delt .* (3 .* r_input.^2 .- 4 .* r_input .+ a.^2) ./ ff.^3 .- 3 .* delt.^2 .* r_input.^2 ./ ff.^4
+        Vv = delt .* alph.^2 ./ ff .+ delt .* (LLM .+ a.^2 .* (erg.^2 .- alph.^2)) ./ ff.^2 .+ delt .* (3 .* r_input.^2 .- 4 .* r_input .+ a.^2) ./ ff.^3 .- 3 .* delt.^2 .* r_input.^2 ./ ff.^4 .+ 2 .* a .* m .* erg ./ ff .- a.^2 .* m.^2 ./ ff.^2
         newV = 2 * outWF_fw[idx] .- outWF_fw[idx - 1] .+ net_rescale .* (Vv .- erg.^2) .* outWF_fw[idx]
         
         newV_r = Float64.(real(newV))
@@ -2174,7 +2185,7 @@ function pre_computed_sr_rates(n, l, m, alph, M; n_high=20, n_low=20, delt_a=0.0
             file_in[:, :, 3] .*= 2.0
             alpha_load = unique(file_in[:,:,1])
             a_load = unique(file_in[:,:,2])
-            file_in[file_in[:, :, 3] .<= 0.0, 3] .= 1e-100
+            file_in[file_in[:, :, 3] .<= 0.0, 3] .= 1e-50
             itp = LinearInterpolation((alpha_load, a_load), log10.(file_in[:, :, 3] ./ (GNew * M)), extrapolation_bc=Line())
             out_high = 10 .^itp(alph, a_list_high)
         else
@@ -2200,7 +2211,7 @@ function pre_computed_sr_rates(n, l, m, alph, M; n_high=20, n_low=20, delt_a=0.0
             file_in[:, :, 3] .*= 2.0
             alpha_load = unique(file_in[:,:,1])
             a_load = unique(file_in[:,:,2])
-            file_in[file_in[:, :, 3] .<= 0.0, 3] .= 1e-100
+            file_in[file_in[:, :, 3] .<= 0.0, 3] .= 1e-50
             itp = LinearInterpolation((alpha_load, a_load), log10.(file_in[:, :, 3] ./ (GNew * M)), extrapolation_bc=Line())
             out_low = 10 .^itp(alph, a_list_low)
         else
@@ -2483,7 +2494,7 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=200, L=4, Npoints=60, Iter
         for l in 0:L, n in 0:Npoints
             LLM = l * (l + 1)
             LLM += (-1 + 2 * l * (l + 1) - 2 * m.^2) * gam.^2 ./ (-3 + 4 * l * (l + 1))
-            LLM += ((l - m - 1 * (l - m) * (l + m) * (l + m - 1)) ./ ((-3 + 2 * l) * (2 * l - 1).^2) - (l + 1 - m) * (2 * l - m) * (l + m + 1) * (2 + l + m) ./ ((3 + 2 * l).^2 * (5 + 2 * l))) * gam.^4 ./ (2 * (1 + 2 * l))
+            LLM += ((l - abs(m) - 1 * (l - abs(m)) * (l + abs(m)) * (l + abs(m) - 1)) ./ ((-3 + 2 * l) * (2 * l - 1).^2) - (l + 1 - abs(m)) * (2 * l - abs(m)) * (l + abs(m) + 1) * (2 + l + abs(m)) ./ ((3 + 2 * l).^2 * (5 + 2 * l))) * gam.^4 ./ (2 * (1 + 2 * l))
             LLM += (4 * ((-1 + 4 * m^2) * (l * (1 + l) * (121 + l * (1 + l) * (213 + 8 * l * (1 + l) * (-37 + 10 * l * (1 + l)))) - 2 * l * (1 + l) * (-137 + 56 * l * (1 + l) * (3 + 2 * l * (1 + l))) * m^2 + (705 + 8 * l * (1 + l) * (125 + 18 * l * (1 + l))) * m^4 - 15 * (1 + 46 * m^2))) * gam^6) / ((-5 + 2 * l) * (-3 + 2 * l) * (5 + 2 * l) * (7 + 2 * l) * (-3 + 4 * l * (1 + l))^5)
             
             r_n = rmap(ζ[n+1])
@@ -2749,7 +2760,7 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=200, L=4, Npoints=60, Iter
     gam_llm = im * a * sqrt.(ω.^2 .- alph.^2)
     LLM = l0 * (l0 + 1)
     LLM += (-1 + 2 * l0 * (l0 + 1) - 2 * m.^2) * gam_llm.^2 ./ (-3 + 4 * l0 * (l0 + 1))
-    LLM += ((l0 - m - 1 * (l0 - m) * (l0 + m) * (l0 + m - 1)) ./ ((-3 + 2 * l0) * (2 * l0 - 1).^2) - (l0 + 1 - m) * (2 * l0 - m) * (l0 + m + 1) * (2 + l0 + m) ./ ((3 + 2 * l0).^2 * (5 + 2 * l0))) * gam_llm.^4 ./ (2 * (1 + 2 * l0))
+    LLM += ((l0 - abs(m) - 1 * (l0 - abs(m)) * (l0 + abs(m)) * (l0 + abs(m) - 1)) ./ ((-3 + 2 * l0) * (2 * l0 - 1).^2) - (l0 + 1 - abs(m)) * (2 * l0 - abs(m)) * (l0 + abs(m) + 1) * (2 + l0 + abs(m)) ./ ((3 + 2 * l0).^2 * (5 + 2 * l0))) * gam_llm.^4 ./ (2 * (1 + 2 * l0))
     LLM += (4 * ((-1 + 4 * m^2) * (l0 * (1 + l0) * (121 + l0 * (1 + l0) * (213 + 8 * l0 * (1 + l0) * (-37 + 10 * l0 * (1 + l0)))) - 2 * l0 * (1 + l0) * (-137 + 56 * l0 * (1 + l0) * (3 + 2 * l0 * (1 + l0))) * m^2 + (705 + 8 * l0 * (1 + l0) * (125 + 18 * l0 * (1 + l0))) * m^4 - 15 * (1 + 46 * m^2))) * gam_llm^6) / ((-5 + 2 * l0) * (-3 + 2 * l0) * (5 + 2 * l0) * (7 + 2 * l0) * (-3 + 4 * l0 * (1 + l0))^5)
     eta = - (Pplus.^2 .+ Pmns.^2 .+ LLM .+ alph.^2 .* rplus.^2 .- ω.^2 .* (4 .* M.^2 .+ 2 .* M .* rplus .+ rplus.^2))
     phi = (alpha_other .- beta .- gam .+ alpha_other .* beta .- beta .* gam) ./ 2 .- eta
@@ -2805,7 +2816,7 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=200, L=4, Npoints=60, Iter
         if r_vals[i] <= r_max_new
             push!(y_values, y_values_short[i])
         else
-            push!(y_values, y_values_short[imax] .* exp.(im .* kk .* (r_vals[i] .- r_max_new)) .* (r_vals[i] ./ r_max_new).^2 )
+            push!(y_values, y_values_short[imax] .* exp.(- abs.(imag.(kk)) .* (r_vals[i] .- r_max_new)) .* (r_vals[i] ./ r_max_new).^2 )
         end
     end
     rlist = r_vals ./ M
@@ -2965,7 +2976,7 @@ function gaunt(l1::Integer, l2::Integer, l3::Integer,
     if !((abs(l1-l2) <= l3 <= l1 + l2) && ((l1 + l2 + l3) % 1 == 0))
         return 0.0
     end
-    if (m1 > l1)||(m2 > l2)||(m3>l3)
+    if (abs(m1) > l1)||(abs(m2) > l2)||(abs(m3) > l3)
         return 0.0
     end
     pref = sqrt((2l1+1)*(2l2+1)*(2l3+1) / (4 * pi))
