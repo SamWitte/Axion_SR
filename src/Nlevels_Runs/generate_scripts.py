@@ -76,7 +76,7 @@ tau_max_map = {
 }
 
 # Queue resource request
-NCPUS          = 10
+NCPUS          = 60
 MEM_GB         = 15
 MEM_GB_NMAX15  = 25
 WALLCLOCK      = "7-00:00:00"   # SLURM format (sbatch --time)
