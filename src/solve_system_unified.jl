@@ -47,7 +47,7 @@ Spinone mode: Single quantum level with precomputed rates, simpler spin dynamics
 function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     n_times=10000, debug=false, impose_low_cut=0.01, return_all_info=false,
     eq_threshold=1e-100, stop_on_a=0, abstol=1e-30, non_rel=true, high_p=true,
-    N_pts_interp=200, N_pts_interpL=200, Nmax=3, cheby=true, spinone=false)
+    N_pts_interp=200, N_pts_interpL=200, Nmax=3, cheby=true, spinone=false, lm_only=false)
 
     # ============================================================================
     # PARAMETER SETUP & VALIDATION
@@ -109,7 +109,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     else
         # Standard: Compute interpolated rates using smooth symlog interpolation
         SR_rates, interp_funcs, interp_dict = compute_sr_rates_smooth(modes, M_BH, aBH, alph, cheby=cheby)
-        rates = load_rate_coeffs(mu, M_BH, aBH, fa, Nmax, SR_rates; non_rel=non_rel)
+        rates = load_rate_coeffs(mu, M_BH, aBH, fa, Nmax, SR_rates; non_rel=non_rel, lm_only=lm_only)
         Mvars = [mu, fa, Emax2, aBH, M_BH, impose_low_cut]
         rP_initial = 1.0 + sqrt(1.0 - aBH^2)
     end
@@ -412,7 +412,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
 
     # Shared: time limit callback
     # max_real_time = 20.0 * 60  # Convert to seconds
-    max_real_time = 10.0 .* 24.0 .* 60.0 .* 60.0
+    max_real_time = 6.0 .* 24.0 .* 60.0 .* 60.0
     start_time = Dates.now()
 
     function time_limit_callback(u, t, integrator)

@@ -27,8 +27,9 @@ import matplotlib.pyplot as plt
 
 
 # ── configuration ──────────────────────────────────────────────────────────────
-OUTPUT_ROOT  = "/mnt/users/switte/Axion_SR/src/Nlevels_Runs/output"
-FIGURES_ROOT = "/mnt/users/switte/Axion_SR/src/Nlevels_Runs/figures"
+_HERE        = os.path.dirname(os.path.abspath(__file__))
+OUTPUT_ROOT  = os.path.join(_HERE, "output")
+FIGURES_ROOT = os.path.join(_HERE, "figures")
 NMAX_LIST    = [3, 4, 5, 6, 7, 8, 15]
 MIN_MAX_VAL  = 1e-30   # ignore states whose peak occupation never exceeds this
 
