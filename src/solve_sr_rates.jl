@@ -571,7 +571,7 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
     
     setprecision(BigFloat, prec)
     if m <= 0
-        use_heunc = true
+        use_heunc = false
     end
     alph = GNew .* M .* mu
     
@@ -794,7 +794,6 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
         
         y_values = []
         rmax_cut = r_vals[abs.(zz) .< r_thresh][end]
-        println(r_max, "\t", r_max_shrt)
         # work backward to find where the solution fails
         imax = length(zz_short)
         if abs.(y_values_short[end]) .> abs.(y_values_short[end-1])
@@ -807,7 +806,6 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
                 end
             end
         end
-        println(r_vals[imax])
         # now go a little further back because you didn't go far enough
         imax = argmin(abs.(r_vals .- r_vals[imax] .* 1.0))
         
@@ -1965,6 +1963,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         println("angles \t", CG, "\t", CG_2)
     end
     
+        
     lam_eff = 1.0e0
     if (n1==n2)&&(l1==l2)&&(m1==m2)
         preFac = 1.0 ./ 2.0
@@ -2026,7 +2025,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         ff = (r_input.^2 .+ a.^2)
             
         net_rescale = h_step.^2
-        Vv = delt .* alph.^2 ./ ff .+ delt .* (LLM .+ a.^2 .* (erg.^2 .- alph.^2)) ./ ff.^2 .+ delt .* (3 .* r_input.^2 .- 4 .* r_input .+ a.^2) ./ ff.^3 .- 3 .* delt.^2 .* r_input.^2 ./ ff.^4 .+ 2 .* a .* m .* erg ./ ff .- a.^2 .* m.^2 ./ ff.^2
+        Vv = delt .* alph.^2 ./ ff .+ delt .* (LLM .+ a.^2 .* (erg.^2 .- alph.^2)) ./ ff.^2 .+ delt .* (3 .* r_input.^2 .- 4 .* r_input .+ a.^2) ./ ff.^3 .- 3 .* delt.^2 .* r_input.^2 ./ ff.^4 .+ 2 .* a .* m .* erg ./ ff .- 2 .* a .* m .* erg .* delt ./ ff.^2 .- a.^2 .* m.^2 ./ ff.^2
         newV = 2 * outWF[idx] .- outWF[idx - 1] .+ net_rescale .* (Vv .- erg.^2) .* outWF[idx]
         
         newV_r = Float64.(real(newV))
@@ -2064,7 +2063,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         ff = (r_input.^2 .+ a.^2)
             
         net_rescale = h_step.^2
-        Vv = delt .* alph.^2 ./ ff .+ delt .* (LLM .+ a.^2 .* (erg.^2 .- alph.^2)) ./ ff.^2 .+ delt .* (3 .* r_input.^2 .- 4 .* r_input .+ a.^2) ./ ff.^3 .- 3 .* delt.^2 .* r_input.^2 ./ ff.^4 .+ 2 .* a .* m .* erg ./ ff .- a.^2 .* m.^2 ./ ff.^2
+        Vv = delt .* alph.^2 ./ ff .+ delt .* (LLM .+ a.^2 .* (erg.^2 .- alph.^2)) ./ ff.^2 .+ delt .* (3 .* r_input.^2 .- 4 .* r_input .+ a.^2) ./ ff.^3 .- 3 .* delt.^2 .* r_input.^2 ./ ff.^4 .+ 2 .* a .* m .* erg ./ ff .- 2 .* a .* m .* erg .* delt ./ ff.^2 .- a.^2 .* m.^2 ./ ff.^2
         newV = 2 * outWF_fw[idx] .- outWF_fw[idx - 1] .+ net_rescale .* (Vv .- erg.^2) .* outWF_fw[idx]
         
         newV_r = Float64.(real(newV))
@@ -2082,17 +2081,50 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     
     outWF .*= 1.0 ./ sqrt.(itp_rrstar.(rvals).^2 .+ a.^2)
     outWF_fw .*= 1.0 ./ sqrt.(itp_rrstar.(rvals).^2 .+ a.^2)
+    
+    ## TESTING
+    # writedlm("test_store/hom1.dat", cat(itp_rrstar.(rvals), real.(abs.(outWF .* conj(outWF))), dims=2))
+    # writedlm("test_store/hom2.dat", cat(itp_rrstar.(rvals), real.(abs.(outWF_fw .* conj(outWF_fw))), dims=2))
 
     if length(outWF_fw) > 15
-        midP = Int(round(length(rvals) - 10))
+        if to_inf
+            midP = Int(round(length(rvals) - 10))
+        else
+            # For bound-state GF (to_inf=false), outWF decays ~exp(-κr*) toward rmax.
+            # Computing the Wronskian near rmax (where outWF ≈ 0) loses all precision.
+            # Use a point ~1/4 from the near-horizon end: far from the near-zero rmax
+            # boundary, far from Δ→0 at the horizon, and in the numerically stable interior.
+            midP = clamp(Int(round(length(rvals) / 4)), 3, length(rvals) - 3)
+        end
     elseif length(outWF_fw) > 4
         midP = Int(round(length(rvals) - 3))
     else
         println("WF not enough points.... return zero....")
         return 0.0
     end
-    wronk  = (outWF_fw[midP] .* (outWF[midP+1] .- outWF[midP-1]) .-  outWF[midP] .* (outWF_fw[midP+1] .- outWF_fw[midP-1]) )./ (itp_rrstar.(rvals[midP+1]) .- itp_rrstar.(rvals[midP-1]))
+
+    # if debug && !to_inf
+    #     println("=== Wronskian conservation check (W_theta = Delta * W_R) ===")
+    #     ncheck = 12
+    #     step = max(1, div(length(rvals) - 4, ncheck))
+    #     for pp in 3:step:(length(rvals)-3)
+    #         r_pp   = itp_rrstar.(rvals[pp])
+    #         dr_pp  = itp_rrstar.(rvals[pp+1]) .- itp_rrstar.(rvals[pp-1])
+    #         delt_pp = (r_pp.^2 .- 2 .* r_pp .+ a.^2) .* (GNew .* M)
+    #         raw_wronk = (outWF_fw[pp] .* (outWF[pp+1] .- outWF[pp-1]) .-
+    #                      outWF[pp] .* (outWF_fw[pp+1] .- outWF_fw[pp-1])) ./ dr_pp
+    #         w_theta = delt_pp .* raw_wronk
+    #         println("  r=", round(r_pp, digits=2),
+    #                 "  |R_INF|=", abs.(outWF[pp]),
+    #                 "  |R_H|=",   abs.(outWF_fw[pp]),
+    #                 "  W_theta=", w_theta)
+    #     end
+    #     println("=== end Wronskian check ===")
+    # end
     
+    wronk  = (outWF_fw[midP] .* (outWF[midP+1] .- outWF[midP-1]) .-  outWF[midP] .* (outWF_fw[midP+1] .- outWF_fw[midP-1]) )./ (itp_rrstar.(rvals[midP+1]) .- itp_rrstar.(rvals[midP-1]))
+
+        
     if isnan.(wronk)
         goback = true
         while goback
@@ -2121,18 +2153,23 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
 
         lam = (mu ./ (M_pl .* 1e9))^2
         kk = real(sqrt.(erg.^2 .- alph.^2))
-        println("1/kk \t", 1 ./ kk)
+        # println("1/kk \t", 1 ./ kk)
         rate_out = 2 .* alph .* kk .* (maxV[end] .* itp_rrstar.(itp_rrstar.(rvals[end])).^2) .* lam^2
         out_gamma = rate_out ./ mu^2 .* (GNew * M^2 * M_to_eV)^2
     else
-        idx_hold = itp_rrstar.(rvals) .> 1.01 .* rp
-        rnew_rp = trapz(outWF[idx_hold] .* Tmm[idx_hold] , itp_rrstar.(rvals[idx_hold])) .* outWF_fw[idx_hold][1] ./ wronk
+        idx_hold = itp_rrstar.(rvals) .> 1.05 .* rp
+        rnew_rp = trapz(outWF[idx_hold] .* Tmm[idx_hold], itp_rrstar.(rvals[idx_hold])) .* outWF_fw[idx_hold][1] ./ wronk
         
         maxV = real(rnew_rp.* conj.(rnew_rp))
 
         lam = (mu ./ (M_pl .* 1e9))^2
-        rate_out = 4 .* alph.^2 .* (1 .+ sqrt.(1 - a.^2)) .* Float64(maxV) .* lam^2
-        out_gamma = rate_out ./ mu^2 .* (GNew * M^2 * M_to_eV)^2
+        
+        omega_H = Float64.(a) ./ Float64.(rp.^2 .+ a.^2)
+        kH = real(erg .- m .* omega_H)
+
+        lam = (mu ./ (M_pl .* 1e9))^2
+        rate_out = 4 .* alph.*kH.* (1 .+ sqrt.(1 - a.^2)) .* Float64(maxV) .* lam^2
+        out_gamma = rate_out ./ mu^2 .* (GNew * M^2 * M_to_eV)^2
     end
 
     if debug
