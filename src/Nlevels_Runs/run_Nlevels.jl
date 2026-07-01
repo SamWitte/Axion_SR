@@ -38,6 +38,10 @@ function parse_commandline()
             arg_type = String
             required = true
             help     = "Directory in which to write output files"
+        "--lm_only"
+            arg_type = Bool
+            default  = false
+            help     = "Use l==m-only rate input file (load_rate_input_Nmax_X_lm.txt)"
     end
     return parse_args(s)
 end
@@ -51,6 +55,7 @@ alpha   = parsed["alpha"]
 Nmax    = parsed["Nmax"]
 tau_max = parsed["tau_max"]
 outdir  = parsed["outdir"]
+lm_only = parsed["lm_only"]
 
 # Derive axion mass from alpha = GNew * MassBH * m_a
 m_a = alpha / (GNew * MassBH)
@@ -65,6 +70,7 @@ println("  m_a     = ", m_a,     "  eV")
 println("  Nmax    = ", Nmax)
 println("  tau_max = ", tau_max)
 println("  outdir  = ", outdir)
+println("  lm_only = ", lm_only)
 println("================================================")
 
 # Output filename -- mirrors single_BH.jl naming convention with Nmax appended
@@ -106,6 +112,7 @@ timeT, StatesOut, idx_lvl, spin, massB = @time solve_system(
     N_pts_interpL   = N_pts_interpL,
     Nmax            = Nmax,
     cheby           = cheby,
+    lm_only         = lm_only,
 )
 
 println("StatesOut size: ", size(StatesOut))

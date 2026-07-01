@@ -1,12 +1,13 @@
 using Glob
 include("state_utils.jl")
 
-function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true)
+function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=false)
     alph = mu * GNew * M
     rP = 1 + sqrt.(1 - a^2)
     faFac = (M_pl ./ f_a)^4
-    
-    rate_list = readdlm(joinpath(@__DIR__, "rate_sve/load_rate_input_Nmax_$(Nmax).txt"))
+
+    input_suffix = lm_only ? "_lm" : ""
+    rate_list = readdlm(joinpath(@__DIR__, "rate_sve/load_rate_input_Nmax_$(Nmax)$(input_suffix).txt"))
     cnt = 1
     
     kill_lvls = []

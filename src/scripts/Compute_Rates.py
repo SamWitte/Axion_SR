@@ -1,83 +1,123 @@
-import numpy as np
+#!/usr/bin/env python3
+"""
+Generate and submit a Slurm job array to compute rates for all entries in
+load_rate_input_Nmax_18.dat.
+
+Each array task covers one (S1, S2, S3, S4) combination and uses NCPUS cores.
+Jobs whose output .dat already exists are skipped at submission time (to keep
+the array compact) and also at runtime as a safety net.
+"""
+
 import os
-import math
+import sys
 
-nstart = 1
-N_groups = 100
-minIX=0 # this is an index which allows you to append to load_rate_input and run only N > minIX  
-S1 = []
-S2 = []
-S3 = []
-S4 = []
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+SRC_DIR    = os.path.dirname(SCRIPT_DIR)          # .../src
+_input_arg = next((sys.argv[i+1] for i, a in enumerate(sys.argv) if a == "--input" and i+1 < len(sys.argv)), None)
+INPUT_FILE = os.path.abspath(_input_arg) if _input_arg else os.path.join(SCRIPT_DIR, "load_rate_input_Nmax_18.dat")
+RATE_DIR   = os.path.join(SRC_DIR, "rate_sve")
+LOG_DIR    = os.path.join(SCRIPT_DIR, "rate_logs")
 
-run_leaver=False
-check_err=False
-file1 = open("load_rate_input_Nmax_5.txt", 'r')
-Lines = file1.readlines()
+NCPUS      = 2
+MEM_GB     = 16
+WALLCLOCK  = "7-00:00:00"
+PARTITION  = "long"
 
-count = 0
-for line in Lines:
-    line_parts = line.split()
-    S1.append(line_parts[0])
-    S2.append(line_parts[1])
-    S3.append(line_parts[2])
-    S4.append(line_parts[3])
-     
+FTAG       = "_LvrHc_"
+ALPHA_MIN  = 0.05
+ALPHA_PTS  = 14
+RUN_LEAVER = True
+CHECK_ERR  = False
+SUBMIT     = "--no-submit" not in sys.argv
 
-ftag="_GF_Cheby_"
+# ---------------------------------------------------------------------------
+# Read input and filter already-computed entries
+# ---------------------------------------------------------------------------
+with open(INPUT_FILE) as fh:
+    all_entries = [l.split() for l in fh if l.strip()]
 
-# Filter out states whose rate files already exist
-states_to_compute = []
-for i in range(len(S1)):
-    filename = "../rate_sve/" + S1[i] + "_" + S2[i] + "_" + S3[i] + "_" + S4[i] + ftag + ".dat"
-    if not os.path.isfile(filename):
-        states_to_compute.append(i)
+pending = [
+    (s1, s2, s3, s4) for s1, s2, s3, s4 in all_entries
+    if not os.path.isfile(os.path.join(RATE_DIR, f"{s1}_{s2}_{s3}_{s4}{FTAG}.dat"))
+]
 
-print(f"Total states: {len(S1)}, Already computed: {len(S1) - len(states_to_compute)}, To compute: {len(states_to_compute)}")
+n_total   = len(all_entries)
+n_done    = n_total - len(pending)
+n_pending = len(pending)
 
-arr_text = np.empty(len(states_to_compute), dtype=object)
-for idx, i in enumerate(states_to_compute):
+print(f"Input entries : {n_total}")
+print(f"Already done  : {n_done}")
+print(f"To compute    : {n_pending}")
 
-    arr_text[idx] = "S1=\""+S1[i]+"\" \n"
-    arr_text[idx] += "S2=\""+S2[i]+"\" \n"
-    arr_text[idx] += "S3=\""+S3[i]+"\" \n"
-    arr_text[idx] += "S4=\""+S4[i]+"\" \n"
-    arr_text[idx] += "ftag=\""+ftag+"\" \n"
-    if run_leaver:
-        arr_text[idx] += "RL=true \n"
-    else:
-        arr_text[idx] += "RL=false \n"
-    if check_err:
-        arr_text[idx] += "check_err=true \n"
-    else:
-        arr_text[idx] += "check_err=false \n"
-    arr_text[idx] += "srun --exclusive julia Compute_all_rates.jl --alpha_min $alpha_min --alpha_pts $alpha_pts --S1 $S1 --S2 $S2 --S3 $S3 --S4 $S4 --ftag $ftag --run_leaver $RL --check_err $check_err \n"
+if n_pending == 0:
+    print("Nothing to do.")
+    raise SystemExit(0)
 
-cnt = 0
-n_per_file = int(math.ceil(len(states_to_compute) / float(N_groups)))
-def split_into_groups(lst, n):
-    k, m = divmod(len(lst), n)
-    return [lst[i*k + min(i, m):(i+1)*k + min(i+1, m)] for i in range(n)]
+# ---------------------------------------------------------------------------
+# Write a compact input file containing only the pending entries
+# (keeps the array indices small and avoids empty tasks)
+# ---------------------------------------------------------------------------
+os.makedirs(LOG_DIR, exist_ok=True)
 
+pending_file = os.path.join(SCRIPT_DIR, "load_rate_pending.dat")
+with open(pending_file, "w") as fh:
+    for row in pending:
+        fh.write("  ".join(row) + "\n")
 
-groups = split_into_groups(list(range(len(states_to_compute))), N_groups)
+print(f"Pending list  : {pending_file}  ({n_pending} entries)")
 
-for j in range(N_groups):
-    text_file = open("Script_Rate_{:.0f}.sh".format(j), "w")
-    text_file.write("#!/bin/bash \n")
-    text_file.write("source /mnt/users/switte/.bashrc \n")
-    text_file.write("cd .. \n")
-    text_file.write("alpha_min=0.03 \n")
-    text_file.write("alpha_pts=30 \n")
+# ---------------------------------------------------------------------------
+# Write the array job script
+# ---------------------------------------------------------------------------
+array_script = os.path.join(SCRIPT_DIR, "Script_Rate_array.sh")
 
-    for i in range(len(groups[j])):
-        if cnt < len(arr_text):
-            text_file.write(arr_text[cnt])
-            text_file.write("wait \n")
-            cnt += 1
-    text_file.close()
+rl_str  = "true"  if RUN_LEAVER else "false"
+ce_str  = "true"  if CHECK_ERR  else "false"
 
-    os.system("chmod u+x Script_Rate_{:.0f}.sh".format(j))
-#    os.system("cd "+script_dir)                                                                                                                                                                                                               
-    os.system("addqueue -s -n 1 -c \"1 week\" -m 40 ./Script_Rate_{:.0f}.sh".format(j))
+with open(array_script, "w") as f:
+    f.write("#!/bin/bash\n")
+    f.write(f"#SBATCH --job-name=Rates\n")
+    f.write(f"#SBATCH --partition={PARTITION}\n")
+    f.write(f"#SBATCH --ntasks=1\n")
+    f.write(f"#SBATCH --cpus-per-task={NCPUS}\n")
+    f.write(f"#SBATCH --mem={MEM_GB}G\n")
+    f.write(f"#SBATCH --time={WALLCLOCK}\n")
+    f.write(f"#SBATCH --array=0-{n_pending - 1}\n")
+    f.write(f"#SBATCH --output={LOG_DIR}/rate_%a.log\n")
+    f.write("\n")
+    f.write("source /home/phys2564/.bashrc\n")
+    f.write(f"cd {SRC_DIR}\n")
+    f.write("\n")
+    f.write(f"# Pick this task's entry from the pending list (0-indexed)\n")
+    f.write(f"read S1 S2 S3 S4 < <(sed -n \"$((SLURM_ARRAY_TASK_ID + 1))p\" {pending_file})\n")
+    f.write("\n")
+    f.write("# Safety-net skip if output appeared since submission\n")
+    f.write(f'outfile="{RATE_DIR}/${{S1}}_${{S2}}_${{S3}}_${{S4}}{FTAG}.dat"\n')
+    f.write('if [ -f "$outfile" ]; then\n')
+    f.write('    echo "Already exists, skipping: $outfile"\n')
+    f.write('    exit 0\n')
+    f.write('fi\n')
+    f.write("\n")
+    f.write(f"export OMP_NUM_THREADS={NCPUS}\n")
+    f.write('echo "Running: S1=$S1  S2=$S2  S3=$S3  S4=$S4"\n')
+    f.write("julia Compute_all_rates.jl \\\n")
+    f.write(f"    --alpha_min {ALPHA_MIN} \\\n")
+    f.write(f"    --alpha_pts {ALPHA_PTS} \\\n")
+    f.write( "    --S1 $S1 --S2 $S2 --S3 $S3 --S4 $S4 \\\n")
+    f.write(f'    --ftag "{FTAG}" \\\n')
+    f.write(f"    --run_leaver {rl_str} \\\n")
+    f.write(f"    --check_err {ce_str}\n")
 
+os.chmod(array_script, 0o755)
+print(f"Written       : {array_script}")
+
+# ---------------------------------------------------------------------------
+# Submit
+# ---------------------------------------------------------------------------
+if SUBMIT:
+    ret = os.system(f"sbatch {array_script}")
+    if ret != 0:
+        print(f"WARNING: sbatch returned exit code {ret}")
+else:
+    print(f"Skipped submission (--no-submit).  To submit manually:")
+    print(f"  sbatch {array_script}")
