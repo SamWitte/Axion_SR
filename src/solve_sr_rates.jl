@@ -76,12 +76,12 @@ function sphericalY(l::Int, m::Int, theta::Float64, phi::Float64)::Complex{Float
     return phase * norm * legendre * exp(im * m * phi)
 end
 
-function ergL(n, l, m, massB, MBH, a; full=true)
+function ergL(n, l, m, massB, MBH, a; full=true, use_framedrag=true)
     # Key to next level
     alph = GNew * MBH * massB
     if full
         if (l > 0)
-            return massB .* (1.0 .- alph.^2 ./ (2 .* n.^2) .- alph.^4 ./ (8 * n.^4) .+ alph.^4 ./ n^4 .* (2 .* l .- 3 .* n .+ 1) ./ (l .+ 0.5) .+ 2 .* a .* m .* alph.^5 ./ n^3 ./ (l .* (l .+ 0.5) .* (l .+ 1)))
+            return massB .* (1.0 .- alph.^2 ./ (2 .* n.^2) .- alph.^4 ./ (8 * n.^4) .+ alph.^4 ./ n^4 .* (2 .* l .- 3 .* n .+ 1) ./ (l .+ 0.5) .+ (use_framedrag ? 1.0 : 0.0) .* 2 .* a .* m .* alph.^5 ./ n^3 ./ (l .* (l .+ 0.5) .* (l .+ 1)))
         else
             return massB .* (1.0 .- alph.^2 ./ (2 .* n.^2) .- alph.^4 ./ (8 * n.^4) .+ alph.^4 ./ n^4 .* (2 .* l .- 3 .* n .+ 1) ./ (l .+ 0.5))
         end
@@ -565,13 +565,13 @@ function s_rate_inf(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3, lF_min; rpts=4
     
 end
 
-function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=2000, xtol=1e-50, ftol=1e-90, sve=false, fnm="test_store/WF_", return_erg=false, Ntot_safe=5000, eps_r=1e-10, QNM=false, QNM_ergs=nothing, pre_compute_erg=nothing, prec=300, use_heunc=true)
+function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=2000, xtol=1e-50, ftol=1e-90, sve=false, fnm="test_store/WF_", return_erg=false, Ntot_safe=5000, eps_r=1e-10, QNM=false, QNM_ergs=nothing, pre_compute_erg=nothing, prec=300, use_heunc=true, Ntot_leaver_fast=3000, fail_log_path="nr_fallback_log.txt", state_label::String="")
     ### dolan 2007
-    
-    
+
+
     setprecision(BigFloat, prec)
     if m <= 0
-        use_heunc = false
+        use_heunc = true
     end
     alph = GNew .* M .* mu
     
@@ -629,30 +629,27 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
     rmax = isnothing(_idx_l) ? _r_search_l[end] : _r_search_l[min(_idx_l + 1, length(_r_search_l))]
     # print("Check \t", rmax, "\t", rmaxT * 1.0 ./ abs.(real(q)), "\n")
     
-    if !use_heunc
+    function compute_leaver(Ntot_val)
         rm = (1.0 .- sqrt.(1 - a.^2))
         rp = (1.0 .+ sqrt.(1 - a.^2))
         OmH = a  ./ (2 .* rp)
 
-        
         sigm = 2 .* rp .* (erg .- OmH .* m) ./ (rp .- rm)
         chi = (alph.^2 .- 2 .* erg.^2) ./ q
         b = sqrt.(1 - a.^2)
-        
-        gam = im * a * sqrt.(erg.^2 .- alph.^2)
-        cc2 = a.^2 .* (erg.^2 .- alph.^2)
-        LLM = l * (l + 1)
-        # LLM += 2 .* cc2 .* (m.^2 .- l .* (l + 1) + 0.5) ./ ((2 * l - 1) .* (2 * l + 3)) # alternative describ 2nd order
-        LLM += (-1 + 2 * l * (l + 1) - 2 * m.^2) * gam.^2 ./ (-3 + 4 * l * (l + 1))
-        LLM += ((l - abs(m) - 1 * (l - abs(m)) * (l + abs(m)) * (l + abs(m) - 1)) ./ ((-3 + 2 * l) * (2 * l - 1).^2) - (l + 1 - abs(m)) * (2 * l - abs(m)) * (l + abs(m) + 1) * (2 + l + abs(m)) ./ ((3 + 2 * l).^2 * (5 + 2 * l))) * gam.^4 ./ (2 * (1 + 2 * l))
-        LLM += (4 * ((-1 + 4 * m^2) * (l * (1 + l) * (121 + l * (1 + l) * (213 + 8 * l * (1 + l) * (-37 + 10 * l * (1 + l)))) - 2 * l * (1 + l) * (-137 + 56 * l * (1 + l) * (3 + 2 * l * (1 + l))) * m^2 + (705 + 8 * l * (1 + l) * (125 + 18 * l * (1 + l))) * m^4 - 15 * (1 + 46 * m^2))) * gam^6) / ((-5 + 2 * l) * (-3 + 2 * l) * (5 + 2 * l) * (7 + 2 * l) * (-3 + 4 * l * (1 + l))^5)
-        
+
+        gam_leaver = im * a * sqrt.(erg.^2 .- alph.^2)
+        LLM_leaver = l * (l + 1)
+        LLM_leaver += (-1 + 2 * l * (l + 1) - 2 * m.^2) * gam_leaver.^2 ./ (-3 + 4 * l * (l + 1))
+        LLM_leaver += ((l - abs(m) - 1 * (l - abs(m)) * (l + abs(m)) * (l + abs(m) - 1)) ./ ((-3 + 2 * l) * (2 * l - 1).^2) - (l + 1 - abs(m)) * (2 * l - abs(m)) * (l + abs(m) + 1) * (2 + l + abs(m)) ./ ((3 + 2 * l).^2 * (5 + 2 * l))) * gam_leaver.^4 ./ (2 * (1 + 2 * l))
+        LLM_leaver += (4 * ((-1 + 4 * m^2) * (l * (1 + l) * (121 + l * (1 + l) * (213 + 8 * l * (1 + l) * (-37 + 10 * l * (1 + l)))) - 2 * l * (1 + l) * (-137 + 56 * l * (1 + l) * (3 + 2 * l * (1 + l))) * m^2 + (705 + 8 * l * (1 + l) * (125 + 18 * l * (1 + l))) * m^4 - 15 * (1 + 46 * m^2))) * gam_leaver^6) / ((-5 + 2 * l) * (-3 + 2 * l) * (5 + 2 * l) * (7 + 2 * l) * (-3 + 4 * l * (1 + l))^5)
+
         c0 = 1.0 .- 2.0 * im * erg - 2 * im ./ b .* (erg .- a .* m ./ 2.0)
         c1 = -4.0 .+ 4 * im * (erg - im * q * (1.0 + b)) + 4 * im / b * (erg - a * m / 2.0) .- 2.0 * (erg.^2 .+ q.^2) ./ q
         c2 = 3.0 - 2 * im * erg - 2.0 * (q.^2 - erg.^2) ./ q - 2.0 * im / b * (erg - a * m ./ 2)
-        c3 = 2.0 * im * (erg - im * q).^3 ./ q .+ 2 * (erg .- im * q).^2 .* b + q.^2 * a.^2 .+ 2 * im * q * a * m - LLM - 1 - (erg - im * q).^2 ./ q .+ 2 * q * b + 2 * im / b * ( (erg - im * q).^2 ./ q + 1.0) * (erg .- a * m / 2)
+        c3 = 2.0 * im * (erg - im * q).^3 ./ q .+ 2 * (erg .- im * q).^2 .* b + q.^2 * a.^2 .+ 2 * im * q * a * m - LLM_leaver - 1 - (erg - im * q).^2 ./ q .+ 2 * q * b + 2 * im / b * ( (erg - im * q).^2 ./ q + 1.0) * (erg .- a * m / 2)
         c4 = (erg .- im * q).^4 ./ q.^2 .+ 2 * im * erg * (erg .- im * q).^2 ./ q .- 2 * im ./ b .* (erg .- im * q).^2 ./ q .* (erg .- a * m ./ 2)
-        
+
         function alphaN(nn)
             return nn.^2 .+ (c0 .+ 1) * nn + c0
         end
@@ -662,55 +659,58 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
         function gammaN(nn)
             return nn.^2 .+ (c2 .- 3) * nn + c4
         end
-        
-        
-        rlist = 10 .^(range(log10.(rp  .* (1.0 .+ eps_r)), log10.(rmax), rpts))
-        if (wR == 0)&&(wI == 0)
-            if return_erg
-                return rlist, zeros(length(rlist)), wR .+ im .* wI
-            else
-                return rlist, zeros(length(rlist))
-            end
-        end
-        
-        preF = (rlist .- rp).^(- im .* sigm) .* (rlist .- rm).^(im .* sigm .+ chi .- 1.0) .* exp.(q .* rlist)
 
-        
-        nfactor = ((rlist .- rp) ./ (rlist .- rm))
-        Rout = zeros(Complex, length(rlist))
-        bk = zeros(Complex, Ntot)
+        rlist_l = 10 .^(range(log10.(rp  .* (1.0 .+ eps_r)), log10.(rmax), rpts))
+        if (wR == 0)&&(wI == 0)
+            return rlist_l, zeros(ComplexF64, length(rlist_l))
+        end
+
+        preF = (rlist_l .- rp).^(- im .* sigm) .* (rlist_l .- rm).^(im .* sigm .+ chi .- 1.0) .* exp.(q .* rlist_l)
+        nfactor = ((rlist_l .- rp) ./ (rlist_l .- rm))
+        Rout = zeros(Complex, length(rlist_l))
+        bk = zeros(Complex, Ntot_val)
         bk[1] = 1.0
         bk[2] = -betaN(0) ./ alphaN(0) .* bk[1]
-        
-        for i in 2:(Ntot-1)
+
+        Ntot_eff = Ntot_val
+        for i in 2:(Ntot_val-1)
             bk[i+1] = (-betaN(i-1) .* bk[i] .- gammaN(i-1) .* bk[i-1]) ./ alphaN(i-1)
+            if i > 100 && abs(bk[i+1]) > abs(bk[i])
+                Ntot_eff = i
+                if debug
+                    println("DEBUG LEAVER: bk stopped growing check at i=", i, " out of Ntot_val=", Ntot_val, " (bk[i]=", abs(bk[i]), ", bk[i+1]=", abs(bk[i+1]), ")")
+                end
+                break
+            end
         end
-        
-        for i in 1:Ntot
+
+        for i in 1:Ntot_eff
             Rout .+= preF .* bk[i] .* nfactor.^(i-1)
         end
-        
-       
-        
+
         if QNM
-            # nm = 1.0
-            alp_trans = 2 .* rp ./ (rp .- rm) .* log.(abs.(rlist .- rp)) .- 2 .* rm ./ (rp .- rm) .* log.(abs.(rlist .- rm))
+            alp_trans = 2 .* rp ./ (rp .- rm) .* log.(abs.(rlist_l .- rp)) .- 2 .* rm ./ (rp .- rm) .* log.(abs.(rlist_l .- rm))
             Rout .*= exp.(im * erg .* alp_trans) # change coord
-            # Rout .*= exp.(-im * erg .* alp_trans) # change coord
         end
-     
-        nm = trapz(Rout .* conj(Rout) .* rlist.^2, rlist)
+
+        nm = trapz(Rout .* conj(Rout) .* rlist_l.^2, rlist_l)
         if QNM
             nm = 1.0
         end
+
+        return rlist_l, Rout ./ sqrt.(nm)
+    end
+
+    if !use_heunc
+        rlist, Rout_final = compute_leaver(Ntot)
         if sve
-            normOut = Rout .* conj(Rout) ./ nm
+            normOut = Rout_final .* conj(Rout_final)
             writedlm(fnm*"_$(alph)_n_$(n)_l_$(l)_m_$(m)_.dat", hcat(float(real(rlist)), float(real(normOut))))
         else
             if return_erg
-                return rlist, Rout ./ sqrt.(nm), erg # erg normalized by GM
+                return rlist, Rout_final, erg # erg normalized by GM
             else
-                return rlist, Rout ./ sqrt.(nm)
+                return rlist, Rout_final
             end
         end
     else
@@ -769,68 +769,189 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
         _rf_nr = abs.(radial_bound_NR(n, l, m, alph ./ (GNew .* M), M, _r_search))
         _idx_rmax = findlast(_rf_nr .>= 1e-50)
         r_max = isnothing(_idx_rmax) ? _r_search[end] : _r_search[min(_idx_rmax + 1, length(_r_search))]
-        
-        
-        r_vals = rlist = 10 .^(range(log10.(rplus  .* (1.0 .+ 1e-3)), log10.(r_max), rpts))
-        
+
+        r_vals = 10 .^(range(log10.(rplus  .* (1.0 .+ 1e-3)), log10.(r_max), rpts))
+
         rout_temp = R.(r_vals, nuV)
         rout_temp = abs.(rout_temp)
         rout_temp ./= trapz(rout_temp.^2 .* r_vals.^2, r_vals)
-        r_thresh = nothing
-        for i in 1:length(r_vals)
-            if r_vals[end - i + 1] .< r_max_shrt
-                r_thresh = r_vals[end - i + 1]
-                break
+
+        # --- Robust cascade: Leaver (fast) -> HeunC (+tail regularization) -> NR fallback ---
+        expected_maxima = n - l0
+
+        rlist_l, Rout_l = compute_leaver(Ntot_leaver_fast)
+        nmax_leaver = count_local_maxima(real.(Rout_l .* conj.(Rout_l)))
+
+        # retry energy guess without frame-dragging term if maxima count is wrong
+        if nmax_leaver != expected_maxima
+            if debug
+                println("[n=$n,l=$l,m=$m] Leaver maxima=$nmax_leaver != expected=$expected_maxima with frame-drag guess, retrying without frame-drag term")
             end
-        end
-        zz = -(r_vals .- rplus) ./ (rplus .- rminus)
-
-        phinu = Float64(real.(phi + nuN)) .+ im .* Float64(imag.(phi + nuN))
-        
-        zz_short = zz[abs.(zz) .< r_thresh] # cant call large zz values of heun (takes forever...)
-        heunc = solve_heun_switch(phi, phi + nuN, 1.0 + beta, 1.0 + gam, alpha_other, zz_short)
-        y_values_short = exp.(-im .* kk .* (r_vals[abs.(zz) .< r_thresh] .- rplus)) .* zz_short.^(im .* Pplus) .* (zz_short .- 1.0).^(- im .* Pmns) .* heunc
-
-        
-        y_values = []
-        rmax_cut = r_vals[abs.(zz) .< r_thresh][end]
-        # work backward to find where the solution fails
-        imax = length(zz_short)
-        if abs.(y_values_short[end]) .> abs.(y_values_short[end-1])
-            for i in 1:(length(zz_short)-1)
-                if abs.(y_values_short[end-i+1]) .> abs.(y_values_short[end-i])
-                    y_values_short[end-i+1] = 0.0 + im * 0.0
+            wR2, wI2 = find_im_part(mu, M, a, n, l0, m; debug=debug, iter=iter, xtol=xtol, ftol=ftol, return_both=true, for_s_rates=true, QNM=false, Ntot_force=Ntot_safe, use_framedrag=false)
+            if !(wR2 == 0 && wI2 == 0)
+                wR = wR2
+                wI = wI2
+                erg = wR2 .+ im .* wI2
+                q = - sqrt.(alph.^2 .- erg.^2)
+                if !QNM
+                    if real(q) > 0
+                        q *= -1
+                    end
                 else
-                    imax = length(zz_short) - i - 1
-                    break
+                    if real(q) < 0
+                        q *= -1
+                    end
+                end
+                rlist_l, Rout_l = compute_leaver(Ntot_leaver_fast)
+                nmax_leaver = count_local_maxima(real.(Rout_l .* conj.(Rout_l)))
+                if debug
+                    println("[n=$n,l=$l,m=$m] Retry without frame-drag: maxima=$nmax_leaver, expected=$expected_maxima")
                 end
             end
         end
-        # now go a little further back because you didn't go far enough
-        imax = argmin(abs.(r_vals .- r_vals[imax] .* 1.0))
-        
-        r_max_new = r_vals[imax]
-        
-        for i in 1:rpts
-            if r_vals[i] <= r_max_new
-                push!(y_values, y_values_short[i])
+
+        if nmax_leaver == expected_maxima
+            if debug
+                println("[n=$n,l=$l,m=$m] method used: LEAVER (maxima=$nmax_leaver, expected=$expected_maxima)")
+            end
+            rlist = rlist_l
+            y_values = Rout_l
+        else
+            heun_allowed = (alph < 0.9) || ((n - l0) > 3)
+
+            if !heun_allowed
+                if debug
+                    println("[n=$n,l=$l,m=$m] alpha=$alph too high for low overtone (n-l0=$(n-l0)), skipping HeunC, using NON-REL")
+                end
+                y_values_tmp0 = rout_temp
+                rlist = r_vals ./ M
+                nm2_0 = trapz(y_values_tmp0 .* conj.(y_values_tmp0) .* rlist.^2, rlist)
+                y_values = y_values_tmp0 ./ sqrt.(nm2_0)
+
+                if debug
+                    open("nonrel_switch_log.dat", "a") do io
+                        println(io, state_label, "\talpha=", alph, "\tn=", n, "\tl=", l, "\tm=", m)
+                    end
+                end
+
+                if sve
+                    writedlm(fnm*"_$(alph)_n_$(n)_l_$(l)_m_$(m)_.dat", hcat(float(real(rlist)), float(real(y_values .* conj.(y_values)))))
+                    return
+                else
+                    if return_erg
+                        return rlist, y_values, erg
+                    else
+                        return rlist, y_values
+                    end
+                end
+            end
+
+            r_thresh = nothing
+            for i in 1:length(r_vals)
+                if r_vals[end - i + 1] .< r_max_shrt
+                    r_thresh = r_vals[end - i + 1]
+                    break
+                end
+            end
+            zz = -(r_vals .- rplus) ./ (rplus .- rminus)
+
+            zz_short = zz[abs.(zz) .< r_thresh] # cant call large zz values of heun (takes forever...)
+            heunc = solve_heun_switch(phi, phi + nuN, 1.0 + beta, 1.0 + gam, alpha_other, zz_short)
+            y_values_short = exp.(-im .* kk .* (r_vals[abs.(zz) .< r_thresh] .- rplus)) .* zz_short.^(im .* Pplus) .* (zz_short .- 1.0).^(- im .* Pmns) .* heunc
+
+            y_values_tmp = []
+            if debug
+                println(r_max, "\t", r_max_shrt)
+            end
+
+            # --- Find first artificial regrowth scanning from horizon outward ---
+            r_sub = r_vals[abs.(zz) .< r_thresh]
+            amp = abs.(y_values_short)
+
+            amp_floor = max(maximum(amp) * 1e-100, eps(Float64))
+            logamp = log.(amp .+ amp_floor)
+
+            half_window = 8
+            logamp_smooth = similar(logamp)
+            for i in eachindex(logamp)
+                ilo = max(firstindex(logamp), i - half_window)
+                ihi = min(lastindex(logamp), i + half_window)
+                logamp_smooth[i] = sum(@view logamp[ilo:ihi]) / (ihi - ilo + 1)
+            end
+
+            istart_tmp = findfirst(r_sub .>= rplus + 0.01)
+            istart = isnothing(istart_tmp) ? 2 : max(istart_tmp, half_window + 2)
+
+            maxima_idx = Int[]
+            min_separation = 2 * half_window + 1
+            for i in istart:(length(logamp_smooth) - 1)
+                if logamp_smooth[i] > logamp_smooth[i-1] && logamp_smooth[i] >= logamp_smooth[i+1]
+                    if isempty(maxima_idx) || i - maxima_idx[end] >= min_separation
+                        push!(maxima_idx, i)
+                    end
+                end
+            end
+
+            imax = length(zz_short)  # fallback: no artificial regrowth found
+            persist_window = half_window
+
+            if debug
+                println("DEBUG: maxima found at r = ", [r_sub[idx] for idx in maxima_idx])
+                println("DEBUG: n maxima found = ", length(maxima_idx), " expected = ", expected_maxima)
+            end
+            if length(maxima_idx) >= expected_maxima
+                last_phys_max = maxima_idx[expected_maxima]
+                for i in (last_phys_max + 1):(length(logamp_smooth) - persist_window)
+                    is_minimum = logamp_smooth[i] < logamp_smooth[i-1] && logamp_smooth[i] <= logamp_smooth[i+1]
+                    persistent_growth = all(logamp_smooth[j+1] > logamp_smooth[j] for j in i:(i + persist_window - 1))
+                    if is_minimum && persistent_growth
+                        imax = i
+                        if debug
+                            println("First robust minimum after physical max #", expected_maxima, " at r=", r_sub[i], " -> attaching tail here")
+                        end
+                        break
+                    end
+                end
+            elseif debug
+                println("Warning: only found ", length(maxima_idx), " maxima, expected ", expected_maxima, " -- using full range")
+            end
+
+            r_max_new = r_sub[imax]
+
+            for i in 1:rpts
+                if r_vals[i] <= r_max_new
+                    push!(y_values_tmp, y_values_short[i])
+                else
+                    push!(y_values_tmp, y_values_short[imax] .* exp.(- abs.(imag.(kk)) .* (r_vals[i] .- r_max_new)) .* (r_vals[i] ./ r_max_new).^2 )
+                end
+            end
+            rlist = r_vals ./ M
+
+            nm2 = trapz(y_values_tmp .* conj.(y_values_tmp) .* rlist.^2, rlist)
+            y_values = y_values_tmp ./ sqrt.(nm2)
+
+            nmax_heun = count_local_maxima(real.(y_values .* conj.(y_values)))
+
+            if nmax_heun == expected_maxima
+                if debug
+                    println("[n=$n,l=$l,m=$m] method used: HEUNC (leaver_maxima=$nmax_leaver, heun_maxima=$nmax_heun, expected=$expected_maxima)")
+                end
             else
-                push!(y_values, y_values_short[imax] .* exp.(- abs.(imag.(kk)) .* (r_vals[i] .- r_max_new)) .* (r_vals[i] ./ r_max_new).^2 )
+                if debug
+                    println("[n=$n,l=$l,m=$m] method used: NR FALLBACK (leaver_maxima=$nmax_leaver, heun_maxima=$nmax_heun, expected=$expected_maxima)")
+                end
+                y_values = rout_temp
+                nm2 = trapz(y_values .* conj.(y_values) .* rlist.^2, rlist)
+                y_values ./= sqrt.(nm2)
+
+                if debug
+                    open(fail_log_path, "a") do io
+                        println(io, "n=$n l=$l m=$m a=$a alpha=$alph leaver_maxima=$nmax_leaver heun_maxima=$nmax_heun -> USING NR")
+                    end
+                end
             end
         end
-        rlist = r_vals ./ M
-        
-        
-        nm2 = trapz(y_values .* conj.(y_values) .* rlist.^2, rlist)
-        y_values ./= sqrt.(nm2)
-        
-        number_max_cnt = count_local_maxima(real.(y_values .* conj.(y_values)))
-        if number_max_cnt != (n - l0)
-            println("Nmax count :", number_max_cnt)
-            y_values = rout_temp
-            nm2 = trapz(y_values .* conj.(y_values) .* rlist.^2, rlist)
-            y_values ./= sqrt.(nm2)
-        end
+
         if sve
             writedlm(fnm*"_$(alph)_n_$(n)_l_$(l)_m_$(m)_.dat", hcat(float(real(rlist)), float(real(y_values .* conj.(y_values)))))
         else
@@ -841,7 +962,7 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
             end
         end
     end
-        
+
 end
 
 function radial_inf(erg, mu, M, a, l, m; rpts=1000, rmax_val=1e4, debug=false, iter=50, xtol=1e-120, ftol=1e-120, sve_for_test=false, fnm="test_store/test_radial", is_infin=true)
@@ -989,7 +1110,7 @@ function spheroidals(l, m, a, erg)
 end
 
 
-function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=5000, iter=50000, xtol=1e-50, ftol=1e-70, return_both=false, for_s_rates=true, QNM=false, QNM_E=1.0, erg_Guess=nothing, max_n_qnm=10, prec=300)
+function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=5000, iter=50000, xtol=1e-50, ftol=1e-70, return_both=false, for_s_rates=true, QNM=false, QNM_E=1.0, erg_Guess=nothing, max_n_qnm=10, prec=300, use_framedrag=true)
     # output divided by alpha! \tau_nlm = 1 / (2 * output * alpha)!
     
     setprecision(BigFloat, prec)
@@ -1034,7 +1155,7 @@ function find_im_part(mu, M, a, n, l, m; debug=false, Ntot_force=5000, iter=5000
                 if SR211_g == 0
                     SR211_g = 1e-10 .* mu
                 end
-                w0 = (ergL(n, l, m, alph ./ (GNew * M), M, a; full=true) .+ im * SR211_g) .* GNew * M
+                w0 = (ergL(n, l, m, alph ./ (GNew * M), M, a; full=true, use_framedrag=use_framedrag) .+ im * SR211_g) .* GNew * M
                 # print("test \t ", w0, "\n")
             else
                 w0 = erg_Guess
@@ -1452,7 +1573,7 @@ end
 
 
 
-function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, debug=false, Ntot_safe=10000,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=500000, eps_fac=1e-10, NON_REL=false, h_mve=1, to_inf=false, rmaxT=100, prec=200, cvg_acc=1e-4, NptsCh=60, iterC=40, Lcheb=4, run_leaver=false, der_acc=1e-20, use_heunc=false)
+function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, debug=false, Ntot_safe=10000,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=500000, eps_fac=1e-10, NON_REL=false, h_mve=1, to_inf=false, rmaxT=100, prec=200, cvg_acc=1e-4, NptsCh=60, iterC=40, Lcheb=4, run_leaver=false, der_acc=1e-20, use_heunc=false, pre_erg1=nothing, pre_erg2=nothing, pre_erg3=nothing)
 
     
     rp = BigFloat(1.0 .+ sqrt.(1.0 .- a.^2))
@@ -1560,7 +1681,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     else
         try
         if run_leaver
-            rl, r1, erg_1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe, use_heunc=use_heunc, debug=debug)
+            rl, r1, erg_1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe, use_heunc=use_heunc, debug=debug, pre_compute_erg=pre_erg1)
         else
             wR, wI, rl, r1 = eigensys_Cheby(M, a, mu, n1, l1, m1, return_wf=true, Npoints=NptsCh, Iter=iterC, L=Lcheb, cvg_acc=cvg_acc, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=false, der_acc=der_acc, debug=debug)
             erg_1 = wR .+ im .* wI
@@ -1574,7 +1695,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         end
         real_diff_test = abs.((erg_1 .- erg_1G) ./ alph) # saftey net for random fail....
         imag_noise_threshold = 1e-40  # numerical noise tolerance for imaginary part
-        if ((imag(erg_1) < -imag_noise_threshold)||(real_diff_test .> 0.5))&&(m1>0)
+        if ((abs(imag(erg_1)) < imag_noise_threshold)||(real_diff_test .> 0.5))&&(m1>0)
             if debug
                 println("Issue with one of the energy eigenstates....")
                 println("ERG 1\t", erg_1)
@@ -1590,7 +1711,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             rf_1 = itp(log10.(rlist))
             real_diff_test = abs.((erg_1 .- erg_1G) ./ alph) # saftey net for random fail....
             imag_noise_threshold = 1e-40  # numerical noise tolerance for imaginary part
-            if ((imag(erg_1) < -imag_noise_threshold)||(real_diff_test .> 0.5))&&(m1>0)
+            if ((abs(imag(erg_1)) < imag_noise_threshold)||(real_diff_test .> 0.5))&&(m1>0)
                 if debug
                     println("Issue with one of the energy eigenstates....")
                     println("ERG 1\t", erg_1)
@@ -1635,7 +1756,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         else
             try
             if run_leaver
-                rl, r2, erg_2 = solve_radial(mu, M, a, n2, l2, m2; rpts=Npts_Bnd,  return_erg=true, Ntot_safe=Ntot_safe, use_heunc=use_heunc, debug=debug)
+                rl, r2, erg_2 = solve_radial(mu, M, a, n2, l2, m2; rpts=Npts_Bnd,  return_erg=true, Ntot_safe=Ntot_safe, use_heunc=use_heunc, debug=debug, pre_compute_erg=pre_erg2)
             else
                 wR, wI, rl, r2 = eigensys_Cheby(M, a, mu, n2, l2, m2, return_wf=true, Npoints=NptsCh, Iter=iterC, cvg_acc=cvg_acc, L=Lcheb,  Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=false, der_acc=der_acc, debug=debug)
                 erg_2 = wR .+ im .* wI
@@ -1650,7 +1771,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             end
             real_diff_test = abs.((erg_2 .- erg_2G ) ./ alph) # saftey net for random fail....
             imag_noise_threshold = 1e-40  # numerical noise tolerance for imaginary part
-            if ((imag(erg_2) < -imag_noise_threshold)||(real_diff_test .> 0.5))&&(m2>0)
+            if ((abs(imag(erg_2)) < imag_noise_threshold)||(real_diff_test .> 0.5))&&(m2>0)
                 if debug
                     println("Issue with one of the energy eigenstates....")
                     println("ERG 2\t", erg_2)
@@ -1668,7 +1789,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                 rf_2 = itp(log10.(rlist))
                 real_diff_test = abs.((erg_2 .- erg_2G ) ./ alph) # saftey net for random fail....
                 imag_noise_threshold = 1e-40  # numerical noise tolerance for imaginary part
-                if ((imag(erg_2) < -imag_noise_threshold)||(real_diff_test .> 0.5))&&(m2>0)
+                if ((abs(imag(erg_2)) < imag_noise_threshold)||(real_diff_test .> 0.5))&&(m2>0)
                     if debug
                         println("Issue with one of the energy eigenstates....")
                         println("ERG 2\t", erg_2)
@@ -1709,7 +1830,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     else
         try
         if run_leaver
-            rl, r3, erg_3 = solve_radial(mu, M, a, n3, l3, m3; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe, use_heunc=use_heunc, debug=debug)
+            rl, r3, erg_3 = solve_radial(mu, M, a, n3, l3, m3; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe, use_heunc=use_heunc, debug=debug, pre_compute_erg=pre_erg3)
         else
             wR, wI, rl, r3 = eigensys_Cheby(M, a, mu, n3, l3, m3, return_wf=true, Npoints=NptsCh, Iter=iterC, cvg_acc=cvg_acc, L=Lcheb, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=false, der_acc=der_acc, debug=debug)
             erg_3 = wR .+ im .* wI
@@ -1724,7 +1845,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         end
         real_diff_test = abs.((erg_3 .- erg_3G) ./ alph) # saftey net for random fail....
         imag_noise_threshold = 1e-40  # numerical noise tolerance for imaginary part
-        if ((imag(erg_3) < -imag_noise_threshold)||(real_diff_test .> 0.5))&&(m3>0)
+        if ((abs(imag(erg_3)) < imag_noise_threshold)||(real_diff_test .> 0.5))&&(m3>0)
             if debug
                 println("Issue with one of the energy eigenstates....")
                 println("ERG 3\t", erg_3)
@@ -1741,7 +1862,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             rf_3 = itp(log10.(rlist))
             real_diff_test = abs.((erg_3 .- erg_3G) ./ alph) # saftey net for random fail....
             imag_noise_threshold = 1e-40  # numerical noise tolerance for imaginary part
-            if ((imag(erg_3) < -imag_noise_threshold)||(real_diff_test .> 0.5))&&(m3>0)
+            if ((abs(imag(erg_3)) < imag_noise_threshold)||(real_diff_test .> 0.5))&&(m3>0)
                 if debug
                     println("Issue with one of the energy eigenstates....")
                     println("ERG 3\t", erg_3)
@@ -2072,13 +2193,22 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             
         rr += h_step
         idx += 1
-        
-        if rr > rvals[end]
+
+        if length(outWF_fw) >= length(rvals)
             run_it = false
         end
     end
-    
-    
+
+    if length(outWF) != length(rvals) || length(outWF_fw) != length(rvals)
+        println("WF_LENGTH_MISMATCH")
+        println("tag = ", tag)
+        println("length(outWF) = ", length(outWF))
+        println("length(outWF_fw) = ", length(outWF_fw))
+        println("length(rvals) = ", length(rvals))
+        flush(stdout)
+        error("WF/rvals length mismatch before rrstar rescaling")
+    end
+
     outWF .*= 1.0 ./ sqrt.(itp_rrstar.(rvals).^2 .+ a.^2)
     outWF_fw .*= 1.0 ./ sqrt.(itp_rrstar.(rvals).^2 .+ a.^2)
     
@@ -2157,7 +2287,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         rate_out = 2 .* alph .* kk .* (maxV[end] .* itp_rrstar.(itp_rrstar.(rvals[end])).^2) .* lam^2
         out_gamma = rate_out ./ mu^2 .* (GNew * M^2 * M_to_eV)^2
     else
-        idx_hold = itp_rrstar.(rvals) .> 1.05 .* rp
+        idx_hold = itp_rrstar.(rvals) .> 1.01 .* rp
         rnew_rp = trapz(outWF[idx_hold] .* Tmm[idx_hold], itp_rrstar.(rvals[idx_hold])) .* outWF_fw[idx_hold][1] ./ wronk
         
         maxV = real(rnew_rp.* conj.(rnew_rp))
@@ -2832,23 +2962,62 @@ function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=200, L=4, Npoints=60, Iter
     
     y_values = []
     rmax_cut = r_vals[abs.(zz) .< r_thresh][end]
-    
-    # work backward to find where the solution fails
-    imax = length(zz_short)
-    if abs.(y_values_short[end]) .> abs.(y_values_short[end-1])
-        for i in 1:(length(zz_short)-1)
-            if abs.(y_values_short[end-i+1]) .> abs.(y_values_short[end-i])
-                y_values_short[end-i+1] = 0.0 + im * 0.0
-            else
-                imax = length(zz_short) - i - 1
-                break
+
+    # --- Find first artificial regrowth scanning from horizon outward ---
+    r_sub = r_vals[abs.(zz) .< r_thresh]
+    amp = abs.(y_values_short)
+
+    amp_floor = max(maximum(amp) * 1e-100, eps(Float64))
+    logamp = log.(amp .+ amp_floor)
+
+    half_window = 8
+    logamp_smooth = similar(logamp)
+    for i in eachindex(logamp)
+        ilo = max(firstindex(logamp), i - half_window)
+        ihi = min(lastindex(logamp), i + half_window)
+        logamp_smooth[i] = sum(@view logamp[ilo:ihi]) / (ihi - ilo + 1)
+    end
+
+    istart_tmp = findfirst(r_sub .>= rplus + 0.01)
+    istart = isnothing(istart_tmp) ? 2 : max(istart_tmp, half_window + 2)
+
+    maxima_idx = Int[]
+    min_separation = 2 * half_window + 1
+    for i in istart:(length(logamp_smooth) - 1)
+        if logamp_smooth[i] > logamp_smooth[i-1] && logamp_smooth[i] >= logamp_smooth[i+1]
+            if isempty(maxima_idx) || i - maxima_idx[end] >= min_separation
+                push!(maxima_idx, i)
             end
         end
     end
-    # now go a little further back because you didn't go far enough
-    imax = argmin(abs.(r_vals .- r_vals[imax] .* 1.0))
-    r_max_new = r_vals[imax]
-    
+
+    expected_maxima = n - l0
+    imax = length(zz_short)  # fallback: no artificial regrowth found
+    persist_window = half_window
+
+    if debug
+        println("DEBUG: maxima found at r = ", [r_sub[idx] for idx in maxima_idx])
+        println("DEBUG: n maxima found = ", length(maxima_idx), " expected = ", expected_maxima)
+    end
+    if length(maxima_idx) >= expected_maxima
+        last_phys_max = maxima_idx[expected_maxima]
+        for i in (last_phys_max + 1):(length(logamp_smooth) - persist_window)
+            is_minimum = logamp_smooth[i] < logamp_smooth[i-1] && logamp_smooth[i] <= logamp_smooth[i+1]
+            persistent_growth = all(logamp_smooth[j+1] > logamp_smooth[j] for j in i:(i + persist_window - 1))
+            if is_minimum && persistent_growth
+                imax = i
+                if debug
+                    println("First robust minimum after physical max #", expected_maxima, " at r=", r_sub[i], " -> attaching tail here")
+                end
+                break
+            end
+        end
+    elseif debug
+        println("Warning: only found ", length(maxima_idx), " maxima, expected ", expected_maxima, " -- using full range")
+    end
+
+    r_max_new = r_sub[imax]
+
     for i in 1:Npts_r
         if r_vals[i] <= r_max_new
             push!(y_values, y_values_short[i])

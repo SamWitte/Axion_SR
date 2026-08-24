@@ -199,6 +199,11 @@ function key_to_indx(keyN, Nmax)
     # Parse rate dictionary keys like "211_322^GW" or "211_211^322^BH"
     # Format is: state1_state2^state3_or_GW^TYPE
     # where each state can be "nlm" (old) or "n_l_m" (new)
+    #
+    # A degenerate N-body self-decay (e.g. "211_211_211^Inf": three identical
+    # quanta annihilating to infinity, no intermediate bound state) is written
+    # with all initial states underscore-joined before the single "^TYPE": all
+    # of state1 and the underscore-joined "middle" states are annihilated.
 
     # Split by first underscore to separate state1 and remainder
     parts = split(keyN, "_", limit=2)
@@ -213,45 +218,53 @@ function key_to_indx(keyN, Nmax)
     caret_parts = split(remainder, "^")
 
     if length(caret_parts) == 2
-        # Format: "state1_state2^GW" or "state1_state2^Inf" (3 total components)
-        totN = 3
-        state2 = caret_parts[1]
-        state3_or_type = caret_parts[2]  # This is GW, Inf, or BH
-        type_str = nothing
+        # Format: "state1_middle^GW/Inf/BH" or "state1_middle^state3"
+        # `middle` is normally a single state (2-body process), but may itself
+        # be several underscore-joined states for an N-body self-decay.
+        middle_states = split(caret_parts[1], "_")
+        state3_or_type = caret_parts[2]  # This is GW, Inf, BH, or a state
+        n_initial = 1 + length(middle_states)
+        totN = n_initial + 1
+
+        outPix = zeros(Int, totN)
+        sgn = zeros(totN)
+
+        sgn[1] = -1.0
+        outPix[1] = get_state_idx(state1, Nmax)
+        for (i, st) in enumerate(middle_states)
+            sgn[1 + i] = -1.0
+            outPix[1 + i] = get_state_idx(String(st), Nmax)
+        end
+
+        if state3_or_type == "BH"
+            outPix[totN] = -1
+        elseif state3_or_type == "Inf" || state3_or_type == "GW"
+            outPix[totN] = 0
+        else
+            # It's actually a state
+            outPix[totN] = get_state_idx(state3_or_type, Nmax)
+        end
+        sgn[totN] = 1.0
+
+        return outPix, sgn
     elseif length(caret_parts) == 3
         # Format: "state1_state2^state3^TYPE" (4 total components)
         totN = 4
         state2 = caret_parts[1]
         state3_or_type = caret_parts[2]  # This is state3
         type_str = caret_parts[3]  # This is BH, Inf, etc.
-    else
-        error("Invalid key format: $keyN (unexpected number of ^ separators)")
-    end
 
-    outPix = zeros(Int, totN)
-    sgn = zeros(totN)
+        outPix = zeros(Int, totN)
+        sgn = zeros(totN)
 
-    # Parse state 1
-    sgn[1] = -1.0
-    outPix[1] = get_state_idx(state1, Nmax)
+        # Parse state 1
+        sgn[1] = -1.0
+        outPix[1] = get_state_idx(state1, Nmax)
 
-    # Parse state 2
-    sgn[2] = -1.0
-    outPix[2] = get_state_idx(state2, Nmax)
+        # Parse state 2
+        sgn[2] = -1.0
+        outPix[2] = get_state_idx(state2, Nmax)
 
-    # Parse state 3 (or GW/Inf/BH)
-    if totN == 3
-        # state3_or_type is GW, Inf, or BH
-        if state3_or_type == "BH"
-            outPix[3] = -1
-        elseif state3_or_type == "Inf" || state3_or_type == "GW"
-            outPix[3] = 0
-        else
-            # It's actually a state
-            outPix[3] = get_state_idx(state3_or_type, Nmax)
-        end
-        sgn[3] = 1.0
-    else  # totN == 4
         # state3_or_type is a quantum state
         sgn[3] = 1.0
         outPix[3] = get_state_idx(state3_or_type, Nmax)
@@ -265,9 +278,11 @@ function key_to_indx(keyN, Nmax)
         else
             error("Unknown type in key: $type_str")
         end
-    end
 
-    return outPix, sgn
+        return outPix, sgn
+    else
+        error("Invalid key format: $keyN (unexpected number of ^ separators)")
+    end
 end
 
 function get_state_idx(str_nlm, Nmax)
