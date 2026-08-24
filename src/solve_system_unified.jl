@@ -119,6 +119,12 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # ============================================================================
     # key_to_indx is O(N_modes) with string allocations per call. For Nmax=15 with
     # ~22k rate keys × 560 modes this was ~18 min/Jacobian. Cache it once here.
+    #
+    # m_drag is the net azimuthal quantum number absorbed by the horizon for BH-type
+    # keys, used below to weight the rate by the horizon superradiance factor. Only
+    # computed for is_bh keys: non-BH keys (e.g. "*_*^GW", "*_*^Inf") don't have a
+    # state label in the trailing slot, so get_m would fail to parse it there.
+    get_m(s) = occursin("-", s) ? parse(Int, split(s, "-")[3]) : parse(Int, s[end:end])
     rate_cache = if !spinone
         map(collect(keys(rates))) do k
             if abs.(rates[k]) .> 1e20
@@ -126,10 +132,22 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
             end
             idxV, sgn = key_to_indx(k, Nmax)
             is_bh = any(idxV .== -1)
-            (idxV, sgn, is_bh, rates[k])
+            m_drag = 0
+            if is_bh
+                parts = split(k, "_", limit=2)
+                caret = split(parts[2], "^")
+                if length(caret) == 2
+                    # "state1_state2^BH": both quanta absorbed by the horizon
+                    m_drag = get_m(String(parts[1])) + get_m(String(caret[1]))
+                elseif length(caret) == 3
+                    # "state1_state2^state3^BH": net m into the horizon = m1 + m2 - m3
+                    m_drag = get_m(String(parts[1])) + get_m(String(caret[1])) - get_m(String(caret[2]))
+                end
+            end
+            (idxV, sgn, is_bh, rates[k], m_drag)
         end
     else
-        Vector{Tuple{Vector{Int}, Vector{Int}, Bool, Float64}}()
+        Vector{Tuple{Vector{Int}, Vector{Int}, Bool, Float64, Int}}()
     end
 
     # ============================================================================
@@ -217,14 +235,18 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         if !spinone
             rP_now = 1.0 + sqrt(1.0 - u_real[spinI]^2)
             rP_ratio_now = rP_now / rP_initial
-            for (idxV, sgn, is_bh_final, base_rate) in rate_cache
+            a_now = u_real[spinI]
+            omH_now = a_now / (rP_now^2 + a_now^2)
+            alph_now = GNew * u_real[massI] * mu
+            for (idxV, sgn, is_bh_final, base_rate, m_drag) in rate_cache
                 u_term_tot = 1.0
                 for j in 1:length(sgn)
                     if (idxV[j] <= idx_lvl) && (idxV[j] > 0)
                         u_term_tot *= u_real[idxV[j]]
                     end
                 end
-                rate_val = base_rate * (is_bh_final ? rP_ratio_now : 1.0)
+                kH = (is_bh_final && m_drag != 0) ? (alph_now - m_drag * omH_now) : 1.0
+                rate_val = base_rate * (is_bh_final ? rP_ratio_now : 1.0) * kH
                 for j in 1:length(sgn)
                     idx_j = idxV[j]
                     if idx_j == 0; continue; end
