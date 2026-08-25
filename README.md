@@ -149,6 +149,39 @@ Derive posterior distributions & exclusion limits
 
 ## Usage
 
+### Quick evolution / spin previews (matplotlib)
+
+Script: [`src/Nlevels_Runs/plot_evolution_preview.py`](src/Nlevels_Runs/plot_evolution_preview.py)
+
+Needs Python with **numpy** + **matplotlib** (pandas optional). Point `--output-root` at a tree of finished N-levels leaves:
+
+```text
+<output-root>/BH_10/fa_1e18/alpha_0.4/{Time_,Spin_,Modes_,States_}*Nmax_K.dat
+# or the same leaf with NL_output_Nmax_K.tar.gz (auto-unpacked)
+```
+
+```bash
+cd src/Nlevels_Runs
+
+# Spin grid (one panel per alpha) + occupation stacks (one PNG per alpha)
+python plot_evolution_preview.py \
+  --output-root /path/to/output_or_archive \
+  --MassBH 10 --f_a 1e18 \
+  --alpha 0.2 0.4 0.6 0.8 \
+  --Nmax 5-8 \
+  --figure-dir ./figures/preview
+
+# States only; Nmax range snaps to {3,4,5,6,7,8,15,18}  →  6 7 8 15
+python plot_evolution_preview.py \
+  --output-root /path/to/output_or_archive \
+  --MassBH 10 --f_a 1e14 --alpha 0.2 \
+  --Nmax 6-15 --what states --fmt png
+```
+
+Useful flags: `--what both|spin|states`, `--fmt png|pdf|jpg`, `--peak-threshold`, `--ncols` (spin grid), `-h`.
+
+Outputs (not paper-final): spin curves use the default Matplotlib colours; state legends use `|n l m⟩`. See the module docstring for full details.
+
 ## Dependencies
 
 - **Julia** (v1.7+)
