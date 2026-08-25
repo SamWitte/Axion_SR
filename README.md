@@ -24,7 +24,7 @@ src/
 ├── Rate Computation & Storage
 │   ├── Compute_all_rates.jl       # CLI for computing transition rates
 │   ├── load_rates.jl              # Load pre-computed rate tables for evaluation during evolution
-│   └── rate_sve/                  # Pre-computed rate files [must be pre-computed!]
+│   └── rate_sve/                  # Rate archives (unzip before evolving) + load_rate_input_*.txt
 │
 ├── Statistical Analysis & Inference
 │   ├── MCMC.jl                    # Affine-invariant MCMC sampler
@@ -101,12 +101,26 @@ Bayesian parameter estimation to constrain axion properties:
 
 ### 4. **Pre-Computed Rate Tables** (`rate_sve/`)
 
-Extensive database of pre-calculated transition rates:
+Ship as archives; unpack into `src/rate_sve/` before evolving:
 
-- **740+ rate files** spanning parameter space (axion coupling, black hole spin)
-- **File format**: `n1l1m1_n2l2m2_n3l3m3_Destination.dat` (nlm indices + GW destination)
-- **Companion data**: Imaginary eigenfrequency data (`.npz` format) for growth rate calculations
-- **Destinations**: "BH" (energy stays near black hole) or "Inf" (radiates to infinity)
+| Archive | Contents |
+|---------|----------|
+| `Eigs.zip` | Superradiance growth tables (`Imag_zeroC_*`, `Imag_ergC_*`) |
+| `Rates.zip` | Self-interaction / scattering tables (`*_LvrHc_.dat`, ~50k; SHA256 in `Rates.zip.sha256`) |
+
+Also in this directory (tracked, not zipped):
+
+- `load_rate_input_Nmax_{3..8,15,18}.txt` (+ optional `_lm`) — which LvrHc files to load
+- `gen_lm_input.py` — build `l==m` subsets of those lists
+- `Rate_Scaling.ipynb` — rate-scaling notebook
+
+```bash
+cd src/rate_sve
+unzip -o Eigs.zip
+unzip -o Rates.zip
+```
+
+Runtime reads the **loose** unpacked files (never the `.zip` directly). Destinations in LvrHc names: `BH` (horizon) or `Inf` (infinity).
 
 ### 5. **Astrophysical Data** (`BH_data/`)
 
@@ -163,9 +177,9 @@ julia install_pkgs.jl
 - Constraint contours for publication
 
 ### Computed Rates (`rate_sve/`)
-- Precomputed transition rate databases
-- Eigenfrequency tables
-- Interpolation data for efficient simulation
+- `Eigs.zip` — SR eigenfrequency / growth-rate tables
+- `Rates.zip` — LvrHc self-interaction rate tables (production bundle)
+- `load_rate_input_Nmax_*.txt` — per-Nmax load lists
 
 ### Constraints (`stored_limits/`)
 - Compiled axion mass limits
