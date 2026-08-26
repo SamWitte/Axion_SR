@@ -2297,9 +2297,18 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         omega_H = Float64.(a) ./ Float64.(rp.^2 .+ a.^2)
         kH = real(erg .- m .* omega_H)
 
-        lam = (mu ./ (M_pl .* 1e9))^2
-        rate_out = 4 .* alph.*kH.* (1 .+ sqrt.(1 - a.^2)) .* Float64(maxV) .* lam^2
-        out_gamma = rate_out ./ mu^2 .* (GNew * M^2 * M_to_eV)^2
+        lam = (mu ./ (M_pl .* 1e9))^2
+        if m != 0
+            # Near a superradiant resonance kH = erg - m*omega_H can pass through
+            # zero (or flip sign) as the BH spin evolves, producing anomalous
+            # negative/strongly spin-dependent rates here. Drop kH from the
+            # tabulated rate in that case and let it be reapplied downstream using
+            # the BH's evolving spin (see the kH term in solve_system_unified.jl).
+            rate_out = 4 .* alph .* (1 .+ sqrt.(1 - a.^2)) .* Float64(maxV) .* lam^2
+        else
+            rate_out = 4 .* alph.*kH.* (1 .+ sqrt.(1 - a.^2)) .* Float64(maxV) .* lam^2
+        end
+        out_gamma = rate_out ./ mu^2 .* (GNew * M^2 * M_to_eV)^2
     end
 
     if debug
