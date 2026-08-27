@@ -107,7 +107,7 @@ function sr_rates(n, l, m, massB, MBH, aBH; impose_low_cut=0.001, solve_322=true
     end
     rP *= (GNew .* MBH)
     OmegaH = aBH ./ (2 .* (GNew .* MBH) .* (1 .+ sqrt.(1 .- aBH.^2)))
-    Anl = 2 .^(4 .* l .+ 1) .* factorial(big(Int(l .+ n))) ./ (n.^(2 .* l .+ 4) .* factorial(big(n .- l .- 1)))
+    Anl = 2 .^(4 .* l .+ 1) .* factorial(big(Int(l .+ n))) ./ (BigFloat(n).^(2 .* l .+ 4) .* factorial(big(n .- l .- 1)))
     Anl *= (factorial(big(Int(l))) ./ (factorial(big(Int(2 .* l))) .* factorial(big(Int(2 .* l .+ 1))))).^2
     Chilm = 1.0
     for k in 1:Int(l)
