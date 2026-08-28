@@ -36,7 +36,7 @@ import os
 import re
 import sys
 import itertools
-
+import time
 # ---------------------------------------------------------------------------
 # Control
 # ---------------------------------------------------------------------------
@@ -56,13 +56,18 @@ os.makedirs(OUTPUT_DIR, exist_ok=True)
 # Parameter grids
 # ---------------------------------------------------------------------------
 # MassBH_vals = [1e8, 1e4, 10.0]
-MassBH_vals = [1e4]
+MassBH_vals = [1e8]
+# MassBH_vals = [1e4]
 SpinBH      = 0.95
 fa_vals     = [1e18, 1e16, 1e14, 1e12]
-# alpha_vals  = [0.05, 0.2, 0.4, 0.6]
-alpha_vals  = [0.05, 0.2, 0.4, 0.6, 0.8, 1.0, 1.3, 1.6]
-Nmax_vals        = [3, 4, 5, 6, 7]   # run sequentially in one script
-Nmax_solo_vals   = [8, 15]            # each gets its own dedicated script
+alpha_vals = [0.1, 0.2, 0.4, 0.6, 0.8, 1.0]
+# alpha_vals  = [0.05, 0.2, 0.4, 0.6, 0.8, 1.0]
+# alpha_vals  = [0.05, 0.2, 0.4, 0.6, 0.8, 1.0, 1.3, 1.6]
+
+# Nmax_vals        = [4, 5, 6, 7]   # run sequentially in one script
+# Nmax_solo_vals   = [8, 15]            # each gets its own dedicated script
+Nmax_vals = []
+Nmax_solo_vals = [15]
 
 tau_max_map = {
     1e8:  1e9,
@@ -71,8 +76,10 @@ tau_max_map = {
 }
 
 # Queue resource request
-MEM_GB    = 5
-WALLCLOCK = "1 week"
+NCPUS          = 10
+MEM_GB         = 15
+MEM_GB_NMAX15  = 25
+WALLCLOCK      = "1 week"
 
 # ---------------------------------------------------------------------------
 # Helper formatters for directory names
@@ -134,6 +141,7 @@ for MassBH, fa, alpha in itertools.product(MassBH_vals, fa_vals, alpha_vals):
         lines.append("#!/bin/bash\n")
         lines.append(f"source /mnt/users/switte/.bashrc\n")
         lines.append(f"cd {BASE_DIR}\n")
+        lines.append(f"export OMP_NUM_THREADS={NCPUS}\n")
         lines.append("\n")
         lines.append(
             f"# MassBH={fmt(MassBH)} M_sun | f_a={fmt(fa)} eV | alpha={alpha:g}\n"
@@ -142,7 +150,7 @@ for MassBH, fa, alpha in itertools.product(MassBH_vals, fa_vals, alpha_vals):
         for Nmax in nmax_list:
             lines.append(f"# --- Nmax = {Nmax} ---\n")
             lines.append(
-                f"srun --exclusive julia run_Nlevels.jl"
+                f"julia run_Nlevels.jl"
                 f" --MassBH {fmt(MassBH)}"
                 f" --SpinBH {SpinBH}"
                 f" --f_a {fmt(fa)}"
@@ -156,16 +164,19 @@ for MassBH, fa, alpha in itertools.product(MassBH_vals, fa_vals, alpha_vals):
         path = os.path.join(SCRIPT_DIR, name + ".sh")
         with open(path, "w") as fh:
             fh.writelines(lines)
+        # time.sleep(0.5)
         os.system(f"chmod u+x {path}")
         return path
-
-    # Small Nmax values run sequentially in one script
-    script_paths.append(make_script(base_name, Nmax_vals))
+    if Nmax_vals:
+        # Small Nmax values run sequentially in one script
+        script_paths.append((make_script(base_name, Nmax_vals), MEM_GB))
     job_count += 1
 
     # Nmax=8 and Nmax=15 each get their own dedicated script
     for Nmax in Nmax_solo_vals:
-        script_paths.append(make_script(f"{base_name}_Nmax_{Nmax}", [Nmax]))
+        mem = MEM_GB_NMAX15 if Nmax == 15 else MEM_GB
+        script_paths.append((make_script(f"{base_name}_Nmax_{Nmax}", [Nmax]), mem))
+        
         job_count += 1
 
 print(f"Created {job_count} scripts in {SCRIPT_DIR}")
@@ -177,9 +188,9 @@ if SUBMIT:
     # addqueue expects to be called from the directory containing the script
     os.chdir(SCRIPT_DIR)
     submitted = 0
-    for sp in script_paths:
+    for sp, mem_gb in script_paths:
         sname = os.path.basename(sp)
-        cmd = f'addqueue -s -n 1 -c "{WALLCLOCK}" -m {MEM_GB} ./{sname}'
+        cmd = f'addqueue -s -n {NCPUS} -c "{WALLCLOCK}" -m {mem_gb} ./{sname}'
         ret = os.system(cmd)
         if ret == 0:
             submitted += 1
@@ -189,4 +200,5 @@ if SUBMIT:
 else:
     print("Skipped submission (--no-submit).  Run with:")
     print(f"  cd {SCRIPT_DIR}")
-    print(f'  addqueue -s -n 1 -c "{WALLCLOCK}" -m {MEM_GB} ./Script_NL_*.sh')
+    print(f'  addqueue -s -n {NCPUS} -c "{WALLCLOCK}" -m {MEM_GB_NMAX15} ./Script_NL_*_Nmax_15.sh')
+    print(f'  addqueue -s -n {NCPUS} -c "{WALLCLOCK}" -m {MEM_GB} ./Script_NL_*.sh  # non-Nmax-15')
