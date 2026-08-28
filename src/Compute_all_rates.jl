@@ -98,10 +98,10 @@ function main(;kpts=14, rpts=1500, rmaxT=100, Nang=5000000, Npts_Bnd=2000)
     n2, l2, m2 = parse_state_from_args(S2)
     n3, l3, m3 = parse_state_from_args(S3)
 
-    min_m = minimum([m1, m2])
+    min_m = minimum([m1, m2, m3])
     alpha_max = a .* min_m ./ (2 .* (1 .+ sqrt.(1 .- a.^2))) .* 1.03
-    if alpha_max > 2
-       alpha_max = 2
+    if alpha_max > 1.7
+       alpha_max = 1.7
     end
     alpha_list = LinRange(alpha_min, alpha_max, alpha_pts)
     NptsCh_list = Int.(round.(LinRange(NptsCh_Min, NptsCh_Max, alpha_pts)))
