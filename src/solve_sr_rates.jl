@@ -930,26 +930,6 @@ function solve_radial(mu, M, a, n, l, m; rpts=1000, rmaxT=50, debug=false, iter=
             nm2 = trapz(y_values_tmp .* conj.(y_values_tmp) .* rlist.^2, rlist)
             y_values = y_values_tmp ./ sqrt.(nm2)
 
-            nmax_heun = count_local_maxima(real.(y_values .* conj.(y_values)))
-
-            if nmax_heun == expected_maxima
-                if debug
-                    println("[n=$n,l=$l,m=$m] method used: HEUNC (leaver_maxima=$nmax_leaver, heun_maxima=$nmax_heun, expected=$expected_maxima)")
-                end
-            else
-                if debug
-                    println("[n=$n,l=$l,m=$m] method used: NR FALLBACK (leaver_maxima=$nmax_leaver, heun_maxima=$nmax_heun, expected=$expected_maxima)")
-                end
-                y_values = rout_temp
-                nm2 = trapz(y_values .* conj.(y_values) .* rlist.^2, rlist)
-                y_values ./= sqrt.(nm2)
-
-                if debug
-                    open(fail_log_path, "a") do io
-                        println(io, "n=$n l=$l m=$m a=$a alpha=$alph leaver_maxima=$nmax_leaver heun_maxima=$nmax_heun -> USING NR")
-                    end
-                end
-            end
         end
 
         if sve
@@ -1682,6 +1662,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         try
         if run_leaver
             rl, r1, erg_1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe, use_heunc=use_heunc, debug=debug, pre_compute_erg=pre_erg1)
+            erg_1G = erg_1
         else
             wR, wI, rl, r1 = eigensys_Cheby(M, a, mu, n1, l1, m1, return_wf=true, Npoints=NptsCh, Iter=iterC, L=Lcheb, cvg_acc=cvg_acc, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=false, der_acc=der_acc, debug=debug)
             erg_1 = wR .+ im .* wI
@@ -1757,6 +1738,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             try
             if run_leaver
                 rl, r2, erg_2 = solve_radial(mu, M, a, n2, l2, m2; rpts=Npts_Bnd,  return_erg=true, Ntot_safe=Ntot_safe, use_heunc=use_heunc, debug=debug, pre_compute_erg=pre_erg2)
+                erg_2G = erg_2
             else
                 wR, wI, rl, r2 = eigensys_Cheby(M, a, mu, n2, l2, m2, return_wf=true, Npoints=NptsCh, Iter=iterC, cvg_acc=cvg_acc, L=Lcheb,  Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=false, der_acc=der_acc, debug=debug)
                 erg_2 = wR .+ im .* wI
@@ -1831,6 +1813,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         try
         if run_leaver
             rl, r3, erg_3 = solve_radial(mu, M, a, n3, l3, m3; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe, use_heunc=use_heunc, debug=debug, pre_compute_erg=pre_erg3)
+            erg_3G = erg_3
         else
             wR, wI, rl, r3 = eigensys_Cheby(M, a, mu, n3, l3, m3, return_wf=true, Npoints=NptsCh, Iter=iterC, cvg_acc=cvg_acc, L=Lcheb, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=false, der_acc=der_acc, debug=debug)
             erg_3 = wR .+ im .* wI
