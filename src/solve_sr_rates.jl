@@ -1669,7 +1669,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             end
             
             # NR fallback
-            if isnan(real(erg_1)) || isnan(imag(erg_1)) || (abs(real(erg_1) .- alph) ./ alph > 1.0)
+            if isnan(real(erg_1)) || isnan(imag(erg_1)) || (abs(real(erg_1) .- alph) ./ alph > 1.0) || (abs.(imag(erg_1)) > 0.1)
                 rf_1 = radial_bound_NR(n1, l1, m1, mu, M, rlist)
                 erg_1 = erg_1G
             else
@@ -1706,7 +1706,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                     erg_2 = wR .+ im .* wI
                 end
                 
-                if isnan(real(erg_2)) || isnan(imag(erg_2)) || (abs(real(erg_2) .- alph) ./ alph > 1.0)
+                if isnan(real(erg_2)) || isnan(imag(erg_2)) || (abs(real(erg_2) .- alph) ./ alph > 1.0) || (abs.(imag(erg_2)) > 0.1)
                     rf_2 = radial_bound_NR(n2, l2, m2, mu, M, rlist)
                     erg_2 = erg_2G
                 else
@@ -1737,7 +1737,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             wR, wI, rl, r3 = eigensys_Cheby(M, a, mu, n3, l3, m3, return_wf=true, Npoints=NptsCh, Iter=iterC, cvg_acc=cvg_acc, L=Lcheb, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=false, der_acc=der_acc, debug=debug)
             erg_3 = wR .+ im .* wI
         end
-            if isnan(real(erg_3)) || isnan(imag(erg_3)) || (abs(real(erg_3) .- alph) ./ alph > 1.0)
+            if isnan(real(erg_3)) || isnan(imag(erg_3)) || (abs(real(erg_3) .- alph) ./ alph > 1.0) || (abs.(imag(erg_3)) > 0.1)
                 rf_3 = radial_bound_NR(n3, l3, m3, mu, M, rlist)
                 erg_3 = erg_3G
             else
