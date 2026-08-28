@@ -81,6 +81,7 @@ MEM_GB         = 15
 MEM_GB_NMAX15  = 25
 WALLCLOCK      = "1 week"
 
+
 # ---------------------------------------------------------------------------
 # Helper formatters for directory names
 # ---------------------------------------------------------------------------
@@ -136,10 +137,13 @@ for MassBH, fa, alpha in itertools.product(MassBH_vals, fa_vals, alpha_vals):
         f"{alpha_tag(alpha)}"
     )
 
-    def make_script(name, nmax_list):
+    def make_script(name, nmax_list, mem_gb_script=MEM_GB):
         lines = []
         lines.append("#!/bin/bash\n")
-        lines.append(f"source /mnt/users/switte/.bashrc\n")
+        lines.append(f"#SBATCH --cpus-per-task={NCPUS}\n")
+        lines.append(f"#SBATCH --mem={mem_gb_script}G\n")
+        lines.append(f"#SBATCH --time={WALLCLOCK}\n")
+        lines.append(f"source /home/phys2564/.bashrc\n")
         lines.append(f"cd {BASE_DIR}\n")
         lines.append(f"export OMP_NUM_THREADS={NCPUS}\n")
         lines.append("\n")
@@ -159,7 +163,6 @@ for MassBH, fa, alpha in itertools.product(MassBH_vals, fa_vals, alpha_vals):
                 f" --tau_max {fmt(tau_max)}"
                 f" --outdir {outdir}\n"
             )
-            lines.append("wait\n")
             lines.append("\n")
         path = os.path.join(SCRIPT_DIR, name + ".sh")
         with open(path, "w") as fh:
@@ -167,16 +170,18 @@ for MassBH, fa, alpha in itertools.product(MassBH_vals, fa_vals, alpha_vals):
         # time.sleep(0.5)
         os.system(f"chmod u+x {path}")
         return path
+
+    # Small Nmax values run sequentially in one script (skip if list is empty)
     if Nmax_vals:
-        # Small Nmax values run sequentially in one script
-        script_paths.append((make_script(base_name, Nmax_vals), MEM_GB))
-    job_count += 1
+        script_paths.append((make_script(base_name, Nmax_vals, MEM_GB), MEM_GB))
+        job_count += 1
+
 
     # Nmax=8 and Nmax=15 each get their own dedicated script
     for Nmax in Nmax_solo_vals:
         mem = MEM_GB_NMAX15 if Nmax == 15 else MEM_GB
-        script_paths.append((make_script(f"{base_name}_Nmax_{Nmax}", [Nmax]), mem))
-        
+
+        script_paths.append((make_script(f"{base_name}_Nmax_{Nmax}", [Nmax], mem), mem))
         job_count += 1
 
 print(f"Created {job_count} scripts in {SCRIPT_DIR}")
@@ -185,17 +190,17 @@ print(f"Created {job_count} scripts in {SCRIPT_DIR}")
 # Submit
 # ---------------------------------------------------------------------------
 if SUBMIT:
-    # addqueue expects to be called from the directory containing the script
     os.chdir(SCRIPT_DIR)
     submitted = 0
     for sp, mem_gb in script_paths:
         sname = os.path.basename(sp)
         cmd = f'addqueue -s -n {NCPUS} -c "{WALLCLOCK}" -m {mem_gb} ./{sname}'
+
         ret = os.system(cmd)
         if ret == 0:
             submitted += 1
         else:
-            print(f"  WARNING: addqueue returned {ret} for {sname}")
+            print(f"  WARNING: sbatch returned {ret} for {sname}")
     print(f"Submitted {submitted}/{job_count} jobs.")
 else:
     print("Skipped submission (--no-submit).  Run with:")
