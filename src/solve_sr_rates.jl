@@ -1553,7 +1553,7 @@ end
 
 
 
-function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, debug=false, Ntot_safe=10000,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=500000, eps_fac=1e-10, NON_REL=false, h_mve=1, to_inf=false, rmaxT=100, prec=200, cvg_acc=1e-4, NptsCh=60, iterC=40, Lcheb=4, run_leaver=false, der_acc=1e-20, use_heunc=false, pre_erg1=nothing, pre_erg2=nothing, pre_erg3=nothing)
+function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, debug=false, Ntot_safe=10000,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=500000, eps_fac=1e-10, NON_REL=false, h_mve=1, to_inf=false, rmaxT=100, prec=200, cvg_acc=1e-4, NptsCh=60, iterC=40, Lcheb=4, run_leaver=false, der_acc=1e-20, use_heunc=false, pre_erg1=nothing, pre_erg2=nothing, pre_erg3=nothing, BHlmax=0)
 
     
     rp = BigFloat(1.0 .+ sqrt.(1.0 .- a.^2))
@@ -1631,14 +1631,12 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
 
     else
         
-        l = 0
-        m = 0
-        if (l1 + l2 - l3) != 0
-            l = (l1 + l2 - l3)
-        end
-        if (m1 + m2 - m3) != 0
-            m = (m1 + m2 - m3)
-        end
+        # BH-absorption channel: the hole carries off (l, m) = (l1+l2-l3, m1+m2-m3).
+        # l is the *smallest* allowed multipole; higher even multipoles are summed
+        # over below when BHlmax > l (see l_list).
+        m = (m1 + m2 - m3)
+        dl = (l1 + l2 - l3)
+        l = max(abs(dl), abs(m))
 
         
         # rmax = Float64.(100 ./ alph.^2 .* (minN ./ 2.0) )
@@ -1781,169 +1779,29 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         m = (m1 + m2 - m3)
         l = l1 + l2 - l3
     end
-    
+
+    #### build the list of BH angular multipoles to sum over.
+    # psi at the horizon is a sum over angular modes; since the S_lm are
+    # orthogonal, the absorbed flux |psi|^2 integrated over the horizon adds
+    # incoherently, so the rate is sum_l |R_l|^2 (see loop over l_list below).
+    # Parity is fixed: dl = l1+l2-l3 has the parity of l1+l2+l3, which the
+    # selection rule forces even, hence only even l contribute for BH channels.
+    # max(BHlmax, l) keeps at least the leading multipole, so BHlmax=0
+    # reproduces the single-mode result exactly.
+    if to_inf
+        l_list = [l]
+    else
+        l = max(abs(l1 + l2 - l3), abs(m))
+        l_list = collect(l:2:max(BHlmax, l))
+    end
+    if debug
+        println("BH multipoles summed: l = ", l_list, "   (BHlmax = ", BHlmax, ", m = ", m, ")")
+    end
+
     Z1 = spheroidals(l1, m1, a, erg_1)
     Z2 = spheroidals(l2, m2, a, erg_2)
     Z3 = spheroidals(l3, m3, a, erg_3)
-    Z4 = spheroidals(l, m, a, erg)
 
-    function compute_angular_integral_adaptive(Z1, Z2, Z3, Z4, use_spherical_fallback=false, timeout_seconds=180.0, nang_max=Nang)
-        """
-        Adaptive Monte Carlo integration with timeout and fallback to spherical harmonics.
-        Returns (CG, CG_2, used_fallback) where CG and CG_2 are the integrated values.
-        """
-
-        # Simple cache for spheroidal evaluations (key = (theta, phi) rounded to grid, value = product)
-        cache = Dict{Tuple{Float64, Float64}, Tuple{Float64, Float64}}()
-        CACHE_GRID = 1000  # Round to ~3 decimal places for caching
-        
-        function cache_key(theta::Float64, phi::Float64)
-            return (round(theta * CACHE_GRID) / CACHE_GRID, round(phi * CACHE_GRID) / CACHE_GRID)
-        end
-
-        # Precompute spheroidal products to avoid redundant evaluations
-        function func_ang_pair(theta, phi)
-            try
-                key = cache_key(theta, phi)
-                if haskey(cache, key)
-                    return cache[key]
-                end
-
-                if use_spherical_fallback
-                    # Use spherical harmonics (much faster)
-                    S1 = sphericalY(l1, m1, theta, phi)
-                    S2 = sphericalY(l2, m2, theta, phi)
-                    S3 = sphericalY(l3, m3, theta, phi)
-                    S4 = sphericalY(l, m, theta, phi)
-                    Z_prod = S1 * S2 * conj(S3) * conj(S4)
-                else
-                    Z_prod = Z1(theta, phi) * Z2(theta, phi) * conj(Z3(theta, phi)) * conj(Z4(theta, phi))
-                end
-                real_prod = real(Z_prod)
-                result = (real_prod, real_prod * cos(theta)^2)
-                cache[key] = result
-                return result
-            catch e
-                if debug && use_spherical_fallback
-                    println("ERROR in func_ang_pair: ", e)
-                    println("Quantum numbers: (l1,m1)=($l1,$m1), (l2,m2)=($l2,$m2), (l3,m3)=($l3,$m3), (l,m)=($l,$m)")
-                    println("theta=$theta, phi=$phi")
-                end
-                return 0.0, 0.0
-            end
-        end
-
-        CG = 0.0
-        CG_2 = 0.0
-        ang_cvrg = false
-        idx = 0
-        check_interval = 1000  # Check convergence every 1000 samples
-        CG_old = 0.0
-        CG_2_old = 0.0
-        first_check = true  # Prevent false convergence on first check when CG_old=0 by init
-        max_iterations = 100000  # Safeguard against infinite loops
-        tol = 1e-4
-        min_samples = 5000  # Require minimum samples before checking convergence
-        max_samples = max(nang_max, 50000)  # Use Nang if larger than default
-
-        # Track time to implement timeout
-        start_time = time()
-
-        while !ang_cvrg && idx < max_iterations
-            # Check timeout periodically
-            if idx % 1000 == 0 && (time() - start_time) > timeout_seconds
-                if debug
-                    method = use_spherical_fallback ? "spherical harmonics" : "spheroidals"
-                    println("Angular MC integration timeout after $(time() - start_time) seconds using $(method)! idx=$idx")
-                    if !use_spherical_fallback
-                        println("Attempting spherical harmonics fallback...")
-                    else
-                        println("Already using fallback! Returning partial result: CG=$CG, CG_2=$CG_2")
-                    end
-                end
-                # Fallback to spherical harmonics
-                if !use_spherical_fallback
-                    return compute_angular_integral_adaptive(Z1, Z2, Z3, Z4, true, timeout_seconds, nang_max)
-                else
-                    # Already tried fallback, return best estimate with warning
-                    if idx > 0
-                        CG *= 4*pi / idx
-                        CG_2 *= 4*pi / idx
-                    end
-                    return CG, CG_2, true
-                end
-            end
-
-            # Batch evaluate multiple samples per iteration
-            for _ in 1:check_interval
-                theta = acos(1.0 - 2.0 * rand())
-                phi = 2.0 * pi * rand()
-                f1, f2 = func_ang_pair(theta, phi)
-                CG += f1
-                CG_2 += f2
-                idx += 1
-            end
-
-            if idx >= min_samples
-                # Compute running averages
-                CG_avg = CG / idx
-                CG_2_avg = CG_2 / idx
-
-                # Check convergence with safeguard against division by zero
-                if abs(CG_old) > 1e-10
-                    test1 = abs(CG_avg - CG_old) / abs(CG_old)
-                else
-                    test1 = abs(CG_avg - CG_old)
-                end
-
-                if abs(CG_2_old) > 1e-10
-                    test2 = abs(CG_2_avg - CG_2_old) / abs(CG_2_old)
-                else
-                    test2 = abs(CG_2_avg - CG_2_old)
-                end
-
-                if !first_check && (test1 < tol) && (test2 < tol)
-                    ang_cvrg = true
-                elseif idx > max_samples
-                    # Force convergence if we've reached max samples
-                    ang_cvrg = true
-                else
-                    CG_old = CG_avg
-                    CG_2_old = CG_2_avg
-                    first_check = false
-                end
-            end
-        end
-
-        # Normalize by volume of integration domain (surface of unit sphere = 4π)
-        if idx > 0
-            CG *= 4*pi / idx
-            CG_2 *= 4*pi / idx
-        end
-
-        return CG, CG_2, use_spherical_fallback
-    end
-
-    if debug
-        println("getting angles")
-        println("Quantum numbers: (l1,m1)=($l1,$m1), (l2,m2)=($l2,$m2), (l3,m3)=($l3,$m3), (l,m)=($l,$m)")
-        println("to_inf = $to_inf")
-        println("Energies: erg_1=$erg_1, erg_2=$erg_2, erg_3=$erg_3, erg=$erg")
-    end
-    CG, CG_2, used_fallback = compute_angular_integral_adaptive(Z1, Z2, Z3, Z4, false, 30.0)
-
-    if used_fallback && debug
-        println("Warning: Angular integration used spherical harmonic fallback")
-    end
-
-    
-    
-    if debug
-        println("ergs ", erg_1, "  ", erg_2, "  ", erg_3, "  ", erg)
-        println("angles \t", CG, "\t", CG_2)
-    end
-    
-        
     lam_eff = 1.0e0
     if (n1==n2)&&(l1==l2)&&(m1==m2)
         preFac = 1.0 ./ 2.0
@@ -1957,206 +1815,402 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     itpGI = LinearInterpolation(log10.(rlist), Float64.(imag.(gammaT)), extrapolation_bc=Line())
     
     gam = im * a * sqrt.(erg.^2 .- alph.^2)
-    LLM = l * (l + 1)
-    LLM += (-1 + 2 * l * (l + 1) - 2 * m.^2) * gam.^2 ./ (-3 + 4 * l * (l + 1))
-    LLM += ((l - abs(m) - 1 * (l - abs(m)) * (l + abs(m)) * (l + abs(m) - 1)) ./ ((-3 + 2 * l) * (2 * l - 1).^2) - (l + 1 - abs(m)) * (2 * l - abs(m)) * (l + abs(m) + 1) * (2 + l + abs(m)) ./ ((3 + 2 * l).^2 * (5 + 2 * l))) * gam.^4 ./ (2 * (1 + 2 * l))
-    LLM += (4 * ((-1 + 4 * m^2) * (l * (1 + l) * (121 + l * (1 + l) * (213 + 8 * l * (1 + l) * (-37 + 10 * l * (1 + l)))) - 2 * l * (1 + l) * (-137 + 56 * l * (1 + l) * (3 + 2 * l * (1 + l))) * m^2 + (705 + 8 * l * (1 + l) * (125 + 18 * l * (1 + l))) * m^4 - 15 * (1 + 46 * m^2))) * gam^6) / ((-5 + 2 * l) * (-3 + 2 * l) * (5 + 2 * l) * (7 + 2 * l) * (-3 + 4 * l * (1 + l))^5)
-    
-    
+
     r_list_map = 10 .^LinRange(log10.(rp * (1.0 .+ eps_fac)), log10.(rmax), 100000)
     rout_star = r_list_map .+ 2.0 .* rp ./ (rp .- rmm) .* log.((r_list_map .- rp) ./ 2.0) .- 2.0 .* rmm .* log.((r_list_map .- rmm) ./ 2.0) ./ (rp .- rmm)
     
     
     itp_rrstar = LinearInterpolation(rout_star, r_list_map, extrapolation_bc=Line())
     itp_rrstar_inv = LinearInterpolation(r_list_map, rout_star, extrapolation_bc=Line())
-    rr = itp_rrstar_inv(rmax)
     
     h_step = Float64.(rp ./ h_mve)
 
-    # Get solution #1
-    outWF = []
-    rvals = []
-    # set D to 1
+    function mode_amplitude(l)
+
+        Z4 = spheroidals(l, m, a, erg)
+
+        function compute_angular_integral_adaptive(Z1, Z2, Z3, Z4, use_spherical_fallback=false, timeout_seconds=180.0, nang_max=Nang)
+            """
+            Adaptive Monte Carlo integration with timeout and fallback to spherical harmonics.
+            Returns (CG, CG_2, used_fallback) where CG and CG_2 are the integrated values.
+            """
+
+            # Simple cache for spheroidal evaluations (key = (theta, phi) rounded to grid, value = product)
+            cache = Dict{Tuple{Float64, Float64}, Tuple{Float64, Float64}}()
+            CACHE_GRID = 1000  # Round to ~3 decimal places for caching
+        
+            function cache_key(theta::Float64, phi::Float64)
+                return (round(theta * CACHE_GRID) / CACHE_GRID, round(phi * CACHE_GRID) / CACHE_GRID)
+            end
+
+            # Precompute spheroidal products to avoid redundant evaluations
+            function func_ang_pair(theta, phi)
+                try
+                    key = cache_key(theta, phi)
+                    if haskey(cache, key)
+                        return cache[key]
+                    end
+
+                    if use_spherical_fallback
+                        # Use spherical harmonics (much faster)
+                        S1 = sphericalY(l1, m1, theta, phi)
+                        S2 = sphericalY(l2, m2, theta, phi)
+                        S3 = sphericalY(l3, m3, theta, phi)
+                        S4 = sphericalY(l, m, theta, phi)
+                        Z_prod = S1 * S2 * conj(S3) * conj(S4)
+                    else
+                        Z_prod = Z1(theta, phi) * Z2(theta, phi) * conj(Z3(theta, phi)) * conj(Z4(theta, phi))
+                    end
+                    real_prod = real(Z_prod)
+                    result = (real_prod, real_prod * cos(theta)^2)
+                    cache[key] = result
+                    return result
+                catch e
+                    if debug && use_spherical_fallback
+                        println("ERROR in func_ang_pair: ", e)
+                        println("Quantum numbers: (l1,m1)=($l1,$m1), (l2,m2)=($l2,$m2), (l3,m3)=($l3,$m3), (l,m)=($l,$m)")
+                        println("theta=$theta, phi=$phi")
+                    end
+                    return 0.0, 0.0
+                end
+            end
+
+            CG = 0.0
+            CG_2 = 0.0
+            ang_cvrg = false
+            idx = 0
+            check_interval = 1000  # Check convergence every 1000 samples
+            CG_old = 0.0
+            CG_2_old = 0.0
+            first_check = true  # Prevent false convergence on first check when CG_old=0 by init
+            max_iterations = 100000  # Safeguard against infinite loops
+            tol = 1e-4
+            min_samples = 5000  # Require minimum samples before checking convergence
+            max_samples = max(nang_max, 50000)  # Use Nang if larger than default
+
+            # Track time to implement timeout
+            start_time = time()
+
+            while !ang_cvrg && idx < max_iterations
+                # Check timeout periodically
+                if idx % 1000 == 0 && (time() - start_time) > timeout_seconds
+                    if debug
+                        method = use_spherical_fallback ? "spherical harmonics" : "spheroidals"
+                        println("Angular MC integration timeout after $(time() - start_time) seconds using $(method)! idx=$idx")
+                        if !use_spherical_fallback
+                            println("Attempting spherical harmonics fallback...")
+                        else
+                            println("Already using fallback! Returning partial result: CG=$CG, CG_2=$CG_2")
+                        end
+                    end
+                    # Fallback to spherical harmonics
+                    if !use_spherical_fallback
+                        return compute_angular_integral_adaptive(Z1, Z2, Z3, Z4, true, timeout_seconds, nang_max)
+                    else
+                        # Already tried fallback, return best estimate with warning
+                        if idx > 0
+                            CG *= 4*pi / idx
+                            CG_2 *= 4*pi / idx
+                        end
+                        return CG, CG_2, true
+                    end
+                end
+
+                # Batch evaluate multiple samples per iteration
+                for _ in 1:check_interval
+                    theta = acos(1.0 - 2.0 * rand())
+                    phi = 2.0 * pi * rand()
+                    f1, f2 = func_ang_pair(theta, phi)
+                    CG += f1
+                    CG_2 += f2
+                    idx += 1
+                end
+
+                if idx >= min_samples
+                    # Compute running averages
+                    CG_avg = CG / idx
+                    CG_2_avg = CG_2 / idx
+
+                    # Check convergence with safeguard against division by zero
+                    if abs(CG_old) > 1e-10
+                        test1 = abs(CG_avg - CG_old) / abs(CG_old)
+                    else
+                        test1 = abs(CG_avg - CG_old)
+                    end
+
+                    if abs(CG_2_old) > 1e-10
+                        test2 = abs(CG_2_avg - CG_2_old) / abs(CG_2_old)
+                    else
+                        test2 = abs(CG_2_avg - CG_2_old)
+                    end
+
+                    if !first_check && (test1 < tol) && (test2 < tol)
+                        ang_cvrg = true
+                    elseif idx > max_samples
+                        # Force convergence if we've reached max samples
+                        ang_cvrg = true
+                    else
+                        CG_old = CG_avg
+                        CG_2_old = CG_2_avg
+                        first_check = false
+                    end
+                end
+            end
+
+            # Normalize by volume of integration domain (surface of unit sphere = 4π)
+            if idx > 0
+                CG *= 4*pi / idx
+                CG_2 *= 4*pi / idx
+            end
+
+            return CG, CG_2, use_spherical_fallback
+        end
+
+
+        if debug
+            println("getting angles")
+            println("Quantum numbers: (l1,m1)=($l1,$m1), (l2,m2)=($l2,$m2), (l3,m3)=($l3,$m3), (l,m)=($l,$m)")
+            println("to_inf = $to_inf")
+            println("Energies: erg_1=$erg_1, erg_2=$erg_2, erg_3=$erg_3, erg=$erg")
+        end
+        CG, CG_2, used_fallback = compute_angular_integral_adaptive(Z1, Z2, Z3, Z4, false, 30.0)
+
+        if used_fallback && debug
+            println("Warning: Angular integration used spherical harmonic fallback")
+        end
+
+    
+    
+        if debug
+            println("ergs ", erg_1, "  ", erg_2, "  ", erg_3, "  ", erg)
+            println("angles \t", CG, "\t", CG_2)
+        end
+
+        LLM = l * (l + 1)
+        LLM += (-1 + 2 * l * (l + 1) - 2 * m.^2) * gam.^2 ./ (-3 + 4 * l * (l + 1))
+        LLM += ((l - abs(m) - 1 * (l - abs(m)) * (l + abs(m)) * (l + abs(m) - 1)) ./ ((-3 + 2 * l) * (2 * l - 1).^2) - (l + 1 - abs(m)) * (2 * l - abs(m)) * (l + abs(m) + 1) * (2 + l + abs(m)) ./ ((3 + 2 * l).^2 * (5 + 2 * l))) * gam.^4 ./ (2 * (1 + 2 * l))
+        LLM += (4 * ((-1 + 4 * m^2) * (l * (1 + l) * (121 + l * (1 + l) * (213 + 8 * l * (1 + l) * (-37 + 10 * l * (1 + l)))) - 2 * l * (1 + l) * (-137 + 56 * l * (1 + l) * (3 + 2 * l * (1 + l))) * m^2 + (705 + 8 * l * (1 + l) * (125 + 18 * l * (1 + l))) * m^4 - 15 * (1 + 46 * m^2))) * gam^6) / ((-5 + 2 * l) * (-3 + 2 * l) * (5 + 2 * l) * (7 + 2 * l) * (-3 + 4 * l * (1 + l))^5)
+
+        rr = itp_rrstar_inv(rmax)
+
+        # Get solution #1
+        outWF = []
+        rvals = []
+        # set D to 1
      
-    testhold =  exp.(-sqrt.(alph.^2 .- erg.^2) .* rr) .* sqrt.(itp_rrstar.(rr).^2 .+ a.^2) ./ itp_rrstar.(rr)
-    if abs.(testhold) .> 1e-200
-        append!(outWF, testhold)
-    else
-        while abs.(testhold) .<= 1e-200
-            rr /= 2.0
-            testhold =  exp.(-sqrt.(alph.^2 .- erg.^2) .* rr) .* sqrt.(itp_rrstar.(rr).^2 .+ a.^2) ./ itp_rrstar.(rr)
-        end
-        append!(outWF, testhold)
-    end
-    append!(rvals, rr)
-    rr -= h_step
-    append!(outWF,  exp.(-sqrt.(alph.^2 .- erg.^2) .* rr) .* sqrt.(itp_rrstar.(rr).^2 .+ a.^2) ./ itp_rrstar.(rr))
-    append!(rvals, rr)
-    rr -= h_step
-
-    
-    stop_running = false
-    run_it = true
-    idx = 2
-    while run_it
-        r_input = itp_rrstar(rvals[idx])
-    
-        delt = (r_input.^2 .- 2 .* r_input .+ a.^2)
-        ff = (r_input.^2 .+ a.^2)
-            
-        net_rescale = h_step.^2
-        Vv = delt .* alph.^2 ./ ff .+ delt .* (LLM .+ a.^2 .* (erg.^2 .- alph.^2)) ./ ff.^2 .+ delt .* (3 .* r_input.^2 .- 4 .* r_input .+ a.^2) ./ ff.^3 .- 3 .* delt.^2 .* r_input.^2 ./ ff.^4 .+ 2 .* a .* m .* erg ./ ff .- 2 .* a .* m .* erg .* delt ./ ff.^2 .- a.^2 .* m.^2 ./ ff.^2
-        newV = 2 * outWF[idx] .- outWF[idx - 1] .+ net_rescale .* (Vv .- erg.^2) .* outWF[idx]
-        
-        newV_r = Float64.(real(newV))
-        newV_i = Float64.(imag(newV))
-        append!(outWF, newV_r + im * newV_i)
-            
-        append!(rvals, rr)
-        
-        rr -= h_step
-        idx += 1
-        
-        if (itp_rrstar(rr) < rp .*  (1.0 .+ eps_fac))
-            run_it = false
-        end
-    end
-    rvals = reverse(rvals)
-    outWF = reverse(outWF)
-    
-    # Get solution #2
-    rr += h_step
-    outWF_fw = []
-    omega_H = Float64.(a) ./ Float64.(rp.^2 .+ a.^2)
-    append!(outWF_fw, exp.(- im .* (erg .- m .* omega_H) .* rr) .* sqrt.(itp_rrstar.(rr).^2 .+ a.^2)) ##
-    rr += h_step
-    append!(outWF_fw, exp.(- im .* (erg .- m .* omega_H) .* rr) .* sqrt.(itp_rrstar.(rr).^2 .+ a.^2))
-    rr += h_step
-    
-    stop_running = false
-    run_it = true
-    idx = 2
-    while run_it
-        r_input = itp_rrstar(rvals[idx])
-    
-        delt = (r_input.^2 .- 2 .* r_input .+ a.^2)
-        ff = (r_input.^2 .+ a.^2)
-            
-        net_rescale = h_step.^2
-        Vv = delt .* alph.^2 ./ ff .+ delt .* (LLM .+ a.^2 .* (erg.^2 .- alph.^2)) ./ ff.^2 .+ delt .* (3 .* r_input.^2 .- 4 .* r_input .+ a.^2) ./ ff.^3 .- 3 .* delt.^2 .* r_input.^2 ./ ff.^4 .+ 2 .* a .* m .* erg ./ ff .- 2 .* a .* m .* erg .* delt ./ ff.^2 .- a.^2 .* m.^2 ./ ff.^2
-        newV = 2 * outWF_fw[idx] .- outWF_fw[idx - 1] .+ net_rescale .* (Vv .- erg.^2) .* outWF_fw[idx]
-        
-        newV_r = Float64.(real(newV))
-        newV_i = Float64.(imag(newV))
-        append!(outWF_fw, newV_r + im * newV_i)
-            
-        rr += h_step
-        idx += 1
-
-        if length(outWF_fw) >= length(rvals)
-            run_it = false
-        end
-    end
-
-    if length(outWF) != length(rvals) || length(outWF_fw) != length(rvals)
-        println("WF_LENGTH_MISMATCH")
-        println("tag = ", tag)
-        println("length(outWF) = ", length(outWF))
-        println("length(outWF_fw) = ", length(outWF_fw))
-        println("length(rvals) = ", length(rvals))
-        flush(stdout)
-        error("WF/rvals length mismatch before rrstar rescaling")
-    end
-
-    outWF .*= 1.0 ./ sqrt.(itp_rrstar.(rvals).^2 .+ a.^2)
-    outWF_fw .*= 1.0 ./ sqrt.(itp_rrstar.(rvals).^2 .+ a.^2)
-    
-    ## TESTING
-    # writedlm("test_store/hom1.dat", cat(itp_rrstar.(rvals), real.(abs.(outWF .* conj(outWF))), dims=2))
-    # writedlm("test_store/hom2.dat", cat(itp_rrstar.(rvals), real.(abs.(outWF_fw .* conj(outWF_fw))), dims=2))
-
-    if length(outWF_fw) > 15
-        if to_inf
-            midP = Int(round(length(rvals) - 10))
+        testhold =  exp.(-sqrt.(alph.^2 .- erg.^2) .* rr) .* sqrt.(itp_rrstar.(rr).^2 .+ a.^2) ./ itp_rrstar.(rr)
+        if abs.(testhold) .> 1e-200
+            append!(outWF, testhold)
         else
-            # For bound-state GF (to_inf=false), outWF decays ~exp(-κr*) toward rmax.
-            # Computing the Wronskian near rmax (where outWF ≈ 0) loses all precision.
-            # Use a point ~1/4 from the near-horizon end: far from the near-zero rmax
-            # boundary, far from Δ→0 at the horizon, and in the numerically stable interior.
-            midP = clamp(Int(round(length(rvals) / 4)), 3, length(rvals) - 3)
+            while abs.(testhold) .<= 1e-200
+                rr /= 2.0
+                testhold =  exp.(-sqrt.(alph.^2 .- erg.^2) .* rr) .* sqrt.(itp_rrstar.(rr).^2 .+ a.^2) ./ itp_rrstar.(rr)
+            end
+            append!(outWF, testhold)
         end
-    elseif length(outWF_fw) > 4
-        midP = Int(round(length(rvals) - 3))
-    else
-        println("WF not enough points.... return zero....")
-        return 0.0
-    end
+        append!(rvals, rr)
+        rr -= h_step
+        append!(outWF,  exp.(-sqrt.(alph.^2 .- erg.^2) .* rr) .* sqrt.(itp_rrstar.(rr).^2 .+ a.^2) ./ itp_rrstar.(rr))
+        append!(rvals, rr)
+        rr -= h_step
 
-    # if debug && !to_inf
-    #     println("=== Wronskian conservation check (W_theta = Delta * W_R) ===")
-    #     ncheck = 12
-    #     step = max(1, div(length(rvals) - 4, ncheck))
-    #     for pp in 3:step:(length(rvals)-3)
-    #         r_pp   = itp_rrstar.(rvals[pp])
-    #         dr_pp  = itp_rrstar.(rvals[pp+1]) .- itp_rrstar.(rvals[pp-1])
-    #         delt_pp = (r_pp.^2 .- 2 .* r_pp .+ a.^2) .* (GNew .* M)
-    #         raw_wronk = (outWF_fw[pp] .* (outWF[pp+1] .- outWF[pp-1]) .-
-    #                      outWF[pp] .* (outWF_fw[pp+1] .- outWF_fw[pp-1])) ./ dr_pp
-    #         w_theta = delt_pp .* raw_wronk
-    #         println("  r=", round(r_pp, digits=2),
-    #                 "  |R_INF|=", abs.(outWF[pp]),
-    #                 "  |R_H|=",   abs.(outWF_fw[pp]),
-    #                 "  W_theta=", w_theta)
-    #     end
-    #     println("=== end Wronskian check ===")
-    # end
     
-    wronk  = (outWF_fw[midP] .* (outWF[midP+1] .- outWF[midP-1]) .-  outWF[midP] .* (outWF_fw[midP+1] .- outWF_fw[midP-1]) )./ (itp_rrstar.(rvals[midP+1]) .- itp_rrstar.(rvals[midP-1]))
+        stop_running = false
+        run_it = true
+        idx = 2
+        while run_it
+            r_input = itp_rrstar(rvals[idx])
+    
+            delt = (r_input.^2 .- 2 .* r_input .+ a.^2)
+            ff = (r_input.^2 .+ a.^2)
+            
+            net_rescale = h_step.^2
+            Vv = delt .* alph.^2 ./ ff .+ delt .* (LLM .+ a.^2 .* (erg.^2 .- alph.^2)) ./ ff.^2 .+ delt .* (3 .* r_input.^2 .- 4 .* r_input .+ a.^2) ./ ff.^3 .- 3 .* delt.^2 .* r_input.^2 ./ ff.^4 .+ 2 .* a .* m .* erg ./ ff .- 2 .* a .* m .* erg .* delt ./ ff.^2 .- a.^2 .* m.^2 ./ ff.^2
+            newV = 2 * outWF[idx] .- outWF[idx - 1] .+ net_rescale .* (Vv .- erg.^2) .* outWF[idx]
+        
+            newV_r = Float64.(real(newV))
+            newV_i = Float64.(imag(newV))
+            append!(outWF, newV_r + im * newV_i)
+            
+            append!(rvals, rr)
+        
+            rr -= h_step
+            idx += 1
+        
+            if (itp_rrstar(rr) < rp .*  (1.0 .+ eps_fac))
+                run_it = false
+            end
+        end
+        rvals = reverse(rvals)
+        outWF = reverse(outWF)
+    
+        # Get solution #2
+        rr += h_step
+        outWF_fw = []
+        omega_H = Float64.(a) ./ Float64.(rp.^2 .+ a.^2)
+        append!(outWF_fw, exp.(- im .* (erg .- m .* omega_H) .* rr) .* sqrt.(itp_rrstar.(rr).^2 .+ a.^2)) ##
+        rr += h_step
+        append!(outWF_fw, exp.(- im .* (erg .- m .* omega_H) .* rr) .* sqrt.(itp_rrstar.(rr).^2 .+ a.^2))
+        rr += h_step
+    
+        stop_running = false
+        run_it = true
+        idx = 2
+        while run_it
+            r_input = itp_rrstar(rvals[idx])
+    
+            delt = (r_input.^2 .- 2 .* r_input .+ a.^2)
+            ff = (r_input.^2 .+ a.^2)
+            
+            net_rescale = h_step.^2
+            Vv = delt .* alph.^2 ./ ff .+ delt .* (LLM .+ a.^2 .* (erg.^2 .- alph.^2)) ./ ff.^2 .+ delt .* (3 .* r_input.^2 .- 4 .* r_input .+ a.^2) ./ ff.^3 .- 3 .* delt.^2 .* r_input.^2 ./ ff.^4 .+ 2 .* a .* m .* erg ./ ff .- 2 .* a .* m .* erg .* delt ./ ff.^2 .- a.^2 .* m.^2 ./ ff.^2
+            newV = 2 * outWF_fw[idx] .- outWF_fw[idx - 1] .+ net_rescale .* (Vv .- erg.^2) .* outWF_fw[idx]
+        
+            newV_r = Float64.(real(newV))
+            newV_i = Float64.(imag(newV))
+            append!(outWF_fw, newV_r + im * newV_i)
+            
+            rr += h_step
+            idx += 1
+
+            if length(outWF_fw) >= length(rvals)
+                run_it = false
+            end
+        end
+
+        if length(outWF) != length(rvals) || length(outWF_fw) != length(rvals)
+            println("WF_LENGTH_MISMATCH")
+            println("tag = ", tag)
+            println("length(outWF) = ", length(outWF))
+            println("length(outWF_fw) = ", length(outWF_fw))
+            println("length(rvals) = ", length(rvals))
+            flush(stdout)
+            error("WF/rvals length mismatch before rrstar rescaling")
+        end
+
+        outWF .*= 1.0 ./ sqrt.(itp_rrstar.(rvals).^2 .+ a.^2)
+        outWF_fw .*= 1.0 ./ sqrt.(itp_rrstar.(rvals).^2 .+ a.^2)
+    
+        ## TESTING
+        # writedlm("test_store/hom1.dat", cat(itp_rrstar.(rvals), real.(abs.(outWF .* conj(outWF))), dims=2))
+        # writedlm("test_store/hom2.dat", cat(itp_rrstar.(rvals), real.(abs.(outWF_fw .* conj(outWF_fw))), dims=2))
+
+        if length(outWF_fw) > 15
+            if to_inf
+                midP = Int(round(length(rvals) - 10))
+            else
+                # For bound-state GF (to_inf=false), outWF decays ~exp(-κr*) toward rmax.
+                # Computing the Wronskian near rmax (where outWF ≈ 0) loses all precision.
+                # Use a point ~1/4 from the near-horizon end: far from the near-zero rmax
+                # boundary, far from Δ→0 at the horizon, and in the numerically stable interior.
+                midP = clamp(Int(round(length(rvals) / 4)), 3, length(rvals) - 3)
+            end
+        elseif length(outWF_fw) > 4
+            midP = Int(round(length(rvals) - 3))
+        else
+            println("WF not enough points.... return zero....")
+            return 0.0 + 0.0im, 0.0
+        end
+
+        # if debug && !to_inf
+        #     println("=== Wronskian conservation check (W_theta = Delta * W_R) ===")
+        #     ncheck = 12
+        #     step = max(1, div(length(rvals) - 4, ncheck))
+        #     for pp in 3:step:(length(rvals)-3)
+        #         r_pp   = itp_rrstar.(rvals[pp])
+        #         dr_pp  = itp_rrstar.(rvals[pp+1]) .- itp_rrstar.(rvals[pp-1])
+        #         delt_pp = (r_pp.^2 .- 2 .* r_pp .+ a.^2) .* (GNew .* M)
+        #         raw_wronk = (outWF_fw[pp] .* (outWF[pp+1] .- outWF[pp-1]) .-
+        #                      outWF[pp] .* (outWF_fw[pp+1] .- outWF_fw[pp-1])) ./ dr_pp
+        #         w_theta = delt_pp .* raw_wronk
+        #         println("  r=", round(r_pp, digits=2),
+        #                 "  |R_INF|=", abs.(outWF[pp]),
+        #                 "  |R_H|=",   abs.(outWF_fw[pp]),
+        #                 "  W_theta=", w_theta)
+        #     end
+        #     println("=== end Wronskian check ===")
+        # end
+    
+        wronk  = (outWF_fw[midP] .* (outWF[midP+1] .- outWF[midP-1]) .-  outWF[midP] .* (outWF_fw[midP+1] .- outWF_fw[midP-1]) )./ (itp_rrstar.(rvals[midP+1]) .- itp_rrstar.(rvals[midP-1]))
 
         
-    if isnan.(wronk)
-        goback = true
-        while goback
-            midP -= 1
-            wronk  = (outWF_fw[midP] .* (outWF[midP+1] .- outWF[midP-1]) .-  outWF[midP] .* (outWF_fw[midP+1] .- outWF_fw[midP-1]) )./ (itp_rrstar.(rvals[midP+1]) .- itp_rrstar.(rvals[midP-1]))
-            if !isnan.(wronk)&&(abs.(wronk) .> 0.0)
-                goback=false
+        if isnan.(wronk)
+            goback = true
+            while goback
+                midP -= 1
+                wronk  = (outWF_fw[midP] .* (outWF[midP+1] .- outWF[midP-1]) .-  outWF[midP] .* (outWF_fw[midP+1] .- outWF_fw[midP-1]) )./ (itp_rrstar.(rvals[midP+1]) .- itp_rrstar.(rvals[midP-1]))
+                if !isnan.(wronk)&&(abs.(wronk) .> 0.0)
+                    goback=false
+                end
+                if midP < 3
+                    goback=false
+                    println("ran out of space in wronk...")
+                end
             end
-            if midP < 3
-                goback=false
-                println("ran out of space in wronk...")
+        end
+
+    
+        wronk *= (itp_rrstar.(rvals[midP]).^2 .- 2 .* itp_rrstar.(rvals[midP]) .+ a.^2) .* (GNew .* M)
+        Tmm = (itpG(log10.(itp_rrstar.(rvals))) + im * itpGI(log10.(itp_rrstar.(rvals)))) .* (CG .* itp_rrstar.(rvals).^2 .+ CG_2 .* a.^2)
+
+        #### amplitude of the mode at the horizon (bound) / at infinity (to_inf)
+        if to_inf
+            amp = outWF[end] .* trapz(outWF_fw .* Tmm, itp_rrstar.(rvals)) ./ wronk
+        else
+            idx_hold = itp_rrstar.(rvals) .> 1.01 .* rp
+            amp = trapz(outWF[idx_hold] .* Tmm[idx_hold], itp_rrstar.(rvals[idx_hold])) .* outWF_fw[idx_hold][1] ./ wronk
+        end
+
+        return amp, rvals[end]
+    end
+
+
+    #### sum |R_l|^2 over the multipoles
+    maxV = 0.0
+    rvals_end = 0.0
+    for lmode in l_list
+        if !to_inf && lmode != first(l_list)
+            # The angular overlap vanishes identically for some multipoles; the MC
+            # integrator's convergence test is relative, so it would happily settle
+            # onto sampling noise there. Skip those. Only applied beyond the leading
+            # multipole, so BHlmax=0 reproduces the previous result untouched.
+            _, ang_iszero = integral4(l1, m1, l2, m2, l3, -m3, lmode, -m)
+            if ang_iszero
+                if debug
+                    println("  l = ", lmode, ": angular integral vanishes, skipped")
+                end
+                continue
             end
+        end
+
+        amp, rv_end = mode_amplitude(lmode)
+        rvals_end = rv_end
+
+        contrib = real(amp .* conj.(amp))
+        if isnan(contrib) || isinf(contrib)
+            println("Mode l = ", lmode, " gave NaN/Inf amplitude, skipping....")
+            continue
+        end
+        maxV += contrib
+
+        if debug
+            println("  l = ", lmode, ": |R_l|^2 = ", contrib, "   running total = ", maxV)
         end
     end
 
-    
-    wronk *= (itp_rrstar.(rvals[midP]).^2 .- 2 .* itp_rrstar.(rvals[midP]) .+ a.^2) .* (GNew .* M)
-    Tmm = (itpG(log10.(itp_rrstar.(rvals))) + im * itpGI(log10.(itp_rrstar.(rvals)))) .* (CG .* itp_rrstar.(rvals).^2 .+ CG_2 .* a.^2)
-    
-    
     ####
     if to_inf
-        
-        out_R = outWF[end] .* trapz(outWF_fw .* Tmm, itp_rrstar.(rvals)) ./ wronk
-        maxV = Float64.(real(out_R .* conj.(out_R)))
-
         lam = (mu ./ (M_pl .* 1e9))^2
         kk = real(sqrt.(erg.^2 .- alph.^2))
         # println("1/kk \t", 1 ./ kk)
-        rate_out = 2 .* alph .* kk .* (maxV[end] .* itp_rrstar.(itp_rrstar.(rvals[end])).^2) .* lam^2
+        rate_out = 2 .* alph .* kk .* (maxV .* itp_rrstar.(itp_rrstar.(rvals_end)).^2) .* lam^2
         out_gamma = rate_out ./ mu^2 .* (GNew * M^2 * M_to_eV)^2
     else
-        idx_hold = itp_rrstar.(rvals) .> 1.01 .* rp
-        rnew_rp = trapz(outWF[idx_hold] .* Tmm[idx_hold], itp_rrstar.(rvals[idx_hold])) .* outWF_fw[idx_hold][1] ./ wronk
-        
-        maxV = real(rnew_rp.* conj.(rnew_rp))
-
         lam = (mu ./ (M_pl .* 1e9))^2
-        
+
         omega_H = Float64.(a) ./ Float64.(rp.^2 .+ a.^2)
         kH = real(erg .- m .* omega_H)
 
-        lam = (mu ./ (M_pl .* 1e9))^2
         if m != 0
             # Near a superradiant resonance kH = erg - m*omega_H can pass through
             # zero (or flip sign) as the BH spin evolves, producing anomalous
