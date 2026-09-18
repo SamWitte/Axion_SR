@@ -99,7 +99,15 @@ Bayesian parameter estimation to constrain axion properties:
 - **Parameters**: Axion mass (m_a), axion decay constant (f_a)
 - **Output**: Posterior distributions, 95% confidence intervals, exclusion regions
 
-### 4. **Pre-Computed Rate Tables** (`rate_sve/`)
+### 4. **N-level post-processing** (`src/Nlevels_Runs/`)
+
+After evolution runs finish, prune inactive modes and make figures:
+
+- Guide: [`src/Nlevels_Runs/POSTPROCESS.md`](src/Nlevels_Runs/POSTPROCESS.md)
+- One-leaf helper: `bash src/Nlevels_Runs/postprocess_leaf.sh output/BH_10/fa_1e16/alpha_0.6`
+- Pipeline: `plot_output_pipeline.py` (unpack → prune → plot → repack)
+
+### 5. **Pre-Computed Rate Tables** (`rate_sve/`)
 
 Ship as archives; unpack into `src/rate_sve/` before evolving:
 
@@ -107,6 +115,7 @@ Ship as archives; unpack into `src/rate_sve/` before evolving:
 |---------|----------|
 | `Eigs.zip` | Superradiance growth tables (`Imag_zeroC_*`, `Imag_ergC_*`) |
 | `Rates.zip` | Self-interaction / scattering tables (`*_LvrHc_.dat`, ~50k; SHA256 in `Rates.zip.sha256`) |
+| `Rates_master_Nmax18_LvrHc.zip` | Full master LvrHc set (84 490 channels; preferred for Nmax≤18) |
 
 Also in this directory (tracked, not zipped):
 
@@ -118,11 +127,12 @@ Also in this directory (tracked, not zipped):
 cd src/rate_sve
 unzip -o Eigs.zip
 unzip -o Rates.zip
+# or: unzip -o Rates_master_Nmax18_LvrHc.zip
 ```
 
 Runtime reads the **loose** unpacked files (never the `.zip` directly). Destinations in LvrHc names: `BH` (horizon) or `Inf` (infinity).
 
-### 5. **Astrophysical Data** (`BH_data/`)
+### 6. **Astrophysical Data** (`BH_data/`)
 
 Real black hole observations:
 

@@ -3,8 +3,8 @@ Plot spin and occupation numbers for each parameter combination in the output di
 One figure per leaf directory (BH / fa / alpha), saved as JPEG at dpi=200.
 
 Layout (shared x-axis = time):
-  Panel 0 : spin  ã  in [0,1]  (linear)
-  Panels 1-7 : States for Nmax = 3, 4, 5, 6, 7, 8, 15  (log, shared y limits)
+  Panel 0 : spin  ã  in [0,1]  (linear; from highest available Nmax)
+  Panels 1-8 : States for Nmax = 3, 4, 5, 6, 7, 8, 15, 18  (log, shared y limits)
 """
 
 import os
@@ -31,7 +31,8 @@ def _log(msg):
 _HERE        = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_ROOT  = os.path.join(_HERE, "output")
 FIGURES_ROOT = os.path.join(_HERE, "figures")
-NMAX_LIST    = [4, 5, 6, 7, 8, 15]
+NMAX_LIST    = [3, 4, 5, 6, 7, 8, 15, 18]
+SPIN_NMAX_PREF = [18, 15, 8, 7, 6, 5, 4, 3]
 MIN_MAX_VAL = 1e-30   # only plot states whose max exceeds this
 
 
@@ -53,6 +54,8 @@ def glob_one(pattern):
 
 def _fast_load(path):
     """Load a whitespace/tab-delimited .dat file quickly via pandas."""
+    if path is None or not os.path.isfile(path) or os.path.getsize(path) == 0:
+        return None
     return pd.read_csv(path, sep=r"\s+", header=None, engine="c").values
 
 
@@ -86,7 +89,7 @@ def load_states_active(directory, nmax, mask, stride, min_val):
     downsampled.
     """
     path = glob_one(os.path.join(directory, f"States_*Nmax_{nmax}.dat"))
-    if path is None:
+    if path is None or os.path.getsize(path) == 0:
         return np.array([], dtype=int), np.zeros((0, 0))
     size_mb = os.path.getsize(path) / 1e6
     _log(f"    Streaming States Nmax={nmax} ({size_mb:.0f} MB) ...")
@@ -129,29 +132,49 @@ def _compute_xlim(directory):
     return t_min_val, t_max_val
 
 
-def plot_directory(directory):
+def _call_prepare(prepare_nmax, directory, nmax, prefixes=None):
+    """Call prepare_nmax with optional prefixes if the callback accepts them."""
+    if not prepare_nmax:
+        return
+    try:
+        prepare_nmax(directory, nmax, prefixes=prefixes)
+    except TypeError:
+        prepare_nmax(directory, nmax)
+
+
+def plot_directory(directory, prepare_nmax=None, finalize_nmax=None, figure_leaf=None):
     _log(f"  Loading Time/Spin ...")
-    # Load time from first available Nmax as reference for the spin panel
-    time = None
+
+    # Only unpack Time here — never States (Nmax=18 States can be ~25+ GB).
+    t_min, t_max = None, None
     for nmax in NMAX_LIST:
+        _call_prepare(prepare_nmax, directory, nmax, prefixes=("Time",))
+        t = load_time(directory, nmax)
+        if t is not None and len(t) > 1:
+            pos = t[t > 0]
+            if len(pos) > 0:
+                t_min = pos.min() if t_min is None else min(t_min, pos.min())
+                t_max = t[-1] if t_max is None else max(t_max, t[-1])
+        if finalize_nmax:
+            finalize_nmax(directory, nmax)
+
+    time = None
+    spin = None
+    spin_nmax = None
+    for nmax in SPIN_NMAX_PREF:
+        _call_prepare(prepare_nmax, directory, nmax, prefixes=("Time", "Spin"))
         time = load_time(directory, nmax)
-        if time is not None and len(time) > 1:
+        spin = load_spin(directory, nmax)
+        if time is not None and spin is not None and len(time) > 1 and len(spin) > 1:
+            spin_nmax = nmax
             break
     if time is None:
         _log(f"  Skipping {directory}: no Time file found")
         return
-
-    spin = None
-    for nmax in NMAX_LIST:
-        spin = load_spin(directory, nmax)
-        if spin is not None and len(spin) > 1:
-            break
     if spin is None:
         _log(f"  Skipping {directory}: no Spin file found")
         return
 
-    # Compute x limits from Time files only (avoids loading all States up front)
-    t_min, t_max = _compute_xlim(directory)
     if t_min is None:
         t_min = time[time > 0].min()
         t_max = time[-1]
@@ -181,13 +204,17 @@ def plot_directory(directory):
     ax0.legend(fontsize=8, loc="upper right", framealpha=0.6)
     ax0.tick_params(labelbottom=False)
 
-    # ---- Panels 1-7: States per Nmax ----
+    # ---- Occupation panels per Nmax ----
     # Load, plot, and immediately free each Nmax to avoid holding all in memory
     occ_ymin, occ_ymax = 1e-16, 10.0
     prop_cycle = plt.rcParams["axes.prop_cycle"].by_key()["color"]
 
     for idx, nmax in enumerate(NMAX_LIST):
         _log(f"  Processing Nmax={nmax} ...")
+        # States only when actually plotting this panel (still large for Nmax=18).
+        _call_prepare(
+            prepare_nmax, directory, nmax, prefixes=("Time", "States", "Modes")
+        )
         ax = axes[1 + idx]
         ax.set_yscale("log")
         ax.set_ylim(occ_ymin, occ_ymax)
@@ -196,7 +223,7 @@ def plot_directory(directory):
         t = load_time(directory, nmax)
         modes = load_modes(directory, nmax)
 
-        if t is None or modes is None:
+        if t is None or modes is None or len(modes) == 0:
             ax.text(0.5, 0.5, "no data", transform=ax.transAxes,
                     ha="center", va="center", color="gray")
         else:
@@ -224,6 +251,9 @@ def plot_directory(directory):
             del t, t_plot, modes, active_idx, active_data
             gc.collect()
 
+        if finalize_nmax:
+            finalize_nmax(directory, nmax)
+
         if idx < len(NMAX_LIST) - 1:
             ax.tick_params(labelbottom=False)
 
@@ -233,12 +263,17 @@ def plot_directory(directory):
     # x-axis label on bottom panel
     axes[-1].set_xlabel("Time")
 
-    # Title from directory path
-    rel = os.path.relpath(directory, OUTPUT_ROOT)
+    # Title and figure path from lustre leaf when plotting from a temp work dir
+    path_leaf = figure_leaf if figure_leaf is not None else directory
+    try:
+        rel = os.path.relpath(
+            os.path.realpath(path_leaf), os.path.realpath(OUTPUT_ROOT)
+        )
+    except ValueError:
+        rel = os.path.basename(path_leaf)
     fig.suptitle(rel, fontsize=10, y=1.002)
 
     # Build output path: figures/<bh_mass>/<fa>/<alpha>.jpg
-    rel = os.path.relpath(directory, OUTPUT_ROOT)
     parts = rel.split(os.sep)
     if len(parts) >= 3:
         bh_label, fa_label, alpha_label = parts[0], parts[1], parts[2]
@@ -255,6 +290,8 @@ def plot_directory(directory):
     fig.savefig(out_path, dpi=200, bbox_inches="tight", format="jpeg")
     plt.close(fig)
     gc.collect()
+    if spin_nmax is not None and finalize_nmax and spin_nmax not in NMAX_LIST:
+        finalize_nmax(directory, spin_nmax)
     _log(f"  [DONE] Saved: {out_path}")
 
 
