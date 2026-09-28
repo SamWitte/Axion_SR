@@ -47,7 +47,8 @@ Spinone mode: Single quantum level with precomputed rates, simpler spin dynamics
 function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     n_times=10000, debug=false, impose_low_cut=0.01, return_all_info=false,
     eq_threshold=1e-100, stop_on_a=0, abstol=1e-30, non_rel=true, high_p=true,
-    N_pts_interp=200, N_pts_interpL=200, Nmax=3, cheby=true, spinone=false, lm_only=false)
+    N_pts_interp=200, N_pts_interpL=200, Nmax=3, cheby=true, spinone=false, lm_only=false,
+    u0_override=nothing, t_start=0.0)
 
     # ============================================================================
     # PARAMETER SETUP & VALIDATION
@@ -92,6 +93,16 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     massI = spinI + 1
 
     y0, reltol = setup_state_vectors(idx_lvl, aBH, M_BH, e_init, default_reltol)
+    # Resume: replace log-space initial state; rates still use original aBH/M_BH above/below.
+    if u0_override !== nothing
+        if length(u0_override) != length(y0)
+            error("u0_override length $(length(u0_override)) != expected $(length(y0)) (idx_lvl=$idx_lvl)")
+        end
+        y0 = copy(u0_override)
+        println("Resuming with overridden u0 at t_start=", t_start,
+                "  spin=", exp(y0[spinI]), "  mass=", exp(y0[massI]))
+        flush(stdout)
+    end
 
     # ============================================================================
     # RATE SETUP
@@ -153,11 +164,24 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # ============================================================================
     # ODE SETUP
     # ============================================================================
-    tspan = (0.0, t_max)
+    if t_start >= t_max
+        error("t_start ($t_start) >= t_max ($t_max); nothing to evolve")
+    end
+    tspan = (Float64(t_start), Float64(t_max))
     # Log-spaced save points so that early-time dynamics are resolved on the log x-axis.
-    # t_start avoids log(0); the floor at 1.0 is arbitrary but safe for all tau_max values.
-    t_log_start = max(1.0, tspan[2] * 1e-9)
-    saveat = exp10.(range(log10(t_log_start), log10(tspan[2]), length=n_times))
+    # Full-grid base uses (0, t_max) so resume hops splice onto the same grid.
+    t_log_start = max(1.0, t_max * 1e-9)
+    saveat_full = exp10.(range(log10(t_log_start), log10(t_max), length=n_times))
+    if t_start > 0.0
+        saveat = saveat_full[saveat_full .> t_start]
+        if isempty(saveat)
+            saveat = [t_max]
+        end
+        println("Resume saveat: $(length(saveat)) / $(length(saveat_full)) points after t_start")
+        flush(stdout)
+    else
+        saveat = saveat_full
+    end
 
     # Trackers for callbacks
     wait = 0
@@ -432,15 +456,27 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         end
     end
 
-    # Shared: time limit callback
-    # max_real_time = 20.0 * 60  # Convert to seconds
-    max_real_time = 6.0 .* 24.0 .* 60.0 .* 60.0
+    # Shared: wall-clock limit. Must be shorter than the Slurm wall so the
+    # solver can terminate!(integrator), return, and write .dat output.
+    # Override with NL_MAX_WALL_SEC (seconds). Default 4.5 days (astro3_long is 5d).
+    max_real_time = let
+        env = get(ENV, "NL_MAX_WALL_SEC", "")
+        if isempty(env)
+            4.5 * 24.0 * 60.0 * 60.0
+        else
+            parse(Float64, env)
+        end
+    end
     start_time = Dates.now()
+    println("ODE wall-clock limit: $(max_real_time / 3600.0) h (then save and exit)")
+    flush(stdout)
 
     function time_limit_callback(u, t, integrator)
         elapsed_time = Dates.now() - start_time
         if Dates.value(elapsed_time) > max_real_time * 1e3
-            println("Terminating integration due to time limit")
+            println("Terminating integration due to wall-clock limit at t=", t,
+                    " after ", Dates.value(elapsed_time) / 3.6e6, " h")
+            flush(stdout)
             return true
         else
             return false
