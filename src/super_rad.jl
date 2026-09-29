@@ -19,7 +19,7 @@ using Printf
 using .RateComputation
 using .RateInterpolation
 
-function super_rad_check(M_BH, aBH, massB, f_a; tau_max=1e4, alpha_max_cut=100.0, debug=false, impose_low_cut=0.01, stop_on_a=0, eq_threshold=1e-120, abstol=1e-35, non_rel=true, high_p=true, N_pts_interp=100, N_pts_interpL=100, Nmax=3, cheby=true, spinone=false)
+function super_rad_check(M_BH, aBH, massB, f_a; tau_max=1e4, alpha_max_cut=100.0, debug=false, impose_low_cut=0.01, stop_on_a=0, eq_threshold=1e-120, abstol=1e-35, non_rel=true, high_p=true, N_pts_interp=100, N_pts_interpL=100, Nmax=3, cheby=true, spinone=false, gw_model=:legacy)
 
     alph = GNew .* M_BH .* massB
 
@@ -31,7 +31,7 @@ function super_rad_check(M_BH, aBH, massB, f_a; tau_max=1e4, alpha_max_cut=100.0
     # println("running.... ", massB * M_BH * GNew)
     # Use unified solve_system with spinone parameter
     if !spinone
-        final_spin, final_BH = solve_system(massB, f_a, aBH, M_BH, tau_max, debug=debug, impose_low_cut=impose_low_cut, stop_on_a=stop_on_a, eq_threshold=eq_threshold, abstol=abstol, non_rel=non_rel, high_p=high_p, N_pts_interp=N_pts_interp, N_pts_interpL=N_pts_interpL, Nmax=Nmax, cheby=cheby, spinone=false)
+        final_spin, final_BH = solve_system(massB, f_a, aBH, M_BH, tau_max, debug=debug, impose_low_cut=impose_low_cut, stop_on_a=stop_on_a, eq_threshold=eq_threshold, abstol=abstol, non_rel=non_rel, high_p=high_p, N_pts_interp=N_pts_interp, N_pts_interpL=N_pts_interpL, Nmax=Nmax, cheby=cheby, spinone=false, gw_model=gw_model)
     else
         final_spin, final_BH = solve_system(massB, nothing, aBH, M_BH, tau_max, spinone=true, n_times=10000)
     end

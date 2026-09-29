@@ -3,3 +3,7 @@
 !*LvrHc*.zip
 src/rate_sve/Imag*.npz
 src/rate_sve/Imag_*.dat
+
+# large GW rate tables: rebuild with `julia src/scripts/build_gw_tables.jl 15 18`
+src/rate_sve/gw_nr_rates_Nmax_15.txt
+src/rate_sve/gw_nr_rates_Nmax_18.txt
