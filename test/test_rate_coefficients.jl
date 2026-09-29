@@ -41,10 +41,8 @@ try
 
     bh_rates = count_rates(db; channel="BH")
     inf_rates = count_rates(db; channel="Inf")
-    gw_rates = count_rates(db; channel="GW")
     println("  - BH channels: $bh_rates")
     println("  - Inf channels: $inf_rates")
-    println("  - GW channels: $gw_rates")
 
     if nrates > 0
         println("✓ Database population successful")
@@ -63,9 +61,9 @@ try
     db = build_default_rates(3; non_relativistic=true)
 
     # Test lookup
-    rate_211_gw = get_rate(db, "211_211^GW")
-    if rate_211_gw === nothing
-        println("✗ FAIL: Could not retrieve '211_211^GW' rate")
+    rate_322_inf = get_rate(db, "322_322^211^Inf")
+    if rate_322_inf === nothing
+        println("✗ FAIL: Could not retrieve '322_322^211^Inf' rate")
         exit(1)
     end
 
@@ -74,12 +72,12 @@ try
     fa_factor = 1.0
     rp = 1.4  # Typical pericenter factor
 
-    computed = evaluate_rate(rate_211_gw, alpha, fa_factor, rp)
-    expected = 1.0e-2 * (alpha ^ 14)  # GW rate, no fa or rp dependence
+    computed = evaluate_rate(rate_322_inf, alpha, fa_factor, rp)
+    expected = 1.1e-8 * (alpha ^ 8) * fa_factor  # Inf rate: fa dependence, no rp
 
-    println("  - Rate key: $(rate_211_gw.key)")
-    println("  - Coefficient: $(rate_211_gw.coefficient)")
-    println("  - Power index: $(rate_211_gw.power_index)")
+    println("  - Rate key: $(rate_322_inf.key)")
+    println("  - Coefficient: $(rate_322_inf.coefficient)")
+    println("  - Power index: $(rate_322_inf.power_index)")
     println("  - Computed value: $computed")
     println("  - Expected value: $expected")
 
@@ -122,9 +120,9 @@ try
     println("  - Dictionary size: $(length(dict_rates)) entries")
 
     # Verify a specific value
-    if haskey(dict_rates, "211_211^GW")
-        val = dict_rates["211_211^GW"]
-        println("  - Sample rate '211_211^GW': $val")
+    if haskey(dict_rates, "322_322^211^Inf")
+        val = dict_rates["322_322^211^Inf"]
+        println("  - Sample rate '322_322^211^Inf': $val")
 
         if val > 0
             println("✓ Dictionary export successful")

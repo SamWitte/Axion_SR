@@ -720,3 +720,115 @@ function gw_channel_rates(c::GWCache, α, a)
     end
     return ann, tr
 end
+
+# ----------------------------------------------------------------------------
+# Signal post-processing: frequency, power and strain of every GW line
+# ----------------------------------------------------------------------------
+
+const GW_ERG_PER_EV = 1.602176634e-12
+const GW_G_CGS = 6.674e-8
+const GW_C_CGS = 2.99792458e10
+const GW_KPC_CM = 3.0857e21
+
+"""
+    gw_lines(timeT, states, modes, spin, mass, mu, Nmax; d_kpc=1.0, rel_floor=1e-8,
+             n_peak_samples=400, gw_model=:nonrel, min_rate_per_yr=1e-10,
+             literature_overrides=true)
+
+GW lines of an evolved cloud. `states[i, k]` is u_i at time `timeT[k]` (years) for
+level `modes[i]` = (n, l, m, ...) (rows of a Modes_ file; pruned lists are fine),
+`spin`/`mass` are the BH spin and mass (M_sun) at the same times, `mu` in eV.
+
+Each annihilation a x b and transition a -> b is one line with, at every time,
+  f  [Hz]    = ω_GW μ / (2π ħ),   ω_GW = ω_a + ω_b  or  |ω_a - ω_b|   (gw_omega)
+  P  [erg/s] = (emission events per s) × ħ ω_GW,
+               events/s = rate(α(t), a(t)) u_a u_b G M_0^2 μ/ħ
+  h0         = sqrt(8 G P / (c^3 (2πf)^2 d^2)),  i.e. sqrt(A_+^2 + A_x^2) averaged
+               over source orientation, for a source at distance d_kpc.
+Lines whose peak power (on `n_peak_samples` sampled times) is below
+rel_floor × the brightest line are dropped. Output is on `n_out` log-spaced
+times. Returns (t, lines): t [yr] and a vector of NamedTuples (kind, a, b, f, P,
+h0) sorted by peak power.
+
+Not included yet: the cloud's self-gravity (and self-interaction) frequency
+shifts, which drive the chirp of annihilation lines as the cloud depletes; the
+frequencies here only drift through α(t) = G M(t) μ and the spin dependence of
+the spectrum.
+"""
+function gw_lines(timeT, states, modes, spin, mass, mu, Nmax; d_kpc=1.0, rel_floor=1e-8,
+                  n_peak_samples=400, n_out=2000, gw_model=:nonrel, min_rate_per_yr=1e-10,
+                  literature_overrides=true)
+    nt = length(timeT)
+    c = gw_build_cache(Nmax, modes, mu, mass[1], spin[1]; gw_model=gw_model,
+                       min_rate_per_yr=min_rate_per_yr, literature_overrides=literature_overrides)
+    nlines = length(c.ann_i) + length(c.tr_i)
+    ω = zeros(length(c.n))
+    peak = zeros(nlines)
+    for k in gw_time_samples(timeT, n_peak_samples)
+        α = gw_set_omegas!(ω, c, mass[k], spin[k], mu)
+        for q in 1:nlines
+            peak[q] = max(peak[q], gw_line_at(c, q, ω, α, states, k, mass[1], mu)[2])
+        end
+    end
+    lines = NamedTuple[]
+    (nlines == 0 || maximum(peak) == 0) && return (t = Float64[], lines = lines)
+    keep = findall(peak .>= rel_floor * maximum(peak))
+    sort!(keep, by=q -> -peak[q])
+    ks = gw_time_samples(timeT, n_out)
+    F = zeros(length(keep), length(ks)); Pw = zeros(length(keep), length(ks))
+    for (col, k) in enumerate(ks)
+        α = gw_set_omegas!(ω, c, mass[k], spin[k], mu)
+        for (row, q) in enumerate(keep)
+            F[row, col], Pw[row, col] = gw_line_at(c, q, ω, α, states, k, mass[1], mu)
+        end
+    end
+    d = d_kpc * GW_KPC_CM
+    na = length(c.ann_i)
+    for (row, q) in enumerate(keep)
+        isann = q <= na
+        ia, ib = isann ? (c.ann_i[q], c.ann_j[q]) : (c.tr_i[q - na], c.tr_j[q - na])
+        if !isann && ω[ia] < ω[ib]      # label transitions hi -> lo (at the last output time)
+            ia, ib = ib, ia
+        end
+        f = F[row, :]
+        h0 = [f[k] > 0 ? sqrt(8GW_G_CGS * Pw[row, k] / GW_C_CGS^3) / (2π * f[k] * d) : 0.0 for k in eachindex(f)]
+        push!(lines, (kind = isann ? :annihilation : :transition,
+                      a = (c.n[ia], c.l[ia], c.m[ia]), b = (c.n[ib], c.l[ib], c.m[ib]),
+                      f = f, P = Pw[row, :], h0 = h0))
+    end
+    return (t = timeT[ks], lines = lines)
+end
+
+# Up to n indices into timeT, log-spaced in time (plus the first and last sample).
+function gw_time_samples(timeT, n)
+    length(timeT) <= n && return collect(eachindex(timeT))
+    tpos = timeT[timeT .> 0]
+    targets = exp10.(range(log10(minimum(tpos)), log10(timeT[end]), length=n))
+    ks = [clamp(searchsortedfirst(timeT, t), 1, length(timeT)) for t in targets]
+    return unique(vcat(1, ks, length(timeT)))
+end
+
+function gw_set_omegas!(ω, c::GWCache, M, a, mu)
+    α = GNew * M * mu
+    @inbounds for i in eachindex(c.n)
+        ω[i] = gw_omega(c.n[i], c.l[i], c.m[i], α, a)
+    end
+    return α
+end
+
+# (f [Hz], P [erg/s]) of line q at output time index k; q <= n_ann: annihilation.
+function gw_line_at(c::GWCache, q, ω, α, states, k, M0, mu)
+    na = length(c.ann_i)
+    if q <= na
+        i, j = c.ann_i[q], c.ann_j[q]
+        wgw = ω[i] + ω[j]
+        r = c.ann_C[q] * α^c.ann_p[q]
+    else
+        t = q - na
+        i, j = c.tr_i[t], c.tr_j[t]
+        wgw = abs(ω[i] - ω[j])
+        r = wgw == 0 ? 0.0 : gw_transition_rate_cached(c, t, α, wgw)
+    end
+    events_per_s = r * states[i, k] * states[j, k] * (GNew * M0^2 * M_to_eV) * mu / hbar
+    return wgw * mu / hbar / (2π), events_per_s * wgw * mu * GW_ERG_PER_EV
+end
