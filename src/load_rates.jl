@@ -2,21 +2,10 @@ using Glob
 include("state_utils.jl")
 include(joinpath(@__DIR__, "Numerics", "gw_rates.jl"))
 
-"""
-    load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=false,
-                     gw_model=:legacy, gw_min_rate_per_yr=1e-10, gw_literature=true)
-
-GW emission is selected independently of the scattering rates by `gw_model`:
-- `:legacy` : the hand-coded 211/322 GW entries below (unchanged behaviour).
-- `:nonrel` : NR annihilation ("a_b^GW") and transition ("a_b^GWT") rates for every
-              pair of levels, from rate_sve/gw_nr_rates_Nmax_<Nmax>.txt
-              (Numerics/gw_rates.jl; build with scripts/build_gw_tables.jl).
-              `gw_literature` swaps the flat-space l=1 x l=1 annihilations for
-              the BH-potential-corrected α^14 result.
-- `:rel`    : relativistic GW rates (hook, not implemented yet).
-"""
-function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=false,
-                          gw_model=:legacy, gw_min_rate_per_yr=1e-10, gw_literature=true)
+# Scattering (BH / Inf) rate coefficients. GW annihilations and transitions are
+# not in this dictionary: they come from Numerics/gw_rates.jl (gw_build_cache /
+# gw_rhs!) inside solve_system.
+function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=false)
     alph = mu * GNew * M
     rP = 1 + sqrt.(1 - a^2)
     faFac = (M_pl ./ f_a)^4
@@ -41,8 +30,6 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
     
     Drate = Dict()
     
-    Drate["211_322^GW"] = 0.0
-    
     if non_rel
         include_m1 = true
         include_m2 = true
@@ -50,8 +37,6 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
         if include_m1
             Drate["211_211^322^BH"] = 4.2e-7 .* alph^11 .* faFac * rP
             Drate["322_322^211^Inf"] = 1.1e-8 * alph^8 .* faFac
-            Drate["211_211^GW"] = 1.0e-2 * alph^14
-            Drate["322_211^GW"] = 5.0e-6 * alph^10
             Drate["211_211_211^Inf"] = 1.5e-8 * alph^21 .* faFac
             
             Drate["211_311^322^BH"] = 3.1e-10 .* alph^7 .* faFac * rP
@@ -60,8 +45,6 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
             Drate["311_311^322^BH"] = 1.62e-10 .* alph^7 .* faFac * rP
             
         end
-        Drate["322_322^GW"] = 3.0e-8 * alph^18
-            
         # n = 4
         if Nmax >= 4
             if include_m1
@@ -175,10 +158,7 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
             
     elseif !non_rel
         
-        Drate["211_211^GW"] = 1.0e-2 * alph^14
-        Drate["322_211^GW"] = 5.0e-6 * alph^10
         # Drate["211_211_211^Inf"] = 1.5e-8 * alph^21 .* faFac
-        Drate["322_322^GW"] = 3.0e-8 * alph^18
         
         
         # rates computed for fixed rP(a=0.9)
@@ -207,14 +187,6 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
         end
     end
 
-    if gw_model != :legacy
-        for k in collect(keys(Drate))
-            (endswith(k, "^GW") || endswith(k, "^GWT")) && delete!(Drate, k)
-        end
-        gw_add_rates!(Drate, Nmax, mu, M, a; gw_model=gw_model, min_rate_per_yr=gw_min_rate_per_yr,
-                      literature_overrides=gw_literature)
-    end
-
     return Drate
 end
 
@@ -227,9 +199,6 @@ function key_to_indx(keyN, Nmax)
     # quanta annihilating to infinity, no intermediate bound state) is written
     # with all initial states underscore-joined before the single "^TYPE": all
     # of state1 and the underscore-joined "middle" states are annihilated.
-    #
-    # "state1_state2^GWT" is a GW transition state1 -> state2 + graviton: state1
-    # loses and state2 gains one quantum, at a rate proportional to both occupations.
 
     # Split by first underscore to separate state1 and remainder
     parts = split(keyN, "_", limit=2)
@@ -262,11 +231,7 @@ function key_to_indx(keyN, Nmax)
             outPix[1 + i] = get_state_idx(String(st), Nmax)
         end
 
-        if state3_or_type == "GWT"
-            length(middle_states) == 1 || error("GW transition key must have two states: $keyN")
-            sgn[2] = 1.0
-            outPix[totN] = 0
-        elseif state3_or_type == "BH"
+        if state3_or_type == "BH"
             outPix[totN] = -1
         elseif state3_or_type == "Inf" || state3_or_type == "GW"
             outPix[totN] = 0

@@ -42,6 +42,10 @@ function parse_commandline()
             arg_type = Bool
             default  = false
             help     = "Use l==m-only rate input file (load_rate_input_Nmax_X_lm.txt)"
+        "--gw_model"
+            arg_type = String
+            default  = "nonrel"
+            help     = "GW emission: nonrel (NR annihilation+transition rates), rel (not implemented), off"
         "--resume"
             action   = :store_true
             help     = "Continue from last row of existing Time_/States_/Spin_/MassBH_ .dat"
@@ -247,6 +251,7 @@ timeT, StatesOut, modes_out, spin, massB = @time solve_system(
     lm_only         = lm_only,
     u0_override     = u0_override,
     t_start         = t_start,
+    gw_model        = Symbol(parsed["gw_model"]),
 )
 
 if do_resume
