@@ -168,6 +168,25 @@ evalR(R, r) = sum(c * r^p for (p, c) in zip(R.pows, R.coefs)) * exp(-R.beta * r)
         @test_throws ErrorException gw_build_cache(5, modes, mu, M, a; gw_model=:rel)
     end
 
+    @testset "cloud self-gravity / self-interaction level shifts" begin
+        @test gw_shift_kernels((1, 0, 0), (1, 0, 0))[3] ≈ 5 / 8 rtol = 1e-12     # hydrogen 1s Coulomb self-energy
+        # Baryakhtar+ 2021 G11-G12 (direct gravity only) and B15-B16 (quartic)
+        _, χ11, D11, _ = gw_shift_kernels((2, 1, 1), (2, 1, 1))
+        _, χ12, D12, E12 = gw_shift_kernels((2, 1, 1), (3, 2, 2))
+        _, χ22, D22, _ = gw_shift_kernels((3, 2, 2), (3, 2, 2))
+        @test round(D11, digits=2) == 0.19 && round(D12, digits=2) == 0.11 && round(D22, digits=2) == 0.09
+        @test χ11 / 8 ≈ 1.2e-4 rtol = 0.05
+        @test 2χ12 / 8 ≈ 3.5e-5 rtol = 0.05
+        @test χ22 / 8 ≈ 1.4e-5 rtol = 0.05
+        @test E12 > 0                                                              # exchange term they omit
+        # symmetric kernels, and the shift routine combines them as documented
+        @test gw_shift_kernels((3, 2, 2), (2, 1, 1))[1] ≈ D12 + E12 rtol = 1e-10
+        KG, X = gw_level_shift_matrices([(2, 1, 1)], [(2, 1, 1), (3, 2, 2)])
+        α, u, fa = 0.1, [0.01, 0.02], 1e17
+        δ = gw_level_shifts(KG, X, u, α; fa=fa)[1]
+        @test δ ≈ -α^3 * (D11 * u[1] + (D12 + E12) * u[2]) - α^5 / 8 * (M_pl / fa)^2 * (χ11 * u[1] + 2χ12 * u[2]) rtol = 1e-10
+    end
+
     @testset "transitions vs literature" begin
         # 322 -> 211: Baryakhtar+ 2021 Table IV: 5e-6 α^10
         ch = gw_transition_channels((3, 2, 2), (2, 1, 1))

@@ -747,17 +747,18 @@ Each annihilation a x b and transition a -> b is one line with, at every time,
                over source orientation, for a source at distance d_kpc.
 Lines whose peak power (on `n_peak_samples` sampled times) is below
 rel_floor × the brightest line are dropped. Output is on `n_out` log-spaced
-times. Returns (t, lines): t [yr] and a vector of NamedTuples (kind, a, b, f, P,
-h0) sorted by peak power.
+times. Returns (t, lines): t [yr] and a vector of NamedTuples (kind, a, b, f,
+df_cloud, P, h0) sorted by peak power.
 
-Not included yet: the cloud's self-gravity (and self-interaction) frequency
-shifts, which drive the chirp of annihilation lines as the cloud depletes; the
-frequencies here only drift through α(t) = G M(t) μ and the spin dependence of
-the spectrum.
+Frequencies include the BH drift (α(t) = G M(t) μ, spin in the spectrum) and,
+with `self_gravity=true` and/or `fa` (GeV) given, the cloud's self-gravity and
+quartic self-interaction level shifts (cloud_shifts.jl) from every level
+occupied above occ_rel × the largest occupation; `df_cloud` is that cloud part
+of f. Powers use the unshifted spectrum, as in the evolution.
 """
 function gw_lines(timeT, states, modes, spin, mass, mu, Nmax; d_kpc=1.0, rel_floor=1e-8,
                   n_peak_samples=400, n_out=2000, gw_model=:nonrel, min_rate_per_yr=1e-10,
-                  literature_overrides=true)
+                  literature_overrides=true, self_gravity=true, fa=nothing, occ_rel=1e-8)
     nt = length(timeT)
     c = gw_build_cache(Nmax, modes, mu, mass[1], spin[1]; gw_model=gw_model,
                        min_rate_per_yr=min_rate_per_yr, literature_overrides=literature_overrides)
@@ -774,16 +775,36 @@ function gw_lines(timeT, states, modes, spin, mass, mu, Nmax; d_kpc=1.0, rel_flo
     (nlines == 0 || maximum(peak) == 0) && return (t = Float64[], lines = lines)
     keep = findall(peak .>= rel_floor * maximum(peak))
     sort!(keep, by=q -> -peak[q])
+    # cloud self-gravity / self-interaction shifts: target levels = those in kept
+    # lines, sources = levels ever occupied above occ_rel × the largest occupation
+    na = length(c.ann_i)
+    lvl(q) = q <= na ? (c.ann_i[q], c.ann_j[q]) : (c.tr_i[q - na], c.tr_j[q - na])
+    Iset = unique(vcat([collect(lvl(q)) for q in keep]...))
+    umax = vec(maximum(states, dims=2))
+    Jset = findall(umax .>= occ_rel * maximum(umax))
+    shifts = self_gravity || fa !== nothing
+    if shifts
+        st(i) = (c.n[i], c.l[i], c.m[i])
+        KG, X = gw_level_shift_matrices(st.(Iset), st.(Jset))
+        self_gravity || (KG .= 0)
+    end
     ks = gw_time_samples(timeT, n_out)
-    F = zeros(length(keep), length(ks)); Pw = zeros(length(keep), length(ks))
+    F = zeros(length(keep), length(ks)); Pw = zeros(length(keep), length(ks)); dF = zeros(length(keep), length(ks))
+    ωs = similar(ω)
     for (col, k) in enumerate(ks)
         α = gw_set_omegas!(ω, c, mass[k], spin[k], mu)
+        ωs .= ω
+        if shifts
+            ωs[Iset] .+= gw_level_shifts(KG, X, states[Jset, k], α; fa=fa)
+        end
         for (row, q) in enumerate(keep)
-            F[row, col], Pw[row, col] = gw_line_at(c, q, ω, α, states, k, mass[1], mu)
+            F0, Pw[row, col] = gw_line_at(c, q, ω, α, states, k, mass[1], mu)
+            i, j = lvl(q)
+            F[row, col] = (q <= na ? ωs[i] + ωs[j] : abs(ωs[i] - ωs[j])) * mu / hbar / (2π)
+            dF[row, col] = F[row, col] - F0
         end
     end
     d = d_kpc * GW_KPC_CM
-    na = length(c.ann_i)
     for (row, q) in enumerate(keep)
         isann = q <= na
         ia, ib = isann ? (c.ann_i[q], c.ann_j[q]) : (c.tr_i[q - na], c.tr_j[q - na])
@@ -794,7 +815,7 @@ function gw_lines(timeT, states, modes, spin, mass, mu, Nmax; d_kpc=1.0, rel_flo
         h0 = [f[k] > 0 ? sqrt(8GW_G_CGS * Pw[row, k] / GW_C_CGS^3) / (2π * f[k] * d) : 0.0 for k in eachindex(f)]
         push!(lines, (kind = isann ? :annihilation : :transition,
                       a = (c.n[ia], c.l[ia], c.m[ia]), b = (c.n[ib], c.l[ib], c.m[ib]),
-                      f = f, P = Pw[row, :], h0 = h0))
+                      f = f, df_cloud = dF[row, :], P = Pw[row, :], h0 = h0))
     end
     return (t = timeT[ks], lines = lines)
 end
@@ -832,3 +853,5 @@ function gw_line_at(c::GWCache, q, ω, α, states, k, M0, mu)
     events_per_s = r * states[i, k] * states[j, k] * (GNew * M0^2 * M_to_eV) * mu / hbar
     return wgw * mu / hbar / (2π), events_per_s * wgw * mu * GW_ERG_PER_EV
 end
+
+include(joinpath(@__DIR__, "cloud_shifts.jl"))
