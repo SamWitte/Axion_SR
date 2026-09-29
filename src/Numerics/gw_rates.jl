@@ -1,0 +1,641 @@
+"""
+    gw_rates.jl
+
+Gravitational-wave annihilation and transition rates for arbitrary pairs of
+hydrogenic scalar levels |nlm>, in the non-relativistic (NR) limit.
+
+Conventions (match load_rates.jl / solve_system_unified.jl)
+------------------------------------------------------------
+Occupations are u_i = N_i / (G M^2) and time is tau = mu t, so that every rate
+returned here is a dimensionless number multiplying u_a u_b:
+
+  annihilation  "a_b^GW"  : du_a/dtau = du_b/dtau = -rate * u_a * u_b
+                            (for a == b the key appears once and the solver's
+                             double-count gives du_a/dtau = -2 rate u_a^2)
+  transition    "a_b^GWT" : du_a/dtau = -rate u_a u_b,  du_b/dtau = +rate u_a u_b
+                            (a -> b + graviton, omega_a > omega_b; stimulated)
+
+Physics (NR limit)
+------------------
+* Annihilation (omega_GW ~ 2 mu, graviton wavelength << cloud): flat-space
+  Weinberg formula with the TT part of the kinetic stress T_ij = d_i phi d_j phi
+  (Arvanitaki, Baryakhtar & Huang 2015, App. A). The Fourier transform is done
+  exactly: gradient formula -> Gaunt coefficients -> closed-form radial
+  integrals of r^p e^{-beta r} j_J(kr). We return the leading term C alpha^p of
+  the small-alpha expansion. Caveat: for 2p x 2p the flat-space leading term
+  cancels for every l=1 pair (alpha^16 instead of the alpha^14 found once the BH potential is
+  included); see `gw_literature_annihilation`.
+* Transition (omega_GW = Delta omega ~ mu alpha^2, wavelength >> cloud): leading
+  mass (I_L) and current (J_L) multipoles of the cross density/current, summed
+  over every allowed L with the Thorne/Blanchet flux
+      P = G sum_L [ (L+1)(L+2)/((L-1)L L!(2L+1)!!) |I_L^(L+1)|^2
+                  + 4L(L+2)/((L-1)(L+1)!(2L+1)!!) |J_L^(L+1)|^2 ].
+  Coefficients are alpha-independent; Delta omega enters at load time.
+
+All lengths are in Bohr units a0 = 1/(mu alpha).
+
+Hook for relativistic rates: `gw_rates_relativistic` (not implemented yet).
+"""
+
+using WignerSymbols: clebschgordan
+using SpecialFunctions: loggamma
+using QuadGK: gauss
+using ForwardDiff
+
+# ----------------------------------------------------------------------------
+# Spherical harmonics (orthonormal, Condon-Shortley phase)
+# ----------------------------------------------------------------------------
+
+"""
+    gw_theta_lm(l, m, θ)
+
+theta part of Y_lm, so that Y_lm(θ,φ) = gw_theta_lm(l,m,θ) e^{imφ}. Works for
+negative m and for ForwardDiff duals.
+"""
+function gw_theta_lm(l::Int, m::Int, θ)
+    if abs(m) > l
+        return zero(cos(θ))
+    end
+    if m < 0
+        return (isodd(m) ? -1 : 1) * gw_theta_lm(l, -m, θ)
+    end
+    x = cos(θ)
+    s = sin(θ)
+    pmm = one(x) / sqrt(4π)
+    for i in 1:m
+        pmm *= -sqrt((2i + 1) / (2i)) * s
+    end
+    l == m && return pmm
+    pm1 = x * sqrt(2m + 3.0) * pmm
+    l == m + 1 && return pm1
+    p_prev, p_cur = pmm, pm1
+    for ll in (m + 2):l
+        a = sqrt((4ll^2 - 1) / (ll^2 - m^2))
+        b = sqrt(((ll - 1)^2 - m^2) / (4 * (ll - 1)^2 - 1))
+        p_next = a * (x * p_cur - b * p_prev)
+        p_prev, p_cur = p_cur, p_next
+    end
+    return p_cur
+end
+
+gw_dtheta_lm(l, m, θ) = ForwardDiff.derivative(t -> gw_theta_lm(l, m, t), θ)
+
+# ----------------------------------------------------------------------------
+# Hydrogenic radial functions as sum_k c_k r^{p_k} e^{-beta r}
+# ----------------------------------------------------------------------------
+
+struct GWRadial{T}
+    pows::Vector{Int}
+    coefs::Vector{T}
+    beta::T
+end
+
+"""
+    gw_hydrogen_radial(n, l; T=Float64)
+
+R_nl in Bohr units, normalised to ∫ R^2 r^2 dr = 1, positive at small r.
+"""
+function gw_hydrogen_radial(n::Int, l::Int; T=Float64)
+    N = n - l - 1
+    norm = sqrt(T(2) / n)^3 * sqrt(T(factorial(big(N))) / (2n * T(factorial(big(n + l)))))
+    pows = Int[]
+    coefs = T[]
+    for j in 0:N
+        c = norm * (T(2) / n)^(l + j) * (isodd(j) ? -1 : 1) *
+            T(binomial(big(n + l), N - j)) / T(factorial(big(j)))
+        push!(pows, l + j)
+        push!(coefs, c)
+    end
+    return GWRadial{T}(pows, coefs, T(1) / n)
+end
+
+function gw_simplify(pows, coefs, beta::T) where {T}
+    d = Dict{Int, T}()
+    for (p, c) in zip(pows, coefs)
+        d[p] = get(d, p, zero(T)) + c
+    end
+    ks = sort(collect(keys(d)))
+    return GWRadial{T}(ks, [d[k] for k in ks], beta)
+end
+
+# g_up = R' - l R / r  (couples to L = l+1),  g_dn = R' + (l+1) R / r  (L = l-1)
+function gw_grad_radial(R::GWRadial{T}, l::Int, up::Bool) where {T}
+    pows = Int[]
+    coefs = T[]
+    shift = up ? -l : (l + 1)
+    for (p, c) in zip(R.pows, R.coefs)
+        push!(pows, p - 1); push!(coefs, c * (p + shift))
+        push!(pows, p);     push!(coefs, -R.beta * c)
+    end
+    keep = coefs .!= 0
+    return gw_simplify(pows[keep], coefs[keep], R.beta)
+end
+
+function gw_radial_product(A::GWRadial{T}, B::GWRadial{T}, extra_pow::Int) where {T}
+    pows = Int[]
+    coefs = T[]
+    for (pa, ca) in zip(A.pows, A.coefs), (pb, cb) in zip(B.pows, B.coefs)
+        push!(pows, pa + pb + extra_pow)
+        push!(coefs, ca * cb)
+    end
+    return gw_simplify(pows, coefs, A.beta + B.beta)
+end
+
+# ∫_0^∞ R(r) dr for R = sum c r^p e^{-beta r}
+function gw_radial_moment(R::GWRadial{T}) where {T}
+    s = zero(T)
+    for (p, c) in zip(R.pows, R.coefs)
+        s += c * T(factorial(big(p))) / R.beta^(p + 1)
+    end
+    return s
+end
+
+# ----------------------------------------------------------------------------
+# Closed-form  k^{p+1} ∫_0^∞ r^p e^{-beta r} j_J(k r) dr,  as a function of b = beta/k.
+# Uses h_J^(1) = (-i)^{J+1} e^{iz}/z sum_s i^s (J+s)!/(s!(J-s)!(2z)^s). The single
+# log-divergent s = J = p term is purely imaginary; its finite real part is
+# (2J)!/(J! 2^J) arctan(1/b).
+# ----------------------------------------------------------------------------
+
+function gw_Itilde(p::Int, J::Int, b::Float64)
+    p >= J || error("gw_Itilde requires p >= J (p=$p, J=$J)")
+    λ = complex(b, -1.0)
+    tot = zero(ComplexF64)
+    for s in 0:J
+        ν = p - s
+        ν == 0 && continue
+        la = loggamma(J + s + 1) - loggamma(s + 1) - loggamma(J - s + 1) - s * log(2.0) + loggamma(ν)
+        tot += im^s * exp(la) * λ^(-ν)
+    end
+    res = real((-im)^(J + 1) * tot)
+    if p == J
+        res += exp(loggamma(2J + 1) - loggamma(J + 1) - J * log(2.0)) * atan(1 / b)
+    end
+    return res
+end
+
+# ----------------------------------------------------------------------------
+# Gradient of psi_nlm in the spherical basis:  ∇ψ = sum_q c_q e_q,
+#   c_q = sum_{L=l±1} A_{L,q} g_L(r) Y_{L, m-q}
+# e_{+1} = -(x+iy)/√2, e_0 = z, e_{-1} = (x-iy)/√2
+# ----------------------------------------------------------------------------
+
+# WignerSymbols keeps a global, non-thread-safe cache: memoise per thread and
+# take a lock on a miss.
+const GW_CG_LOCK = ReentrantLock()
+const GW_CG_CACHES = [Dict{NTuple{6,Int}, Float64}() for _ in 1:Threads.nthreads()]
+function gw_cg(j1, m1, j2, m2, j3, m3)
+    c = GW_CG_CACHES[Threads.threadid()]
+    get!(c, (j1, m1, j2, m2, j3, m3)) do
+        lock(GW_CG_LOCK) do
+            clebschgordan(Float64, j1, m1, j2, m2, j3, m3)
+        end
+    end
+end
+
+const GW_EQ = Dict(
+    1  => ComplexF64[-1 / sqrt(2), -im / sqrt(2), 0],
+    0  => ComplexF64[0, 0, 1],
+    -1 => ComplexF64[1 / sqrt(2), -im / sqrt(2), 0],
+)
+
+struct GWGradTerm
+    q::Int
+    L::Int
+    mu::Int          # azimuthal index of Y_{L,mu}, mu = m - q
+    A::Float64
+end
+
+function gw_grad_terms(l::Int, m::Int)
+    terms = GWGradTerm[]
+    for q in -1:1
+        μ = m - q
+        L = l + 1
+        if abs(μ) <= L
+            A = -sqrt((l + 1) / (2l + 1)) * gw_cg(L, μ, 1, q, l, m)
+            A != 0 && push!(terms, GWGradTerm(q, L, μ, A))
+        end
+        L = l - 1
+        if L >= 0 && abs(μ) <= L
+            A = sqrt(l / (2l + 1)) * gw_cg(L, μ, 1, q, l, m)
+            A != 0 && push!(terms, GWGradTerm(q, L, μ, A))
+        end
+    end
+    return terms
+end
+
+"""
+    gw_grad_psi(n, l, m, x) -> Vector{ComplexF64}
+
+Cartesian gradient of the normalised hydrogenic psi_nlm at Cartesian point x
+(Bohr units), built from the spherical-basis gradient formula. Used in tests.
+"""
+function gw_grad_psi(n, l, m, x)
+    r = sqrt(sum(abs2, x)); θ = acos(x[3] / r); φ = atan(x[2], x[1])
+    R = gw_hydrogen_radial(n, l)
+    out = zeros(ComplexF64, 3)
+    for t in gw_grad_terms(l, m)
+        g = gw_grad_radial(R, l, t.L == l + 1)
+        gval = sum(c * r^p for (p, c) in zip(g.pows, g.coefs)) * exp(-g.beta * r)
+        out .+= t.A * gval * gw_theta_lm(t.L, t.mu, θ) * exp(im * t.mu * φ) .* GW_EQ[t.q]
+    end
+    return out
+end
+
+function gw_psi(n, l, m, x)
+    r = sqrt(sum(abs2, x)); θ = acos(x[3] / r); φ = atan(x[2], x[1])
+    R = gw_hydrogen_radial(n, l)
+    return sum(c * r^p for (p, c) in zip(R.pows, R.coefs)) * exp(-R.beta * r) *
+           gw_theta_lm(l, m, θ) * exp(im * m * φ)
+end
+
+gw_gaunt(L1, m1, L2, m2, J, M) =
+    sqrt((2L1 + 1) * (2L2 + 1) / (4π * (2J + 1))) *
+    gw_cg(L1, 0, L2, 0, J, 0) * gw_cg(L1, m1, L2, m2, J, M)
+
+# ----------------------------------------------------------------------------
+# Annihilation: flat-space power
+# ----------------------------------------------------------------------------
+
+"""
+    gw_annihilation_F(sa, sb, α) -> (Fhat, Pmin)
+
+Angular-integrated TT power functional F = ∫dΩ Λ_{ij,kl} T*_ij T_kl for the
+source S_ij = ∂_iψ_a ∂_jψ_b (+ i<->j if a != b), evaluated at κ = k a0 = 2/α.
+Returned as F = κ^{-2 Pmin} Fhat to avoid underflow.
+"""
+function gw_annihilation_F(sa::NTuple{3,Int}, sb::NTuple{3,Int}, α::Float64)
+    (na, la, ma), (nb, lb, mb) = sa, sb
+    κ = 2 / α
+    Pmin = la + lb - 1
+    Ra = gw_hydrogen_radial(na, la); Rb = gw_hydrogen_radial(nb, lb)
+    ta = gw_grad_terms(la, ma); tb = gw_grad_terms(lb, mb)
+    ga = Dict(L => gw_grad_radial(Ra, la, L == la + 1) for L in (la - 1, la + 1) if L >= 0)
+    gb = Dict(L => gw_grad_radial(Rb, lb, L == lb + 1) for L in (lb - 1, lb + 1) if L >= 0)
+
+    nθ = la + lb + 6
+    xs, ws = gauss(nθ)
+    θs = acos.(xs)
+    T = zeros(ComplexF64, 3, 3, nθ)
+
+    radcache = Dict{Tuple{Int,Int,Int}, Float64}()
+    function radJ(La, Lb, J)
+        get!(radcache, (La, Lb, J)) do
+            P = gw_radial_product(ga[La], gb[Lb], 2)
+            b = P.beta / κ
+            s = 0.0
+            for (p, c) in zip(P.pows, P.coefs)
+                s += c * gw_Itilde(p, J, b) * κ^(-(p + 1 - Pmin))
+            end
+            s
+        end
+    end
+
+    Yk = Dict{Tuple{Int,Int}, Vector{Float64}}()
+    for a in ta, b in tb
+        M = a.mu + b.mu
+        eij = GW_EQ[a.q] * transpose(GW_EQ[b.q])
+        for J in abs(a.L - b.L):(a.L + b.L)
+            (isodd(a.L + b.L + J) || abs(M) > J) && continue
+            G = gw_gaunt(a.L, a.mu, b.L, b.mu, J, M)
+            G == 0 && continue
+            amp = a.A * b.A * G * 4π * (-im)^J * radJ(a.L, b.L, J)
+            y = get!(Yk, (J, M)) do
+                [gw_theta_lm(J, M, θ) for θ in θs]
+            end
+            for k in 1:nθ
+                @views T[:, :, k] .+= (amp * y[k]) .* eij
+            end
+        end
+    end
+
+    Fhat = 0.0
+    for k in 1:nθ
+        Tk = T[:, :, k]
+        if sa != sb
+            Tk = Tk + transpose(Tk)
+        end
+        n̂ = [sin(θs[k]), 0.0, cos(θs[k])]
+        Pp = [1.0 0 0; 0 1.0 0; 0 0 1.0] - n̂ * n̂'
+        A = Pp * Tk * Pp
+        tr = A[1, 1] + A[2, 2] + A[3, 3]
+        val = real(sum(conj.(Tk) .* (A .- 0.5 .* tr .* Pp)))
+        Fhat += ws[k] * val
+    end
+    return 2π * Fhat, Pmin
+end
+
+"""
+    gw_annihilation_rate_flat(sa, sb, α)
+
+Full flat-space annihilation rate (all orders in α within the flat-space,
+ω_GW = 2μ approximation), in the solver's convention (see file header).
+"""
+function gw_annihilation_rate_flat(sa, sb, α)
+    Fhat, Pmin = gw_annihilation_F(sa, sb, α)
+    return α^6 * (α / 2)^(2Pmin) * Fhat / (2π)
+end
+
+"""
+    gw_annihilation_leading(sa, sb; α1=1e-3) -> (C, p)
+
+Leading NR term, rate ≈ C α^p, extracted from the exact flat-space expression at
+α1 and 2α1 (Richardson-corrected for the O(α) term).
+"""
+function gw_annihilation_leading(sa, sb; α1=1e-3)
+    α2 = 2α1
+    F1, Pmin = gw_annihilation_F(sa, sb, α1)
+    F2, _ = gw_annihilation_F(sa, sb, α2)
+    # rate/(α^{6+2Pmin} 2^{-2Pmin}/(2π)) = Fhat, which scales as α^{p - 6 - 2Pmin}
+    (F1 == 0 || F2 == 0) && return (0.0, 0)
+    q = round(Int, log(abs(F2 / F1)) / log(2.0))
+    p = 6 + 2Pmin + q
+    c1 = F1 / α1^q
+    c2 = F2 / α2^q
+    Cf = 2c1 - c2
+    return Cf * 2.0^(-2Pmin) / (2π), p
+end
+
+# ----------------------------------------------------------------------------
+# Transitions: multipole moments (α-independent)
+# ----------------------------------------------------------------------------
+
+gw_dfact(n) = n <= 0 ? 1.0 : prod(Float64, n:-2:1)
+gw_cmass(L) = 4π * (L + 1) * (L + 2) / ((L - 1) * L * gw_dfact(2L + 1)^2)
+gw_ccurr(L) = 16π * L * (L + 2) / ((L - 1) * (L + 1) * gw_dfact(2L + 1)^2)
+
+"""
+    gw_transition_channels(sa, sb; radcache=nothing, angcache=nothing) -> Vector{(L, kind, K)}
+
+Multipole channels for a <-> b. kind = :mass or :current. With δ = Δω/μ, the rate
+of each channel is K α^{2-2L} δ^{2L+1} (mass) or K α^{4-2L} δ^{2L+1} (current).
+Optional Dict caches reuse the radial (m-independent) and angular (n-independent)
+factors across pairs.
+"""
+function gw_transition_channels(sa::NTuple{3,Int}, sb::NTuple{3,Int}; radcache=nothing, angcache=nothing)
+    (na, la, ma), (nb, lb, mb) = sa, sb
+    m = ma - mb
+    out = Tuple{Int, Symbol, Float64}[]
+    Ls = max(2, abs(m), abs(la - lb)):(la + lb)
+    isempty(Ls) && return out
+    radf = function (extra)
+        key = (na, la, nb, lb, extra)
+        f() = Float64(gw_radial_moment(gw_radial_product(gw_hydrogen_radial(na, la; T=BigFloat),
+                                                         gw_hydrogen_radial(nb, lb; T=BigFloat), extra)))
+        radcache === nothing ? f() : get!(f, radcache, key)
+    end
+    angf = function (L)
+        key = (la, ma, lb, mb, L)
+        angcache === nothing ? gw_transition_angular(la, ma, lb, mb, L) :
+                               get!(() -> gw_transition_angular(la, ma, lb, mb, L), angcache, key)
+    end
+    for L in Ls
+        ang = angf(L)
+        abs(ang) < 1e-14 && continue
+        if iseven(la + lb + L)
+            K = 2 * gw_cmass(L) * (radf(L + 2) * ang)^2
+            K > 0 && push!(out, (L, :mass, K))
+        else
+            K = 2 * gw_ccurr(L) * ((π / L) * radf(L + 1) * ang)^2
+            K > 0 && push!(out, (L, :current, K))
+        end
+    end
+    return out
+end
+
+# Angular factor of the mass (even parity) or current (odd parity) moment.
+function gw_transition_angular(la, ma, lb, mb, L)
+    m = ma - mb
+    if iseven(la + lb + L)
+        xs, ws = gauss((la + lb + L) ÷ 2 + 2)
+        return 2π * sum(w * gw_theta_lm(la, ma, acos(x)) * gw_theta_lm(lb, mb, acos(x)) *
+                        gw_theta_lm(L, m, acos(x)) for (x, w) in zip(xs, ws))
+    else
+        θg, wθ = gauss(la + lb + L + 30, 0, π)
+        return sum(w * (m * (gw_theta_lm(la, ma, θ) * gw_dtheta_lm(lb, mb, θ) -
+                             gw_theta_lm(lb, mb, θ) * gw_dtheta_lm(la, ma, θ)) * gw_theta_lm(L, m, θ) -
+                        (ma + mb) * gw_theta_lm(la, ma, θ) * gw_theta_lm(lb, mb, θ) * gw_dtheta_lm(L, m, θ))
+                   for (θ, w) in zip(θg, wθ))
+    end
+end
+
+gw_transition_rate(channels, α, δ) =
+    sum((kind == :mass ? K * α^(2 - 2L) : K * α^(4 - 2L)) * δ^(2L + 1) for (L, kind, K) in channels; init=0.0)
+
+# ----------------------------------------------------------------------------
+# Level energies (same spectrum as ergL in solve_sr_rates.jl), in units of mu
+# ----------------------------------------------------------------------------
+
+gw_omega(n, l, m, α, a) = 1 - α^2 / (2n^2) - α^4 / (8n^4) + α^4 / n^4 * (2l - 3n + 1) / (l + 0.5) +
+                          2a * m * α^5 / n^3 / (l * (l + 0.5) * (l + 1))
+
+# ----------------------------------------------------------------------------
+# Tables for a whole state list
+# ----------------------------------------------------------------------------
+
+"""
+    gw_state_list(Nmax) -> Vector{NTuple{3,Int}}
+
+The solver's level list: (n,l,m) with 1 <= m <= l < n <= Nmax, then the
+truncation modes (2l+1, 2l, 2m) that fall outside Nmax (same order as
+setup_quantum_levels_standard).
+"""
+function gw_state_list(Nmax::Int)
+    st = NTuple{3,Int}[]
+    for n in 1:Nmax, l in 1:(n - 1), m in 1:l
+        push!(st, (n, l, m))
+    end
+    seen = Set{NTuple{3,Int}}()
+    for n in 1:Nmax, l in 1:(n - 1), m in 1:l
+        t = (2l + 1, 2l, 2m)
+        if t[1] > Nmax && !(t in seen)
+            push!(st, t); push!(seen, t)
+        end
+    end
+    return st
+end
+
+gw_table_path(Nmax) = joinpath(@__DIR__, "..", "rate_sve", "gw_nr_rates_Nmax_$(Nmax).txt")
+
+# |Δω/μ| at α = 1, maximised over BH spin: an upper bound used only for pruning.
+gw_delta_bound(sa, sb) = maximum(abs(gw_omega(sa..., 1.0, a) - gw_omega(sb..., 1.0, a)) for a in (0.0, 1.0))
+
+"""
+    gw_build_nr_table(Nmax; path=gw_table_path(Nmax), floor_at_alpha1=1e-60, rel_channel=1e-8)
+
+Compute leading NR annihilation (C, p) and transition multipole coefficients for
+every unordered pair of levels in `gw_state_list(Nmax)` and write
+
+  ann  na la ma nb lb mb  C   p   0                       rate = C α^p
+  tr   na la ma nb lb mb  K   L   kind(1=mass,2=current)  rate = K α^{2-2L | 4-2L} δ^{2L+1}
+
+Rates only fall with decreasing α, so entries are pruned at α = 1: an annihilation
+is dropped if C < floor_at_alpha1; a transition channel is dropped if its α = 1
+rate (with the largest Δω the spectrum allows) is below floor_at_alpha1 or below
+rel_channel times the pair's dominant channel. `threaded=true` spreads pairs over
+Julia threads (can deadlock on Julia 1.8 with many threads; serial is the default).
+"""
+function gw_build_nr_table(Nmax::Int; path=gw_table_path(Nmax), floor_at_alpha1=1e-60,
+                           rel_channel=1e-8, verbose=true, threaded=false)
+    states = gw_state_list(Nmax)
+    pairs = [(states[i], states[j]) for i in 1:length(states) for j in i:length(states)]
+    rows = [Vector{Any}[] for _ in 1:length(pairs)]
+    nt = Threads.nthreads()
+    radcaches = [Dict{NTuple{5,Int}, Float64}() for _ in 1:nt]
+    angcaches = [Dict{NTuple{5,Int}, Float64}() for _ in 1:nt]
+    done = Threads.Atomic{Int}(0)
+    t0 = time()
+    verbose && println("GW NR table: $(length(states)) states, $(length(pairs)) pairs, $(nt) threads")
+    # Compile every code path serially first: Julia 1.8 can deadlock when many
+    # threads JIT-compile the same methods at once.
+    gw_annihilation_leading((2, 1, 1), (3, 2, 1))
+    gw_transition_channels((3, 2, 2), (2, 1, 1))
+    gw_transition_channels((3, 2, 2), (3, 1, 1); radcache=radcaches[1], angcache=angcaches[1])
+    gw_delta_bound((3, 2, 2), (2, 1, 1))
+    verbose && flush(stdout)
+    work = function (ip)
+        tid = Threads.threadid()
+        sa, sb = pairs[ip]
+        C, p = gw_annihilation_leading(sa, sb)
+        C >= floor_at_alpha1 && push!(rows[ip], Any["ann", sa..., sb..., C, p, 0])
+        if sa != sb
+            ch = gw_transition_channels(sa, sb; radcache=radcaches[tid], angcache=angcaches[tid])
+            if !isempty(ch)
+                δ1 = gw_delta_bound(sa, sb)
+                r1 = [K * δ1^(2L + 1) for (L, kind, K) in ch]
+                keep = max(floor_at_alpha1, rel_channel * maximum(r1))
+                for ((L, kind, K), r) in zip(ch, r1)
+                    r >= keep && push!(rows[ip], Any["tr", sa..., sb..., K, L, kind == :mass ? 1 : 2])
+                end
+            end
+        end
+        c = Threads.atomic_add!(done, 1) + 1
+        if verbose && (c % 20000 == 0)
+            println("  $(c)/$(length(pairs)) pairs  ($(round(time() - t0, digits=1)) s)")
+            flush(stdout)
+        end
+    end
+    if threaded
+        Threads.@threads :static for ip in 1:length(pairs)
+            work(ip)
+        end
+    else
+        foreach(work, 1:length(pairs))
+    end
+    open(path, "w") do io
+        println(io, "# GW NR rates, Nmax=$(Nmax), solver convention (Numerics/gw_rates.jl).")
+        println(io, "# ann: rate = C alpha^p.  tr: rate = K alpha^(2-2L mass | 4-2L current) (dw/mu)^(2L+1)")
+        println(io, "# type na la ma nb lb mb coeff power kind")
+        for rs in rows, r in rs
+            println(io, join(r, " "))
+        end
+    end
+    verbose && println("wrote $(path) in $(round(time() - t0, digits=1)) s")
+    return path
+end
+
+# ----------------------------------------------------------------------------
+# Literature overrides and the relativistic hook
+# ----------------------------------------------------------------------------
+
+# |R_nl(r)/r^l| at r -> 0 (Bohr units), squared.
+gw_origin_amp2(n, l) = (2 / n)^(2l + 3) * exp(loggamma(n + l + 1) - loggamma(n - l) - 2 * loggamma(2l + 2)) / (2n)
+
+"""
+    gw_literature_annihilation(sa, sb) -> (C, p) or nothing
+
+Leading-order annihilation terms that supersede the flat-space value. For every
+l = 1 pair (n p x n' p) the flat-space O(α^14) term cancels, leaving α^16; the BH
+potential restores α^14 with dE/dt = (484+9π^2)/23040 (M_c/M)^2 α^14 for 2p x 2p
+(Yoshino & Kodama 2014; Brito et al. 2017; Baryakhtar et al. 2021 Table IV quotes
+1e-2 α^14). The large-k tail is set by the wavefunctions at the origin, so other
+n, n' follow from |R_n1(0)|^2 |R_n'1(0)|^2, times 4 for distinct levels (the
+same scaling the flat-space coefficients obey exactly).
+"""
+function gw_literature_annihilation(sa, sb)
+    (sa[2] == 1 && sb[2] == 1) || return nothing
+    C211 = (484 + 9π^2) / 46080
+    w(n) = gw_origin_amp2(n, 1) / gw_origin_amp2(2, 1)
+    return (C211 * w(sa[1]) * w(sb[1]) * (sa == sb ? 1 : 4), 14)
+end
+
+function gw_rates_relativistic(args...; kwargs...)
+    error("Relativistic GW rates (gw_model=:rel) are not implemented yet. " *
+          "This is the hook for Teukolsky-based annihilation/transition rates.")
+end
+
+# ----------------------------------------------------------------------------
+# Solver-facing: fill a rate dictionary
+# ----------------------------------------------------------------------------
+
+gw_key_state(s) = format_state_string(s[1], s[2], s[3])
+
+const GW_TABLE_CACHE = Dict{String, Any}()
+
+function gw_load_table(path)
+    get!(GW_TABLE_CACHE, path) do
+        ann = Tuple{NTuple{3,Int}, NTuple{3,Int}, Float64, Int}[]
+        trans = Dict{Tuple{NTuple{3,Int},NTuple{3,Int}}, Vector{Tuple{Int,Symbol,Float64}}}()
+        for line in eachline(path)
+            startswith(line, "#") && continue
+            f = split(line)
+            sa = (parse(Int, f[2]), parse(Int, f[3]), parse(Int, f[4]))
+            sb = (parse(Int, f[5]), parse(Int, f[6]), parse(Int, f[7]))
+            if f[1] == "ann"
+                push!(ann, (sa, sb, parse(Float64, f[8]), parse(Int, f[9])))
+            else
+                push!(get!(trans, (sa, sb), Tuple{Int,Symbol,Float64}[]),
+                      (parse(Int, f[9]), f[10] == "1" ? :mass : :current, parse(Float64, f[8])))
+            end
+        end
+        (ann, trans)
+    end
+end
+
+"""
+    gw_add_rates!(Drate, Nmax, mu, M, a; gw_model=:nonrel, min_rate_per_yr=1e-10,
+                  literature_overrides=true) -> (n_annihilation, n_transition)
+
+Add "a_b^GW" (annihilation) and "a_b^GWT" (transition a -> b) entries for every
+pair of levels in the Nmax state list, evaluated at α = G M mu and BH spin a.
+gw_model = :nonrel uses the NR table (built by scripts/build_gw_tables.jl);
+gw_model = :rel is the (not yet implemented) relativistic hook. Entries with
+rate * mu/hbar * yr < min_rate_per_yr are dropped: with the default 1e-10 their
+e-fold time exceeds a Hubble time even at u = 1. At α ≳ 0.2 and Nmax ≳ 15 this
+still leaves O(10^4-10^5) (mostly high-n transition) channels; raise the floor
+to trade completeness for solver setup time.
+"""
+function gw_add_rates!(Drate, Nmax, mu, M, a; gw_model=:nonrel, min_rate_per_yr=1e-10,
+                       literature_overrides=true)
+    gw_model == :rel && return gw_rates_relativistic(Drate, Nmax, mu, M, a)
+    gw_model == :nonrel || error("unknown gw_model $(gw_model); use :nonrel, :rel or :legacy")
+    path = gw_table_path(Nmax)
+    isfile(path) || error("GW table $(path) missing; run `julia scripts/build_gw_tables.jl $(Nmax)`")
+    ann, trans = gw_load_table(path)
+    α = GNew * M * mu
+    floor_rate = min_rate_per_yr / (mu / hbar * YEAR_IN_SECONDS)
+    n_ann = 0
+    for (sa, sb, C, p) in ann
+        if literature_overrides
+            lit = gw_literature_annihilation(sa, sb)
+            lit === nothing || ((C, p) = lit)
+        end
+        r = C * α^p
+        if r >= floor_rate
+            Drate[gw_key_state(sa) * "_" * gw_key_state(sb) * "^GW"] = r
+            n_ann += 1
+        end
+    end
+    n_tr = 0
+    for ((sa, sb), ch) in trans
+        δ = gw_omega(sa..., α, a) - gw_omega(sb..., α, a)
+        δ == 0 && continue
+        hi, lo = δ > 0 ? (sa, sb) : (sb, sa)
+        r = gw_transition_rate(ch, α, abs(δ))
+        if r >= floor_rate
+            Drate[gw_key_state(hi) * "_" * gw_key_state(lo) * "^GWT"] = r
+            n_tr += 1
+        end
+    end
+    return (n_ann, n_tr)
+end
