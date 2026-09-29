@@ -4,16 +4,19 @@
 Gravitational-wave annihilation and transition rates for arbitrary pairs of
 hydrogenic scalar levels |nlm>, in the non-relativistic (NR) limit.
 
-Conventions (match load_rates.jl / solve_system_unified.jl)
-------------------------------------------------------------
+Conventions (solve_system_unified.jl)
+-------------------------------------
 Occupations are u_i = N_i / (G M^2) and time is tau = mu t, so that every rate
-returned here is a dimensionless number multiplying u_a u_b:
+here is a dimensionless number multiplying u_a u_b:
 
-  annihilation  "a_b^GW"  : du_a/dtau = du_b/dtau = -rate * u_a * u_b
-                            (for a == b the key appears once and the solver's
-                             double-count gives du_a/dtau = -2 rate u_a^2)
-  transition    "a_b^GWT" : du_a/dtau = -rate u_a u_b,  du_b/dtau = +rate u_a u_b
-                            (a -> b + graviton, omega_a > omega_b; stimulated)
+  annihilation a x b -> g : du_a/dtau = du_b/dtau = -rate u_a u_b
+                            (a == b: du_a/dtau = -2 rate u_a^2)
+  transition   a -> b + g : du_a/dtau = -rate u_a u_b,  du_b/dtau = +rate u_a u_b
+                            (omega_a > omega_b; stimulated emission)
+
+The solver builds a GWCache once (gw_build_cache) and calls gw_rhs! on every
+right-hand-side evaluation, so the rates follow the evolving BH mass (α) and
+spin (hyperfine part of Δω).
 
 Physics (NR limit)
 ------------------
@@ -560,15 +563,14 @@ function gw_literature_annihilation(sa, sb)
 end
 
 function gw_rates_relativistic(args...; kwargs...)
+    # Should return a GWCache-compatible object for (Nmax, modes, mu, M, a).
     error("Relativistic GW rates (gw_model=:rel) are not implemented yet. " *
           "This is the hook for Teukolsky-based annihilation/transition rates.")
 end
 
 # ----------------------------------------------------------------------------
-# Solver-facing: fill a rate dictionary
+# Solver-facing: rate cache evaluated inside the ODE right-hand side
 # ----------------------------------------------------------------------------
-
-gw_key_state(s) = format_state_string(s[1], s[2], s[3])
 
 const GW_TABLE_CACHE = Dict{String, Any}()
 
@@ -593,49 +595,128 @@ function gw_load_table(path)
 end
 
 """
-    gw_add_rates!(Drate, Nmax, mu, M, a; gw_model=:nonrel, min_rate_per_yr=1e-10,
-                  literature_overrides=true) -> (n_annihilation, n_transition)
-
-Add "a_b^GW" (annihilation) and "a_b^GWT" (transition a -> b) entries for every
-pair of levels in the Nmax state list, evaluated at α = G M mu and BH spin a.
-gw_model = :nonrel uses the NR table (built by scripts/build_gw_tables.jl);
-gw_model = :rel is the (not yet implemented) relativistic hook. Entries with
-rate * mu/hbar * yr < min_rate_per_yr are dropped: with the default 1e-10 their
-e-fold time exceeds a Hubble time even at u = 1. At α ≳ 0.2 and Nmax ≳ 15 this
-still leaves O(10^4-10^5) (mostly high-n transition) channels; raise the floor
-to trade completeness for solver setup time.
+GW channels resolved to solver level indices. Annihilation k: rate C α^p.
+Transition t: rate sum_q K_q α^{apow_q} |δ|^{dpow_q} over channels
+q in off[t]:off[t+1]-1 (stored as ln K), with δ = ω_i - ω_j recomputed from the current α and
+spin (the emission direction follows the sign of δ).
 """
-function gw_add_rates!(Drate, Nmax, mu, M, a; gw_model=:nonrel, min_rate_per_yr=1e-10,
-                       literature_overrides=true)
-    gw_model == :rel && return gw_rates_relativistic(Drate, Nmax, mu, M, a)
-    gw_model == :nonrel || error("unknown gw_model $(gw_model); use :nonrel, :rel or :legacy")
+struct GWCache
+    n::Vector{Int}; l::Vector{Int}; m::Vector{Int}; ω::Vector{Float64}
+    ann_i::Vector{Int}; ann_j::Vector{Int}; ann_C::Vector{Float64}; ann_p::Vector{Int}
+    tr_i::Vector{Int}; tr_j::Vector{Int}; tr_off::Vector{Int}
+    ch_lnK::Vector{Float64}; ch_apow::Vector{Int}; ch_dpow::Vector{Int}
+end
+
+gw_empty_cache(modes) = GWCache([md[1] for md in modes], [md[2] for md in modes], [md[3] for md in modes],
+                                zeros(length(modes)), Int[], Int[], Float64[], Int[], Int[], Int[], [1],
+                                Float64[], Int[], Int[])
+
+"""
+    gw_build_cache(Nmax, modes, mu, M, a; gw_model=:nonrel, min_rate_per_yr=1e-10,
+                   literature_overrides=true) -> GWCache
+
+Resolve the GW table for `Nmax` onto the solver's level list `modes`
+((n,l,m,...) tuples, as from setup_quantum_levels_standard).
+
+gw_model: :nonrel (NR tables, Numerics/gw_rates.jl), :rel (relativistic hook,
+not implemented) or :off (no GW emission).
+
+Channels with rate * mu/hbar * yr < min_rate_per_yr at the initial (α, a) are
+dropped: with the default 1e-10 their e-fold time exceeds a Hubble time even at
+u = 1 (α only decreases during spin-down, so this stays conservative). At
+α ≳ 0.2 and Nmax ≳ 15 this still leaves O(10^5) mostly high-n transitions.
+`literature_overrides` replaces the flat-space l=1 x l=1 annihilations by the
+BH-potential-corrected α^14 result (gw_literature_annihilation).
+"""
+function gw_build_cache(Nmax, modes, mu, M, a; gw_model=:nonrel, min_rate_per_yr=1e-10,
+                        literature_overrides=true)
+    c = gw_empty_cache(modes)
+    gw_model == :off && return c
+    gw_model == :rel && return gw_rates_relativistic(Nmax, modes, mu, M, a)
+    gw_model == :nonrel || error("unknown gw_model $(gw_model); use :nonrel, :rel or :off")
     path = gw_table_path(Nmax)
-    isfile(path) || error("GW table $(path) missing; run `julia scripts/build_gw_tables.jl $(Nmax)`")
+    isfile(path) || error("GW table $(path) missing; build it with `julia src/scripts/build_gw_tables.jl $(Nmax)`")
     ann, trans = gw_load_table(path)
+    idx = Dict((md[1], md[2], md[3]) => i for (i, md) in enumerate(modes))
     α = GNew * M * mu
     floor_rate = min_rate_per_yr / (mu / hbar * YEAR_IN_SECONDS)
-    n_ann = 0
     for (sa, sb, C, p) in ann
+        (haskey(idx, sa) && haskey(idx, sb)) || continue
         if literature_overrides
             lit = gw_literature_annihilation(sa, sb)
             lit === nothing || ((C, p) = lit)
         end
-        r = C * α^p
-        if r >= floor_rate
-            Drate[gw_key_state(sa) * "_" * gw_key_state(sb) * "^GW"] = r
-            n_ann += 1
-        end
+        C * α^p >= floor_rate || continue
+        push!(c.ann_i, idx[sa]); push!(c.ann_j, idx[sb]); push!(c.ann_C, C); push!(c.ann_p, p)
     end
-    n_tr = 0
     for ((sa, sb), ch) in trans
+        (haskey(idx, sa) && haskey(idx, sb)) || continue
         δ = gw_omega(sa..., α, a) - gw_omega(sb..., α, a)
-        δ == 0 && continue
-        hi, lo = δ > 0 ? (sa, sb) : (sb, sa)
-        r = gw_transition_rate(ch, α, abs(δ))
-        if r >= floor_rate
-            Drate[gw_key_state(hi) * "_" * gw_key_state(lo) * "^GWT"] = r
-            n_tr += 1
+        (δ != 0 && gw_transition_rate(ch, α, abs(δ)) >= floor_rate) || continue
+        push!(c.tr_i, idx[sa]); push!(c.tr_j, idx[sb])
+        for (L, kind, K) in ch
+            push!(c.ch_lnK, log(K)); push!(c.ch_apow, kind == :mass ? 2 - 2L : 4 - 2L); push!(c.ch_dpow, 2L + 1)
         end
+        push!(c.tr_off, length(c.ch_lnK) + 1)
     end
-    return (n_ann, n_tr)
+    return c
+end
+
+@inline function gw_transition_rate_cached(c::GWCache, t, α, ad)
+    lα, lδ = log(α), log(ad)
+    r = 0.0
+    @inbounds for q in c.tr_off[t]:(c.tr_off[t + 1] - 1)
+        r += exp(c.ch_lnK[q] + c.ch_apow[q] * lα + c.ch_dpow[q] * lδ)
+    end
+    return r
+end
+
+"""
+    gw_rhs!(du, u, c::GWCache, α, a)
+
+Add GW annihilation and transition terms to du (solver units: rates in units of
+mu multiplying u_i u_j, before the solver's mu/hbar*yr conversion), using the
+current α = G M mu and BH spin a. Mass and spin are untouched: the gravitons
+leave the system.
+"""
+function gw_rhs!(du, u, c::GWCache, α, a)
+    @inbounds for i in eachindex(c.n)
+        c.ω[i] = gw_omega(c.n[i], c.l[i], c.m[i], α, a)
+    end
+    @inbounds for k in eachindex(c.ann_i)
+        i, j = c.ann_i[k], c.ann_j[k]
+        r = c.ann_C[k] * α^c.ann_p[k] * u[i] * u[j]
+        du[i] -= r
+        du[j] -= r        # i == j: -2r, two quanta per annihilation
+    end
+    @inbounds for t in eachindex(c.tr_i)
+        i, j = c.tr_i[t], c.tr_j[t]
+        δ = c.ω[i] - c.ω[j]
+        δ == 0 && continue
+        r = gw_transition_rate_cached(c, t, α, abs(δ)) * u[i] * u[j]
+        hi, lo = δ > 0 ? (i, j) : (j, i)
+        du[hi] -= r
+        du[lo] += r
+    end
+    return du
+end
+
+"""
+    gw_channel_rates(c::GWCache, α, a) -> (ann, tr)
+
+Instantaneous rates for inspection / signal modelling. ann: (i, j, rate) with
+ω_GW = ω_i + ω_j; tr: (hi, lo, rate) for hi -> lo with ω_GW = ω_hi - ω_lo
+(frequencies in units of mu, from gw_omega).
+"""
+function gw_channel_rates(c::GWCache, α, a)
+    ann = [(c.ann_i[k], c.ann_j[k], c.ann_C[k] * α^c.ann_p[k]) for k in eachindex(c.ann_i)]
+    tr = Tuple{Int,Int,Float64}[]
+    for t in eachindex(c.tr_i)
+        i, j = c.tr_i[t], c.tr_j[t]
+        δ = gw_omega(c.n[i], c.l[i], c.m[i], α, a) - gw_omega(c.n[j], c.l[j], c.m[j], α, a)
+        δ == 0 && continue
+        hi, lo = δ > 0 ? (i, j) : (j, i)
+        push!(tr, (hi, lo, gw_transition_rate_cached(c, t, α, abs(δ))))
+    end
+    return ann, tr
 end

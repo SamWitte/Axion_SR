@@ -147,6 +147,27 @@ evalR(R, r) = sum(c * r^p for (p, c) in zip(R.pows, R.coefs)) * exp(-R.beta * r)
         @test gw_literature_annihilation((2, 1, 1), (3, 2, 2)) === nothing
     end
 
+    @testset "solver kernel gw_rhs!" begin
+        modes = [(s..., 0.0) for s in gw_state_list(5)]
+        M, α, a = 10.0, 0.3, 0.9
+        mu = α / (GNew * M)
+        c = gw_build_cache(5, modes, mu, M, a)
+        @test !isempty(c.ann_i) && !isempty(c.tr_i)
+        u = [1e-3 * (1 + 0.1i) for i in 1:length(modes)]
+        du = gw_rhs!(zeros(length(modes)), u, c, α, a)
+        ann, tr = gw_channel_rates(c, α, a)
+        # transitions conserve quanta, each annihilation removes two
+        @test sum(du) ≈ -2 * sum(r * u[i] * u[j] for (i, j, r) in ann) rtol = 1e-12
+        # 322 -> 211 present with the 211 index gaining
+        i211 = findfirst(==((2, 1, 1, 0.0)), modes); i322 = findfirst(==((3, 2, 2, 0.0)), modes)
+        @test any(t -> t[1] == i322 && t[2] == i211, tr)
+        # l=1 override applied, and rates follow α
+        k = findfirst(k -> c.ann_i[k] == i211 && c.ann_j[k] == i211, eachindex(c.ann_i))
+        @test c.ann_p[k] == 14
+        @test gw_build_cache(5, modes, mu, M, a; gw_model=:off).ann_i == Int[]
+        @test_throws ErrorException gw_build_cache(5, modes, mu, M, a; gw_model=:rel)
+    end
+
     @testset "transitions vs literature" begin
         # 322 -> 211: Baryakhtar+ 2021 Table IV: 5e-6 α^10
         ch = gw_transition_channels((3, 2, 2), (2, 1, 1))

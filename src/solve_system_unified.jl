@@ -49,7 +49,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     eq_threshold=1e-100, stop_on_a=0, abstol=1e-30, non_rel=true, high_p=true,
     N_pts_interp=200, N_pts_interpL=200, Nmax=3, cheby=true, spinone=false, lm_only=false,
     u0_override=nothing, t_start=0.0,
-    gw_model=:legacy, gw_min_rate_per_yr=1e-10, gw_literature=true)
+    gw_model=:nonrel, gw_min_rate_per_yr=1e-10, gw_literature=true)
 
     # ============================================================================
     # PARAMETER SETUP & VALIDATION
@@ -121,10 +121,19 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     else
         # Standard: Compute interpolated rates using smooth symlog interpolation
         SR_rates, interp_funcs, interp_dict = compute_sr_rates_smooth(modes, M_BH, aBH, alph, cheby=cheby)
-        rates = load_rate_coeffs(mu, M_BH, aBH, fa, Nmax, SR_rates; non_rel=non_rel, lm_only=lm_only,
-                                 gw_model=gw_model, gw_min_rate_per_yr=gw_min_rate_per_yr, gw_literature=gw_literature)
+        rates = load_rate_coeffs(mu, M_BH, aBH, fa, Nmax, SR_rates; non_rel=non_rel, lm_only=lm_only)
         Mvars = [mu, fa, Emax2, aBH, M_BH, impose_low_cut]
         rP_initial = 1.0 + sqrt(1.0 - aBH^2)
+    end
+
+    # GW annihilations/transitions for every pair of levels; gw_rhs! re-evaluates
+    # them each RHS call at the current BH mass and spin (single assignment keeps
+    # the RHS closure type-stable).
+    gw_cache = spinone ? gw_empty_cache(Tuple{Int,Int,Int}[]) :
+               gw_build_cache(Nmax, modes, mu, M_BH, aBH; gw_model=gw_model,
+                              min_rate_per_yr=gw_min_rate_per_yr, literature_overrides=gw_literature)
+    if debug && !spinone
+        println("GW ($(gw_model)): $(length(gw_cache.ann_i)) annihilation + $(length(gw_cache.tr_i)) transition channels")
     end
 
     # ============================================================================
@@ -135,7 +144,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     #
     # m_drag is the net azimuthal quantum number absorbed by the horizon for BH-type
     # keys, used below to weight the rate by the horizon superradiance factor. Only
-    # computed for is_bh keys: non-BH keys (e.g. "*_*^GW", "*_*^Inf") don't have a
+    # computed for is_bh keys: non-BH keys (e.g. "*_*^Inf") don't have a
     # state label in the trailing slot, so get_m would fail to parse it there.
     get_m(s) = occursin("-", s) ? parse(Int, split(s, "-")[3]) : parse(Int, s[end:end])
     rate_cache = if !spinone
@@ -280,6 +289,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
                     du[idx_j] += sgn[j] * rate_val * u_term_tot
                 end
             end
+            gw_rhs!(du, u_real, gw_cache, alph_now, a_now)
         end
 
         # Unit corrections
