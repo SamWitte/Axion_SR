@@ -627,9 +627,11 @@ u = 1 (α only decreases during spin-down, so this stays conservative). At
 α ≳ 0.2 and Nmax ≳ 15 this still leaves O(10^5) mostly high-n transitions.
 `literature_overrides` replaces the flat-space l=1 x l=1 annihilations by the
 BH-potential-corrected α^14 result (gw_literature_annihilation).
+With accretion the BH can grow: pass the largest mass reached as `M_cut`, and
+a channel is kept if it passes the cut at either M or M_cut.
 """
 function gw_build_cache(Nmax, modes, mu, M, a; gw_model=:nonrel, min_rate_per_yr=1e-10,
-                        literature_overrides=true)
+                        literature_overrides=true, M_cut=M)
     c = gw_empty_cache(modes)
     gw_model == :off && return c
     gw_model == :rel && return gw_rates_relativistic(Nmax, modes, mu, M, a)
@@ -639,6 +641,7 @@ function gw_build_cache(Nmax, modes, mu, M, a; gw_model=:nonrel, min_rate_per_yr
     ann, trans = gw_load_table(path)
     idx = Dict((md[1], md[2], md[3]) => i for (i, md) in enumerate(modes))
     α = GNew * M * mu
+    αc = GNew * max(M, M_cut) * mu
     floor_rate = min_rate_per_yr / (mu / hbar * YEAR_IN_SECONDS)
     for (sa, sb, C, p) in ann
         (haskey(idx, sa) && haskey(idx, sb)) || continue
@@ -646,13 +649,15 @@ function gw_build_cache(Nmax, modes, mu, M, a; gw_model=:nonrel, min_rate_per_yr
             lit = gw_literature_annihilation(sa, sb)
             lit === nothing || ((C, p) = lit)
         end
-        C * α^p >= floor_rate || continue
+        C * max(α^p, αc^p) >= floor_rate || continue
         push!(c.ann_i, idx[sa]); push!(c.ann_j, idx[sb]); push!(c.ann_C, C); push!(c.ann_p, p)
     end
     for ((sa, sb), ch) in trans
         (haskey(idx, sa) && haskey(idx, sb)) || continue
         δ = gw_omega(sa..., α, a) - gw_omega(sb..., α, a)
-        (δ != 0 && gw_transition_rate(ch, α, abs(δ)) >= floor_rate) || continue
+        δc = gw_omega(sa..., αc, a) - gw_omega(sb..., αc, a)
+        ((δ != 0 && gw_transition_rate(ch, α, abs(δ)) >= floor_rate) ||
+         (δc != 0 && gw_transition_rate(ch, αc, abs(δc)) >= floor_rate)) || continue
         push!(c.tr_i, idx[sa]); push!(c.tr_j, idx[sb])
         for (L, kind, K) in ch
             push!(c.ch_lnK, log(K)); push!(c.ch_apow, kind == :mass ? 2 - 2L : 4 - 2L); push!(c.ch_dpow, 2L + 1)
@@ -754,21 +759,25 @@ Frequencies include the BH drift (α(t) = G M(t) μ, spin in the spectrum) and,
 with `self_gravity=true` and/or `fa` (GeV) given, the cloud's self-gravity and
 quartic self-interaction level shifts (cloud_shifts.jl) from every level
 occupied above occ_rel × the largest occupation; `df_cloud` is that cloud part
-of f. Powers use the unshifted spectrum, as in the evolution.
+of f. Powers use the unshifted spectrum, as in the evolution. `M0` is the BH mass
+that normalises u (the initial mass of the run); pass it when `timeT` etc. are a
+late-time slice of the run.
 """
 function gw_lines(timeT, states, modes, spin, mass, mu, Nmax; d_kpc=1.0, rel_floor=1e-8,
                   n_peak_samples=400, n_out=2000, gw_model=:nonrel, min_rate_per_yr=1e-10,
-                  literature_overrides=true, self_gravity=true, fa=nothing, occ_rel=1e-8)
+                  literature_overrides=true, self_gravity=true, fa=nothing, occ_rel=1e-8,
+                  M0=mass[1])
     nt = length(timeT)
     c = gw_build_cache(Nmax, modes, mu, mass[1], spin[1]; gw_model=gw_model,
-                       min_rate_per_yr=min_rate_per_yr, literature_overrides=literature_overrides)
+                       min_rate_per_yr=min_rate_per_yr, literature_overrides=literature_overrides,
+                       M_cut=maximum(mass))
     nlines = length(c.ann_i) + length(c.tr_i)
     ω = zeros(length(c.n))
     peak = zeros(nlines)
     for k in gw_time_samples(timeT, n_peak_samples)
         α = gw_set_omegas!(ω, c, mass[k], spin[k], mu)
         for q in 1:nlines
-            peak[q] = max(peak[q], gw_line_at(c, q, ω, α, states, k, mass[1], mu)[2])
+            peak[q] = max(peak[q], gw_line_at(c, q, ω, α, states, k, M0, mu)[2])
         end
     end
     lines = NamedTuple[]
@@ -798,7 +807,7 @@ function gw_lines(timeT, states, modes, spin, mass, mu, Nmax; d_kpc=1.0, rel_flo
             ωs[Iset] .+= gw_level_shifts(KG, X, states[Jset, k], α; fa=fa)
         end
         for (row, q) in enumerate(keep)
-            F0, Pw[row, col] = gw_line_at(c, q, ω, α, states, k, mass[1], mu)
+            F0, Pw[row, col] = gw_line_at(c, q, ω, α, states, k, M0, mu)
             i, j = lvl(q)
             F[row, col] = (q <= na ? ωs[i] + ωs[j] : abs(ωs[i] - ωs[j])) * mu / hbar / (2π)
             dF[row, col] = F[row, col] - F0
