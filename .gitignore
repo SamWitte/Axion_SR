@@ -14,3 +14,11 @@ GW_note/*.log
 GW_note/*.fls
 GW_note/*.fdb_latexmk
 GW_note/*.out
+
+# GW forward-model run outputs (regenerate with the scripts in src/GW_forward)
+src/GW_forward/test_plots/*.dat
+src/GW_forward/test_plots/*.log
+src/GW_forward/test_plots/realizations_zoom.png
+src/GW_forward/cygx1/*.dat
+src/GW_forward/cygx1/*.log
+src/GW_forward/cygx1/*.png
