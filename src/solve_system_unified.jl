@@ -1,5 +1,6 @@
 using DelimitedFiles
 using Interpolations
+include(joinpath(@__DIR__, "Core", "accretion.jl"))
 
 
 """
@@ -23,6 +24,15 @@ Handles both standard multi-level mode and spinone single-level mode via the spi
 - `high_p::Bool`: Use high-precision tolerances (default true)
 - `Nmax::Int`: Maximum principal quantum number 3-8 (default 3)
 - `cheby::Bool`: Use Chebyshev interpolation (default true)
+- `f_edd::Float64`: Eddington ratio of constant thin-disc accretion (default 0 = off);
+  Mdot = f_edd * Mdot_Edd(M_BH) is fixed in time (Core/accretion.jl)
+- `acc_eta::Float64`: radiative efficiency defining Mdot_Edd = L_Edd/(eta c^2) (default 0.1)
+
+- `track_alpha`: let the SR rates (tabulated on a grid in M) and the scattering
+  rates (interpolated in log alpha between grid masses) follow M(t). Default
+  (`nothing`) = on iff f_edd > 0, since accretion can change M by O(1); with it
+  off they stay at the initial alpha, as before. The GW rates always follow M(t);
+  the bosenova caps and Emax2 always use the initial alpha.
 
 # Arguments - Spinone Mode (spinone=true)
 - `mu::Float64`: Axion mass (eV)
@@ -49,12 +59,22 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     eq_threshold=1e-100, stop_on_a=0, abstol=1e-30, non_rel=true, high_p=true,
     N_pts_interp=200, N_pts_interpL=200, Nmax=3, cheby=true, spinone=false, lm_only=false,
     u0_override=nothing, t_start=0.0,
-    gw_model=:nonrel, gw_min_rate_per_yr=1e-10, gw_literature=true)
+    gw_model=:nonrel, gw_min_rate_per_yr=1e-10, gw_literature=true,
+    f_edd=0.0, acc_eta=0.1, track_alpha=nothing)
 
     # ============================================================================
     # PARAMETER SETUP & VALIDATION
     # ============================================================================
     alph = GNew .* M_BH .* mu
+    accreting = f_edd > 0
+    if accreting && spinone
+        error("accretion (f_edd > 0) is not implemented for spinone mode")
+    end
+    Mdot_acc = accreting ? f_edd * eddington_rate(M_BH; eta=acc_eta) : 0.0  # M_sun/yr, constant
+    track_alpha = (track_alpha === nothing) ? accreting : track_alpha
+    if track_alpha && spinone
+        error("track_alpha is not implemented for spinone mode")
+    end
 
     # Compute tolerances based on physical regime
     default_reltol, reltol_Thres = initialize_solver_tolerances(non_rel, high_p)
@@ -121,9 +141,46 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     else
         # Standard: Compute interpolated rates using smooth symlog interpolation
         SR_rates, interp_funcs, interp_dict = compute_sr_rates_smooth(modes, M_BH, aBH, alph, cheby=cheby)
-        rates = load_rate_coeffs(mu, M_BH, aBH, fa, Nmax, SR_rates; non_rel=non_rel, lm_only=lm_only)
+        # Under accretion, levels that are not superradiant at t=0 may become so
+        # later, so their scattering rates are kept.
+        SR_kill = accreting ? ones(length(SR_rates)) : SR_rates
+        rates = load_rate_coeffs(mu, M_BH, aBH, fa, Nmax, SR_kill; non_rel=non_rel, lm_only=lm_only)
         Mvars = [mu, fa, Emax2, aBH, M_BH, impose_low_cut]
         rP_initial = 1.0 + sqrt(1.0 - aBH^2)
+    end
+
+    # ============================================================================
+    # TRACK_ALPHA: rate grids in BH mass so that alpha can follow M(t)
+    # ============================================================================
+    # M_lo allows for SR spin-down mass loss; M_hi bounds the mass reached by
+    # t_max. SR rates: log-spaced nodes (1%), linear in ln M between them.
+    # Scattering rates: coarser nodes (5%), linear in ln(rate) vs ln M.
+    M_hi = track_alpha ? 1.02 * (M_BH + Mdot_acc * t_max) : M_BH
+    lnM_lo, nM_sr, dlnM_sr, M_sr, sr_nodes, nM_sc, dlnM_sc, rates_sc = if track_alpha
+        M_lo = 0.8 * M_BH
+        n_sr = max(2, ceil(Int, log(M_hi / M_lo) / 0.01) + 1)
+        d_sr = log(M_hi / M_lo) / (n_sr - 1)
+        Ms_sr = exp.(log(M_lo) .+ d_sr .* (0:(n_sr - 1)))
+        n_sc = max(2, ceil(Int, log(M_hi / M_lo) / 0.05) + 1)
+        d_sc = log(M_hi / M_lo) / (n_sc - 1)
+        Ms_sc = exp.(log(M_lo) .+ d_sc .* (0:(n_sc - 1)))
+        if debug
+            println("track_alpha: f_edd=$(f_edd), Mdot=$(Mdot_acc) M_sun/yr; SR grid $(n_sr) masses, ",
+                    "scattering grid $(n_sc) masses in [$(M_lo), $(M_hi)] M_sun")
+        end
+        (log(M_lo), n_sr, d_sr, collect(Ms_sr),
+         [compute_sr_rates_smooth(modes, Mj, aBH, GNew * Mj * mu, cheby=cheby)[2] for Mj in Ms_sr],
+         n_sc, d_sc,
+         [load_rate_coeffs(mu, Mj, aBH, fa, Nmax, SR_kill; non_rel=non_rel, lm_only=lm_only) for Mj in Ms_sc])
+    else
+        (0.0, 2, 1.0, Float64[], Vector{Any}[], 2, 1.0, Dict[])
+    end
+    # node index and weight for linear interpolation in ln M
+    function mass_bracket(M, nM, dlnM)
+        x = (log(M) - lnM_lo) / dlnM
+        x = isnan(x) ? 0.0 : clamp(x, 0.0, Float64(nM - 1))   # trial Newton states may be wild
+        j = clamp(floor(Int, x) + 1, 1, nM - 1)
+        return j, clamp(x - (j - 1), 0.0, 1.0)
     end
 
     # GW annihilations/transitions for every pair of levels; gw_rhs! re-evaluates
@@ -131,7 +188,8 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # the RHS closure type-stable).
     gw_cache = spinone ? gw_empty_cache(Tuple{Int,Int,Int}[]) :
                gw_build_cache(Nmax, modes, mu, M_BH, aBH; gw_model=gw_model,
-                              min_rate_per_yr=gw_min_rate_per_yr, literature_overrides=gw_literature)
+                              min_rate_per_yr=gw_min_rate_per_yr, literature_overrides=gw_literature,
+                              M_cut=M_hi)
     if debug && !spinone
         println("GW ($(gw_model)): $(length(gw_cache.ann_i)) annihilation + $(length(gw_cache.tr_i)) transition channels")
     end
@@ -171,6 +229,15 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     else
         Vector{Tuple{Vector{Int}, Vector{Int}, Bool, Float64, Int}}()
     end
+    # Accretion: ln|rate| of every rate_cache entry at each scattering-grid mass
+    # (same key order as rate_cache; sign taken from the initial-mass rate).
+    rate_keys = spinone ? String[] : collect(keys(rates))
+    lnR_sc = if track_alpha
+        [log(max(abs(get(rates_sc[j], k, 0.0)) < 1e20 ? abs(get(rates_sc[j], k, 0.0)) : 0.0, 1e-300))
+         for k in rate_keys, j in 1:nM_sc]
+    else
+        zeros(0, 0)
+    end
 
     # ============================================================================
     # ODE SETUP
@@ -193,6 +260,11 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     else
         saveat = saveat_full
     end
+
+    # Spin callback: without accretion the spin cannot exceed its initial value
+    # (reset to aBH beyond aBH + 0.01); with accretion it may spin up to maxSpin.
+    spin_reset = accreting ? maxSpin : aBH
+    spin_ceiling = accreting ? maxSpin : aBH + 0.01
 
     # Trackers for callbacks
     wait = 0
@@ -233,7 +305,16 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
             return SR_rates_local, false
         else
             spin_val = clamp(u_real[spinI], 0.0, maxSpin)
-            SR_rates_local = [func(spin_val) for func in interp_funcs]
+            if track_alpha
+                # rate [eV] at node mass M_j is (dimensionless) * 2/(G M_j)
+                M_now = u_real[massI]
+                j, w = mass_bracket(M_now, nM_sr, dlnM_sr)
+                fl, fr = sr_nodes[j], sr_nodes[j + 1]
+                SR_rates_local = [((1 - w) * fl[i](spin_val) * M_sr[j] + w * fr[i](spin_val) * M_sr[j + 1]) / M_now
+                                  for i in 1:idx_lvl]
+            else
+                SR_rates_local = [func(spin_val) for func in interp_funcs]
+            end
             if (u_real[1] .> Emax2) && (SR_rates_local[1] > 0)
                 SR_rates_local[1] = 0.0
             end
@@ -273,7 +354,13 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
             a_now = u_real[spinI]
             omH_now = a_now / (rP_now^2 + a_now^2)
             alph_now = GNew * u_real[massI] * mu
-            for (idxV, sgn, is_bh_final, base_rate, m_drag) in rate_cache
+            if track_alpha
+                jsc, wsc = mass_bracket(u_real[massI], nM_sc, dlnM_sc)
+            end
+            for (kk, (idxV, sgn, is_bh_final, base_rate, m_drag)) in enumerate(rate_cache)
+                if track_alpha && base_rate != 0.0
+                    base_rate = sign(base_rate) * exp((1 - wsc) * lnR_sc[kk, jsc] + wsc * lnR_sc[kk, jsc + 1])
+                end
                 u_term_tot = 1.0
                 for j in 1:length(sgn)
                     if (idxV[j] <= idx_lvl) && (idxV[j] > 0)
@@ -315,6 +402,12 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         du[spinI] *= mu ./ hbar .* 3.15e7
         du[massI] *= (mu .* u_real[massI]) .* (mu .* GNew .* u_real[massI]) ./ hbar .* 3.15e7
 
+        if accreting   # already per year
+            dM_acc, da_acc = accretion_rhs(u_real[massI], u_real[spinI], Mdot_acc)
+            du[massI] += dM_acc
+            du[spinI] += da_acc
+        end
+
         du ./= u_real
 
         for i in 1:idx_lvl
@@ -348,7 +441,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
             if u_real[spinI] <= stop_on_a
                 return true
             end
-            if u_real[spinI] .> (aBH .+ 0.01)
+            if u_real[spinI] .> spin_ceiling
                 return true
             elseif u_real[spinI] .<= 0.0
                 return true
@@ -363,8 +456,8 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         if !spinone && u_real[spinI] <= stop_on_a
             terminate!(integrator)
         end
-        if u_real[spinI] .> aBH
-            integrator.u[spinI] = log(aBH)
+        if u_real[spinI] .> spin_reset
+            integrator.u[spinI] = log(spin_reset)
         elseif u_real[spinI] .< 0.0
             integrator.u[spinI] = -10.0
         end
