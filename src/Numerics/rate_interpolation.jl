@@ -27,6 +27,11 @@ export symlog, inverse_symlog
 # Floor value used in the data files - anything at or below this is artificial
 const RATE_FLOOR = 1e-90
 
+# Rate tables are read once per session (accretion runs rebuild the SR
+# interpolators on a grid of BH masses).
+const NPZ_CACHE = Dict{String, Any}()
+cached_npzread(fn) = get!(() -> npzread(fn), NPZ_CACHE, fn)
+
 """
     symlog(x, linthresh)
 
@@ -120,7 +125,7 @@ function pre_computed_sr_rates_unified(n, l, m, alph, M; cheby::Bool=true)
 
     # Add positive rate data (these are growth rates, keep as positive)
     if isfile(pos_file)
-        pos_data = npzread(pos_file)
+        pos_data = cached_npzread(pos_file)
         spins_pos, rates_pos, alpha_min_pos = extract_valid_rates_at_alpha(pos_data, alph, M)
         if alph < alpha_min_pos
             rates_pos = rates_pos .* (alph / alpha_min_pos)^(4*l + 5)
@@ -136,7 +141,7 @@ function pre_computed_sr_rates_unified(n, l, m, alph, M; cheby::Bool=true)
 
     # Add negative rate data (these are damping rates, make negative)
     if isfile(neg_file)
-        neg_data = npzread(neg_file)
+        neg_data = cached_npzread(neg_file)
         spins_neg, rates_neg, alpha_min_neg = extract_valid_rates_at_alpha(neg_data, alph, M)
         if alph < alpha_min_neg
             rates_neg = rates_neg .* (alph / alpha_min_neg)^(4*l + 5)
