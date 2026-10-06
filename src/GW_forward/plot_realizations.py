@@ -118,6 +118,11 @@ def main():
         good = ok & np.isfinite(logw)
         w = np.where(good, np.exp(logw - (np.max(logw[good]) if good.any() else 0.0)), 0.0)
     ess = w.sum() ** 2 / np.sum(w ** 2) if w.sum() > 0 else 0.0
+    w_post = w.copy()
+    if w.sum() == 0:
+        # no draw compatible with the measurement: show the draws unweighted
+        print("no realization is compatible with the measurement; showing all draws unweighted")
+        w = ok.astype(float)
     print(f"{len(samp)} realizations, {ok.sum()} ok, effective sample size {ess:.1f}")
     wid = dict(zip(samp["id"].astype(int), w))
     aid = dict(zip(samp["id"].astype(int), samp["a_today"]))
@@ -216,8 +221,8 @@ def main():
         else:
             bins = np.linspace(v[ok].min(), v[ok].max(), 21)
             a_.hist(v[pri & ok], bins=bins, density=True, histtype="stepfilled", color="0.85", label="prior (round 1)")
-            if w.sum() > 0:
-                a_.hist(v[ok], bins=bins, weights=w[ok], density=True, histtype="step", color="k", lw=2, label="posterior")
+            if w_post.sum() > 0:
+                a_.hist(v[ok], bins=bins, weights=w_post[ok], density=True, histtype="step", color="k", lw=2, label="posterior")
             a_.legend(fontsize=8)
         a_.set(xlabel=xl, ylabel="density", title=ttl)
 
@@ -231,7 +236,8 @@ def main():
     if args.a_obs_max is not None:
         obs.append(f"a < {args.a_obs_max}")
     fig.suptitle(f"{args.tag}: {len(samp)} realizations ({ok.sum()} ok), "
-                 f"weighted by {', '.join(obs) if obs else 'nothing (prior)'}; ESS = {ess:.1f}")
+                 f"weighted by {', '.join(obs) if obs else 'nothing (prior)'}; ESS = {ess:.1f}"
+                 + ("\nNO DRAW COMPATIBLE: all draws shown unweighted" if w_post.sum() == 0 else ""))
     fig.tight_layout()
     out = os.path.join(args.outdir, f"realizations_{args.tag}{'_' + args.suffix if args.suffix else ''}.png")
     fig.savefig(out, dpi=130)
