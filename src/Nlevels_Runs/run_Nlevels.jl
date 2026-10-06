@@ -46,6 +46,15 @@ function parse_commandline()
             arg_type = String
             default  = "nonrel"
             help     = "GW emission: nonrel (NR annihilation+transition rates), rel (not implemented), off"
+        "--f_edd"
+            arg_type = Float64
+            default  = 0.0
+            help     = "Constant accretion: Mdot = f_edd * Mdot_Edd(MassBH), fixed in M_sun/yr for the whole run " *
+                       "(Core/accretion.jl; thin disc, Bardeen spin-up, Mdot_Edd = L_Edd/(acc_eta c^2)). 0 = off"
+        "--acc_eta"
+            arg_type = Float64
+            default  = 0.1
+            help     = "Radiative efficiency in Mdot_Edd (only used if f_edd > 0)"
         "--resume"
             action   = :store_true
             help     = "Continue from last row of existing Time_/States_/Spin_/MassBH_ .dat"
@@ -167,6 +176,9 @@ tau_max = parsed["tau_max"]
 outdir  = parsed["outdir"]
 lm_only = parsed["lm_only"]
 do_resume = parsed["resume"]
+f_edd   = parsed["f_edd"]
+acc_eta = parsed["acc_eta"]
+f_edd >= 0 || error("--f_edd must be >= 0")
 
 # Derive axion mass from alpha = GNew * MassBH * m_a
 m_a = alpha / (GNew * MassBH)
@@ -183,10 +195,14 @@ println("  tau_max = ", tau_max)
 println("  outdir  = ", outdir)
 println("  lm_only = ", lm_only)
 println("  resume  = ", do_resume)
+println("  f_edd   = ", f_edd, f_edd > 0 ? "  (Mdot = $(f_edd * eddington_rate(MassBH; eta=acc_eta)) M_sun/yr, eta = $(acc_eta))" : "  (no accretion)")
 println("================================================")
 
-# Output filename -- mirrors single_BH.jl naming convention with Nmax appended
-fname = "FullRel_fa_$(f_a)_ma_$(m_a)_MBH_$(MassBH)_spin_$(SpinBH)_Nmax_$(Nmax).dat"
+# Output filename -- mirrors single_BH.jl naming convention with Nmax appended.
+# With accretion a _fedd_<f_edd> tag goes before _Nmax_ (the *Nmax_N.dat globs and
+# the gw_lines_from_run.jl filename parser still match); without it the name is unchanged.
+fedd_tag = f_edd > 0 ? "_fedd_$(f_edd)" : ""
+fname = "FullRel_fa_$(f_a)_ma_$(m_a)_MBH_$(MassBH)_spin_$(SpinBH)$(fedd_tag)_Nmax_$(Nmax).dat"
 
 spin_path = joinpath(outdir, "Spin_" * fname)
 if isfile(spin_path) && !do_resume
@@ -252,6 +268,8 @@ timeT, StatesOut, modes_out, spin, massB = @time solve_system(
     u0_override     = u0_override,
     t_start         = t_start,
     gw_model        = Symbol(parsed["gw_model"]),
+    f_edd           = f_edd,
+    acc_eta         = acc_eta,
 )
 
 if do_resume

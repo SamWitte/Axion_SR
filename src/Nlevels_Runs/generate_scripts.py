@@ -27,9 +27,15 @@ Output layout:
     BH_10/
       ...
 
+Accretion: set F_EDD below (or pass --f_edd X) for a constant accretion rate
+Mdot = F_EDD * Mdot_Edd(MassBH) in every run (default 0 = off). Runs with
+F_EDD > 0 go to output_fedd_<X>/ (same layout) and scripts get a _fedd_<X> tag,
+so they never share a directory with the non-accreting runs.
+
 Usage:
   python generate_scripts.py           # create scripts AND submit
   python generate_scripts.py --no-submit  # create scripts only
+  python generate_scripts.py --no-submit --f_edd 0.01
 """
 
 import os
@@ -42,12 +48,18 @@ import itertools
 # ---------------------------------------------------------------------------
 SUBMIT = "--no-submit" not in sys.argv   # pass --no-submit to skip addqueue
 
+# Constant accretion (Eddington ratio of MassBH, Mdot fixed in time); 0 = off.
+F_EDD = 0.0
+if "--f_edd" in sys.argv:
+    F_EDD = float(sys.argv[sys.argv.index("--f_edd") + 1])
+FEDD_TAG = f"_fedd_{F_EDD:g}" if F_EDD > 0 else ""
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))   # .../Nlevels_Runs
 SCRIPT_DIR = os.path.join(BASE_DIR, "scripts")
-OUTPUT_DIR = os.path.join(BASE_DIR, "output")
+OUTPUT_DIR = os.path.join(BASE_DIR, "output" + FEDD_TAG)
 
 os.makedirs(SCRIPT_DIR, exist_ok=True)
 os.makedirs(OUTPUT_DIR, exist_ok=True)
@@ -133,7 +145,7 @@ for MassBH, fa, alpha in itertools.product(MassBH_vals, fa_vals, alpha_vals):
     base_name = (
         f"Script_NL_{bh_tag(MassBH)}_"
         f"{fa_tag(fa)}_"
-        f"{alpha_tag(alpha)}"
+        f"{alpha_tag(alpha)}{FEDD_TAG}"
     )
 
     def make_script(name, nmax_list, mem_gb_script=MEM_GB):
@@ -160,7 +172,8 @@ for MassBH, fa, alpha in itertools.product(MassBH_vals, fa_vals, alpha_vals):
                 f" --alpha {alpha:g}"
                 f" --Nmax {Nmax}"
                 f" --tau_max {fmt(tau_max)}"
-                f" --outdir {outdir}\n"
+                + (f" --f_edd {F_EDD:g}" if F_EDD > 0 else "")
+                + f" --outdir {outdir}\n"
             )
             lines.append("\n")
         path = os.path.join(SCRIPT_DIR, name + ".sh")
