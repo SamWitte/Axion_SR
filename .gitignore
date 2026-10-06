@@ -22,3 +22,19 @@ src/GW_forward/test_plots/realizations_zoom.png
 src/GW_forward/cygx1/*.dat
 src/GW_forward/cygx1/*.log
 src/GW_forward/cygx1/*.png
+
+# AGN resonance pipeline outputs (regenerate with src/GW_forward/analysis/agn_julia_pipeline.py)
+src/GW_forward/analysis/test_run*/
+src/GW_forward/analysis/runs/
+src/GW_forward/analysis/*.png
+src/GW_forward/analysis/crossings.csv
+
+# Nlevels_Runs outputs and generated job scripts/logs (created on the cluster)
+src/Nlevels_Runs/output*/
+src/Nlevels_Runs/scripts/
+src/Nlevels_Runs/scripts_bh10/
+src/Nlevels_Runs/logs/
+
+# OS / Python clutter (5 .DS_Store files are already tracked; this only stops new ones)
+.DS_Store
+__pycache__/
