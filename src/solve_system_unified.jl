@@ -27,12 +27,31 @@ Handles both standard multi-level mode and spinone single-level mode via the spi
 - `f_edd::Float64`: Eddington ratio of constant thin-disc accretion (default 0 = off);
   Mdot = f_edd * Mdot_Edd(M_BH) is fixed in time (Core/accretion.jl)
 - `acc_eta::Float64`: radiative efficiency defining Mdot_Edd = L_Edd/(eta c^2) (default 0.1)
+- `acc_dlnM_dt::Float64`: alternative to f_edd: accretion with Mdot = acc_dlnM_dt * M(t)
+  [1/yr], i.e. a fixed Eddington ratio lam with acc_dlnM_dt = lam (1-eps)/(eps t_Edd)
+  (default 0 = off; use either this or f_edd)
 
 - `track_alpha`: let the SR rates (tabulated on a grid in M) and the scattering
   rates (interpolated in log alpha between grid masses) follow M(t). Default
   (`nothing`) = on iff f_edd > 0, since accretion can change M by O(1); with it
   off they stay at the initial alpha, as before. The GW rates always follow M(t);
-  the bosenova caps and Emax2 always use the initial alpha.
+  the bosenova caps and Emax2 always use the initial alpha. With track_alpha the
+  cloud's back-reaction on M and a also uses the occupation normalisation
+  u = N/(G M_BH^2) correctly (without it the old approximation M ~ M_BH is kept:
+  the SR / scattering terms in dM/dt and da/dt are then too large by (M/M_BH)^2).
+- `emax2_mode`: cap on the 211 cloud (211 superradiance is switched off above it).
+  :fixed = Emax2, the saturated 211 cloud of a BH that starts at (M_BH, aBH) with
+  no cloud (original behaviour). :evolving = current 211 cloud + the 211 cloud the
+  BH can still produce from its current (M, a), i.e. Emax2 evaluated on the
+  current BH, recomputed every step. It equals the fixed cap at a fresh start,
+  stays constant (to first order) while only superradiance acts, grows when
+  accretion spins the BH up, and depends only on the current state, so a run
+  resumed from any intermediate state (u0_override) gets the same cap. Default:
+  :evolving with accretion, :fixed otherwise. The evolving cap acts smoothly: the
+  211 SR rate is scaled by clamp((cap - u_211) / (emax2_taper * cap), 0, 1).
+  Under steady accretion the cloud sits at the cap (the spin is pinned just above
+  the 211 threshold), and a hard on/off switch there makes the ODE crawl.
+- `emax2_taper`: width of that taper, as a fraction of the cap (default 0.01).
 
 # Arguments - Spinone Mode (spinone=true)
 - `mu::Float64`: Axion mass (eV)
@@ -60,18 +79,23 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     N_pts_interp=200, N_pts_interpL=200, Nmax=3, cheby=true, spinone=false, lm_only=false,
     u0_override=nothing, t_start=0.0,
     gw_model=:nonrel, gw_min_rate_per_yr=1e-10, gw_literature=true,
-    f_edd=0.0, acc_eta=0.1, track_alpha=nothing)
+    f_edd=0.0, acc_eta=0.1, acc_dlnM_dt=0.0, track_alpha=nothing, emax2_mode=nothing,
+    emax2_taper=0.01)
 
     # ============================================================================
     # PARAMETER SETUP & VALIDATION
     # ============================================================================
     alph = GNew .* M_BH .* mu
-    accreting = f_edd > 0
+    (f_edd > 0 && acc_dlnM_dt > 0) && error("give either f_edd or acc_dlnM_dt, not both")
+    accreting = f_edd > 0 || acc_dlnM_dt > 0
     if accreting && spinone
-        error("accretion (f_edd > 0) is not implemented for spinone mode")
+        error("accretion is not implemented for spinone mode")
     end
-    Mdot_acc = accreting ? f_edd * eddington_rate(M_BH; eta=acc_eta) : 0.0  # M_sun/yr, constant
+    Mdot_acc = f_edd > 0 ? f_edd * eddington_rate(M_BH; eta=acc_eta) : 0.0  # M_sun/yr, constant part
+    acc_mdot(M) = Mdot_acc + acc_dlnM_dt * M                                 # M_sun/yr
     track_alpha = (track_alpha === nothing) ? accreting : track_alpha
+    emax2_mode = (emax2_mode === nothing) ? (accreting ? :evolving : :fixed) : emax2_mode
+    emax2_mode in (:fixed, :evolving) || error("emax2_mode must be :fixed or :evolving")
     if track_alpha && spinone
         error("track_alpha is not implemented for spinone mode")
     end
@@ -155,7 +179,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # M_lo allows for SR spin-down mass loss; M_hi bounds the mass reached by
     # t_max. SR rates: log-spaced nodes (1%), linear in ln M between them.
     # Scattering rates: coarser nodes (5%), linear in ln(rate) vs ln M.
-    M_hi = track_alpha ? 1.02 * (M_BH + Mdot_acc * t_max) : M_BH
+    M_hi = track_alpha ? 1.02 * (M_BH + Mdot_acc * t_max) * exp(acc_dlnM_dt * t_max) : M_BH
     lnM_lo, nM_sr, dlnM_sr, M_sr, sr_nodes, nM_sc, dlnM_sc, rates_sc = if track_alpha
         M_lo = 0.8 * M_BH
         n_sr = max(2, ceil(Int, log(M_hi / M_lo) / 0.01) + 1)
@@ -165,7 +189,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         d_sc = log(M_hi / M_lo) / (n_sc - 1)
         Ms_sc = exp.(log(M_lo) .+ d_sc .* (0:(n_sc - 1)))
         if debug
-            println("track_alpha: f_edd=$(f_edd), Mdot=$(Mdot_acc) M_sun/yr; SR grid $(n_sr) masses, ",
+            println("track_alpha: f_edd=$(f_edd), Mdot=$(Mdot_acc) M_sun/yr, dlnM/dt=$(acc_dlnM_dt)/yr; SR grid $(n_sr) masses, ",
                     "scattering grid $(n_sc) masses in [$(M_lo), $(M_hi)] M_sun")
         end
         (log(M_lo), n_sr, d_sr, collect(Ms_sr),
@@ -250,6 +274,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # Full-grid base uses (0, t_max) so resume hops splice onto the same grid.
     t_log_start = max(1.0, t_max * 1e-9)
     saveat_full = exp10.(range(log10(t_log_start), log10(t_max), length=n_times))
+    saveat_full[end] = t_max      # exp10(log10(t_max)) can round above t_max and never be saved
     if t_start > 0.0
         saveat = saveat_full[saveat_full .> t_start]
         if isempty(saveat)
@@ -291,6 +316,15 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         end
     end
 
+    # 211 cloud the current BH (M, a) can still produce before saturating, in
+    # u units (N / (G M_BH^2)); emax_211 is normalised to G M^2.
+    function emax2_remaining(u_real)
+        M, a = u_real[massI], clamp(u_real[spinI], 0.0, maxSpin)
+        OmH = a / (2 * GNew * M * (1 + sqrt(1 - a^2)))
+        OmH > ergL(2, 1, 1, mu, M, a) || return 0.0
+        return max(emax_211(M, mu, a), 0.0) * (M / M_BH)^2
+    end
+
     function compute_SR_rates_local(u_real)
         if spinone
             OmegaH = u_real[spinI] ./ (2 .* (GNew .* u_real[massI]) .* (1 .+ sqrt.(1 .- u_real[spinI].^2)))
@@ -315,7 +349,13 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
             else
                 SR_rates_local = [func(spin_val) for func in interp_funcs]
             end
-            if (u_real[1] .> Emax2) && (SR_rates_local[1] > 0)
+            if emax2_mode == :evolving
+                if SR_rates_local[1] > 0
+                    rem = emax2_remaining(u_real)
+                    cap = u_real[1] + rem
+                    SR_rates_local[1] *= clamp(rem / (emax2_taper * cap), 0.0, 1.0)
+                end
+            elseif (u_real[1] .> Emax2) && (SR_rates_local[1] > 0)
                 SR_rates_local[1] = 0.0
             end
             return SR_rates_local, false
@@ -400,10 +440,16 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         end
 
         du[spinI] *= mu ./ hbar .* 3.15e7
-        du[massI] *= (mu .* u_real[massI]) .* (mu .* GNew .* u_real[massI]) ./ hbar .* 3.15e7
+        if track_alpha
+            # u = N / (G M_BH^2): dJ = -m dN -> da = -m du (M_BH/M)^2; dM = -mu dN = -mu G M_BH^2 du
+            du[spinI] *= (M_BH / u_real[massI])^2
+            du[massI] *= (mu .* M_BH) .* (mu .* GNew .* M_BH) ./ hbar .* 3.15e7
+        else
+            du[massI] *= (mu .* u_real[massI]) .* (mu .* GNew .* u_real[massI]) ./ hbar .* 3.15e7
+        end
 
         if accreting   # already per year
-            dM_acc, da_acc = accretion_rhs(u_real[massI], u_real[spinI], Mdot_acc)
+            dM_acc, da_acc = accretion_rhs(u_real[massI], u_real[spinI], acc_mdot(u_real[massI]))
             du[massI] += dM_acc
             du[spinI] += da_acc
         end
@@ -643,6 +689,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=reltol, abstol=1e-10)
     end
     sol = solve(prob, TRBDF2(autodiff=false), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e6)
+    debug && println("solver retcode: ", sol.retcode, "  t_end = ", sol.t[end], " of ", t_max)
     # ============================================================================
     # EXTRACT AND PROCESS OUTPUT
     # ============================================================================
