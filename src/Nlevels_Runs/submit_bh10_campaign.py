@@ -34,6 +34,12 @@ OUTPUT_DIR = (
     else os.path.join(BASE_DIR, "output")
 )
 SCRIPT_DIR = os.path.join(BASE_DIR, "scripts_bh10")
+
+
+def output_dir(f_edd: float) -> str:
+    """Accreting runs (--f_edd > 0) go to output/<RUN_TAG>_fedd_<f_edd>; use that
+    RUN_TAG for the plot / postprocess tools."""
+    return OUTPUT_DIR + (f"_fedd_{f_edd:g}" if f_edd > 0 else "")
 LOG_DIR = os.path.join(BASE_DIR, "logs")
 JULIA_BIN = os.environ.get(
     "JULIA_BIN", "/groups/astro/spieksma/julia-1.8.0/bin/julia"
@@ -84,9 +90,9 @@ def already_done(outdir: str, nmax: int) -> bool:
     )
 
 
-def write_script(fa: float, alpha: float, nmax: int, *, resume: bool) -> str:
-    outdir = os.path.join(OUTPUT_DIR, "BH_10", fa_tag(fa), alpha_tag(alpha))
-    tag = f"BH_10_{fa_tag(fa)}_{alpha_tag(alpha)}_Nmax_{nmax}"
+def write_script(fa: float, alpha: float, nmax: int, *, resume: bool, f_edd: float = 0.0) -> str:
+    outdir = os.path.join(output_dir(f_edd), "BH_10", fa_tag(fa), alpha_tag(alpha))
+    tag = f"BH_10_{fa_tag(fa)}_{alpha_tag(alpha)}" + (f"_fedd_{f_edd:g}" if f_edd > 0 else "") + f"_Nmax_{nmax}"
     if resume:
         tag = f"{tag}_resume"
     script = os.path.join(SCRIPT_DIR, f"NL_{tag}.sh")
@@ -94,6 +100,8 @@ def write_script(fa: float, alpha: float, nmax: int, *, resume: bool) -> str:
     os.makedirs(outdir, exist_ok=True)
     os.makedirs(LOG_DIR, exist_ok=True)
     resume_arg = " \\\n  --resume" if resume else ""
+    if f_edd > 0:
+        resume_arg = f" \\\n  --f_edd {f_edd:g}" + resume_arg
     if resume:
         prep = f"""# Resume: keep existing Time_/States_/… checkpoint for Nmax=$NMAX
 TIMEFILE=$(ls "$OUTDIR"/Time_*Nmax_${{NMAX}}.dat 2>/dev/null | head -1 || true)
@@ -207,6 +215,8 @@ def main() -> None:
     ap.add_argument("--nmax", type=int, nargs="*", default=None)
     ap.add_argument("--fa", type=float, nargs="*", default=None)
     ap.add_argument("--alpha", type=float, nargs="*", default=None)
+    ap.add_argument("--f_edd", type=float, default=0.0,
+                    help="constant accretion rate, Eddington ratio of the BH mass (default 0 = off)")
     args = ap.parse_args()
 
     fas = args.fa or FA_VALS
@@ -217,7 +227,7 @@ def main() -> None:
     scripts = []
     skipped = 0
     for fa, alpha, nmax in itertools.product(fas, alphas, nmaxs):
-        outdir = os.path.join(OUTPUT_DIR, "BH_10", fa_tag(fa), alpha_tag(alpha))
+        outdir = os.path.join(output_dir(args.f_edd), "BH_10", fa_tag(fa), alpha_tag(alpha))
         if already_done(outdir, nmax):
             skipped += 1
             continue
@@ -230,9 +240,9 @@ def main() -> None:
                 print(f"skip resume (no checkpoint): {fa_tag(fa)}/{alpha_tag(alpha)} Nmax={nmax}")
                 skipped += 1
                 continue
-        scripts.append(write_script(fa, alpha, nmax, resume=args.resume))
+        scripts.append(write_script(fa, alpha, nmax, resume=args.resume, f_edd=args.f_edd))
 
-    print(f"OUTPUT_DIR={OUTPUT_DIR}")
+    print(f"OUTPUT_DIR={output_dir(args.f_edd)}" + (f"  (f_edd={args.f_edd:g})" if args.f_edd > 0 else ""))
     print(f"NL_MAX_WALL_SEC={NL_MAX_WALL_SEC} TIMEOUT={TIMEOUT} WALLCLOCK={WALLCLOCK}")
     print(f"resume={args.resume} scripts_created={len(scripts)} skipped={skipped}")
     if args.no_submit:
