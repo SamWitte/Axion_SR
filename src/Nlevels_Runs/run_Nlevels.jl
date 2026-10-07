@@ -55,6 +55,10 @@ function parse_commandline()
             arg_type = Float64
             default  = 0.1
             help     = "Radiative efficiency in Mdot_Edd (only used if f_edd > 0)"
+        "--no_track_alpha"
+            action   = :store_true
+            help     = "Keep the SR and scattering rates at the initial alpha (original behaviour; " *
+                       "default: they follow M(t), see solve_system track_alpha)"
         "--save_factor"
             arg_type = Float64
             default  = 5.0
@@ -279,6 +283,7 @@ timeT, StatesOut, modes_out, spin, massB = @time solve_system(
     gw_model        = Symbol(parsed["gw_model"]),
     f_edd           = f_edd,
     acc_eta         = acc_eta,
+    track_alpha     = !parsed["no_track_alpha"],
     save_factor     = parsed["save_factor"],
     save_dlna       = parsed["save_dlna"],
 )

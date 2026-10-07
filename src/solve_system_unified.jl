@@ -32,9 +32,12 @@ Handles both standard multi-level mode and spinone single-level mode via the spi
   (default 0 = off; use either this or f_edd)
 
 - `track_alpha`: let the SR rates (tabulated on a grid in M) and the scattering
-  rates (interpolated in log alpha between grid masses) follow M(t). Default
-  (`nothing`) = on iff f_edd > 0, since accretion can change M by O(1); with it
-  off they stay at the initial alpha, as before. The GW rates always follow M(t);
+  rates (interpolated in log alpha between grid masses, refreshed whenever ln M
+  has moved by more than 1e-5) follow M(t). Default (`nothing`) = on (off in
+  spinone mode); with it off they stay at the initial alpha, as in the original
+  code. `track_alpha_dlnM` = (SR, scattering) grid spacing in ln M (default
+  (0.0025, 0.05), converged in tests; 0.01 for SR shifted late spins by ~5e-3)); `track_alpha_refresh` = change in ln M that triggers a refresh of
+  the scattering rates (default 1e-5; 0 = every RHS call). The GW rates always follow M(t);
   the bosenova caps and Emax2 always use the initial alpha. With track_alpha the
   cloud's back-reaction on M and a also uses the occupation normalisation
   u = N/(G M_BH^2) correctly (without it the old approximation M ~ M_BH is kept:
@@ -91,11 +94,13 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     u0_override=nothing, t_start=0.0,
     gw_model=:nonrel, gw_min_rate_per_yr=1e-10, gw_literature=true,
     f_edd=0.0, acc_eta=0.1, acc_dlnM_dt=0.0, track_alpha=nothing, emax2_mode=nothing,
-    emax2_taper=0.01, save_factor=5.0, save_dlna=1e-3, save_rel_floor=1e-10, save_max_sub=100)
+    emax2_taper=0.01, save_factor=5.0, save_dlna=1e-3, save_rel_floor=1e-10, save_max_sub=100,
+    track_alpha_dlnM=(0.0025, 0.05), track_alpha_refresh=1e-5)
 
     # ============================================================================
     # PARAMETER SETUP & VALIDATION
     # ============================================================================
+    t_setup0 = time()
     alph = GNew .* M_BH .* mu
     (f_edd > 0 && acc_dlnM_dt > 0) && error("give either f_edd or acc_dlnM_dt, not both")
     accreting = f_edd > 0 || acc_dlnM_dt > 0
@@ -104,7 +109,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     end
     Mdot_acc = f_edd > 0 ? f_edd * eddington_rate(M_BH; eta=acc_eta) : 0.0  # M_sun/yr, constant part
     acc_mdot(M) = Mdot_acc + acc_dlnM_dt * M                                 # M_sun/yr
-    track_alpha = (track_alpha === nothing) ? accreting : track_alpha
+    track_alpha = (track_alpha === nothing) ? !spinone : track_alpha
     emax2_mode = (emax2_mode === nothing) ? (accreting ? :evolving : :fixed) : emax2_mode
     emax2_mode in (:fixed, :evolving) || error("emax2_mode must be :fixed or :evolving")
     if track_alpha && spinone
@@ -187,16 +192,16 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # ============================================================================
     # TRACK_ALPHA: rate grids in BH mass so that alpha can follow M(t)
     # ============================================================================
-    # M_lo allows for SR spin-down mass loss; M_hi bounds the mass reached by
+    # M_lo allows for SR spin-down mass loss (up to ~30% at large alpha); M_hi bounds the mass reached by
     # t_max. SR rates: log-spaced nodes (1%), linear in ln M between them.
     # Scattering rates: coarser nodes (5%), linear in ln(rate) vs ln M.
     M_hi = track_alpha ? 1.02 * (M_BH + Mdot_acc * t_max) * exp(acc_dlnM_dt * t_max) : M_BH
     lnM_lo, nM_sr, dlnM_sr, M_sr, sr_nodes, nM_sc, dlnM_sc, rates_sc = if track_alpha
-        M_lo = 0.8 * M_BH
-        n_sr = max(2, ceil(Int, log(M_hi / M_lo) / 0.01) + 1)
+        M_lo = 0.7 * M_BH
+        n_sr = max(2, ceil(Int, log(M_hi / M_lo) / track_alpha_dlnM[1]) + 1)
         d_sr = log(M_hi / M_lo) / (n_sr - 1)
         Ms_sr = exp.(log(M_lo) .+ d_sr .* (0:(n_sr - 1)))
-        n_sc = max(2, ceil(Int, log(M_hi / M_lo) / 0.05) + 1)
+        n_sc = max(2, ceil(Int, log(M_hi / M_lo) / track_alpha_dlnM[2]) + 1)
         d_sc = log(M_hi / M_lo) / (n_sc - 1)
         Ms_sc = exp.(log(M_lo) .+ d_sc .* (0:(n_sc - 1)))
         if debug
@@ -272,6 +277,22 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
          for k in rate_keys, j in 1:nM_sc]
     else
         zeros(0, 0)
+    end
+    # Current scattering rates under track_alpha, recomputed only when ln M has
+    # moved by more than 1e-5 since the last refresh (rates ~ alpha^p with p <~ 11,
+    # so the error is <~ 1e-4), instead of one exp per rate in every RHS call.
+    sc_rates_now = [r[4] for r in rate_cache]
+    sc_lnM = Ref(-Inf)
+    function refresh_sc_rates!(M)
+        lnM = log(M)
+        abs(lnM - sc_lnM[]) <= track_alpha_refresh && lnM == lnM && return
+        j, w = mass_bracket(M, nM_sc, dlnM_sc)
+        for kk in eachindex(sc_rates_now)
+            b = rate_cache[kk][4]
+            sc_rates_now[kk] = b == 0.0 ? 0.0 : sign(b) * exp((1 - w) * lnR_sc[kk, j] + w * lnR_sc[kk, j + 1])
+        end
+        sc_lnM[] = lnM
+        return
     end
 
     # ============================================================================
@@ -405,12 +426,10 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
             a_now = u_real[spinI]
             omH_now = a_now / (rP_now^2 + a_now^2)
             alph_now = GNew * u_real[massI] * mu
-            if track_alpha
-                jsc, wsc = mass_bracket(u_real[massI], nM_sc, dlnM_sc)
-            end
+            track_alpha && refresh_sc_rates!(u_real[massI])
             for (kk, (idxV, sgn, is_bh_final, base_rate, m_drag)) in enumerate(rate_cache)
-                if track_alpha && base_rate != 0.0
-                    base_rate = sign(base_rate) * exp((1 - wsc) * lnR_sc[kk, jsc] + wsc * lnR_sc[kk, jsc + 1])
+                if track_alpha
+                    base_rate = sc_rates_now[kk]
                 end
                 u_term_tot = 1.0
                 for j in 1:length(sgn)
@@ -742,8 +761,12 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=reltol, abstol=1e-10)
         prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=reltol, abstol=1e-10)
     end
+    t_solve0 = time()
     sol = solve(prob, TRBDF2(autodiff=false), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e6)
-    debug && println("solver retcode: ", sol.retcode, "  t_end = ", sol.t[end], " of ", t_max)
+    debug && println("solver retcode: ", sol.retcode, "  t_end = ", sol.t[end], " of ", t_max,
+                     "  [setup ", round(t_solve0 - t_setup0, digits=1), " s, integration ",
+                     round(time() - t_solve0, digits=1), " s, ", sol.stats.naccept, " steps, ",
+                     sol.stats.nf, " RHS calls]")
     # ============================================================================
     # EXTRACT AND PROCESS OUTPUT
     # ============================================================================
