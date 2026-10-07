@@ -52,6 +52,17 @@ Handles both standard multi-level mode and spinone single-level mode via the spi
   Under steady accretion the cloud sits at the cap (the spin is pinned just above
   the 211 threshold), and a hard on/off switch there makes the ODE crawl.
 - `emax2_taper`: width of that taper, as a fraction of the cap (default 0.01).
+- `save_factor`, `save_dlna`, `save_rel_floor`: save-on-change output. Besides the
+  log-spaced saveat grid, an accepted step is saved whenever, since the last
+  saved point, a relevant level's occupation changed by more than a factor
+  save_factor (default 5) or the spin changed by |d ln a| > save_dlna (default
+  1e-3). Relevant = within a factor save_rel_floor (default 1e-10) of the largest
+  occupation, so levels growing up from the seed floor do not trigger saves. The
+  solver already takes small steps where the state changes quickly; this only
+  records them, and when a single step changes the state by more than the
+  thresholds, extra points inside it are taken from the step's interpolant (as
+  for saveat), at most save_max_sub per step. No extra RHS evaluations; the
+  solution is unchanged. Set save_factor = save_dlna = Inf to switch it off.
 
 # Arguments - Spinone Mode (spinone=true)
 - `mu::Float64`: Axion mass (eV)
@@ -80,7 +91,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     u0_override=nothing, t_start=0.0,
     gw_model=:nonrel, gw_min_rate_per_yr=1e-10, gw_literature=true,
     f_edd=0.0, acc_eta=0.1, acc_dlnM_dt=0.0, track_alpha=nothing, emax2_mode=nothing,
-    emax2_taper=0.01)
+    emax2_taper=0.01, save_factor=5.0, save_dlna=1e-3, save_rel_floor=1e-10, save_max_sub=100)
 
     # ============================================================================
     # PARAMETER SETUP & VALIDATION
@@ -663,16 +674,59 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     def_spin_tol = 1e-3
     dt_guess = abs.((maximum(SR_rates) ./ hbar .* 3.15e7)^(-1) ./ 5.0)
     cback_lower = DiscreteCallback(check_lower_bound, affect_lower_bound!, save_positions=(false, false))
+
+    # Save-on-change (see docstring), in log space against the last saved point
+    # (saveat or callback). change_units = change in units of the thresholds; only
+    # the part of a level's change above save_rel_floor * (largest occupation)
+    # counts. First in the callback set: the other saving callbacks fire on exactly
+    # the fast steps, and would otherwise save the end point first and hide the
+    # step from this one. It never modifies u, so the integration is unaffected;
+    # points it adds inside a step can precede pending saveat points and are put in
+    # time order on output.
+    ln_save_factor = log(save_factor)
+    ln_save_floor = log(save_rel_floor)
+    function change_units(ua, ub)
+        thr = max(maximum(@view ua[1:idx_lvl]), maximum(@view ub[1:idx_lvl])) + ln_save_floor
+        dl = 0.0
+        for i in 1:idx_lvl
+            dl = max(dl, abs(max(ua[i], thr) - max(ub[i], thr)))
+        end
+        return max(dl / ln_save_factor, abs(ua[spinI] - ub[spinI]) / save_dlna)
+    end
+    function check_change(u, t, integrator)
+        sol = integrator.sol
+        isempty(sol.t) && return false
+        sol.t[end] >= t && return false                    # already saved at this time
+        return change_units(u, sol.u[end]) > 1
+    end
+    function affect_change!(integrator)
+        sol = integrator.sol
+        t1 = integrator.t
+        t0 = max(sol.t[end], integrator.tprev)             # the interpolant covers [tprev, t]
+        u0 = t0 == sol.t[end] ? sol.u[end] : integrator(t0)
+        n = min(ceil(Int, change_units(integrator.u, u0)), save_max_sub)
+        if n > 1 && integrator.saveiter == length(sol.t)
+            for k in 1:(n - 1)
+                tk = t0 + (t1 - t0) * k / n
+                push!(sol.t, tk)
+                push!(sol.u, copy(integrator(tk)))
+                integrator.saveiter += 1
+            end
+        end
+        u_modified!(integrator, false)                     # the end point is saved by save_positions
+    end
+    cback_change = DiscreteCallback(check_change, affect_change!, save_positions=(false, true))
+
     if spinone
         # Spinone: minimal callbacks
         cbackspin = DiscreteCallback(check_spin, affect_spin!, save_positions=(false, true))
-        cbset = CallbackSet(cbackspin, cback_lower)
+        cbset = CallbackSet(cback_change, cbackspin, cback_lower)
     else
         # Standard: full callback set
         callbackTIME = DiscreteCallback(time_limit_callback, affect_time!, save_positions=(false, false))
         cbackdt = DiscreteCallback(check_timescale, affect_timescale!, save_positions=(false, true))
         cbackspin = DiscreteCallback(check_spin, affect_spin!, save_positions=(false, true))
-        cbset = CallbackSet(cbackspin, cbackdt, callbackTIME, cback_lower)
+        cbset = CallbackSet(cback_change, cbackspin, cbackdt, callbackTIME, cback_lower)
 
     end
 
@@ -693,25 +747,30 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # ============================================================================
     # EXTRACT AND PROCESS OUTPUT
     # ============================================================================
+    # Save-on-change can add points inside a step before that step's saveat points;
+    # a stable sort restores time order (identity when nothing was added).
+    perm = sortperm(sol.t, alg=MergeSort)
+    sol_t = sol.t[perm]
+    sol_u = sol.u[perm]
     state_out = []
     for j in 1:idx_lvl
-        push!(state_out, [exp(sol.u[i][j]) for i in 1:length(sol.u)])
+        push!(state_out, [exp(sol_u[i][j]) for i in 1:length(sol_u)])
     end
 
 
-    spinBH = [exp(sol.u[i][spinI]) for i in 1:length(sol.u)]
-    MassB = [exp(sol.u[i][massI]) for i in 1:length(sol.u)]
+    spinBH = [exp(sol_u[i][spinI]) for i in 1:length(sol_u)]
+    MassB = [exp(sol_u[i][massI]) for i in 1:length(sol_u)]
     if return_all_info
-        return sol.t, state_out, modes, spinBH, MassB
+        return sol_t, state_out, modes, spinBH, MassB
     end
 
     # Check for incomplete evolution
     if spinone
-        if (sol.t[end] != t_max)
+        if (sol_t[end] != t_max)
             return 0.0, MassB[end]
         end
     else
-        if (sol.t[end] != t_max) && (spinBH[end] > stop_on_a)
+        if (sol_t[end] != t_max) && (spinBH[end] > stop_on_a)
             return 0.0, MassB[end]
         end
     end

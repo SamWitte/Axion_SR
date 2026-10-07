@@ -55,6 +55,15 @@ function parse_commandline()
             arg_type = Float64
             default  = 0.1
             help     = "Radiative efficiency in Mdot_Edd (only used if f_edd > 0)"
+        "--save_factor"
+            arg_type = Float64
+            default  = 5.0
+            help     = "Also save a point whenever a relevant level's occupation changed by more than this factor " *
+                       "since the last saved point (Inf = off; see solve_system)"
+        "--save_dlna"
+            arg_type = Float64
+            default  = 1e-3
+            help     = "Also save a point whenever |d ln a| since the last saved point exceeds this (Inf = off)"
         "--resume"
             action   = :store_true
             help     = "Continue from last row of existing Time_/States_/Spin_/MassBH_ .dat"
@@ -270,6 +279,8 @@ timeT, StatesOut, modes_out, spin, massB = @time solve_system(
     gw_model        = Symbol(parsed["gw_model"]),
     f_edd           = f_edd,
     acc_eta         = acc_eta,
+    save_factor     = parsed["save_factor"],
+    save_dlna       = parsed["save_dlna"],
 )
 
 if do_resume

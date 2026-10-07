@@ -32,7 +32,9 @@ s = ArgParseSettings()
     "--f_a";      arg_type = Float64; default = 1e18;  help = "decay constant [GeV]"
     "--Nmax";     arg_type = Int;     default = 3
     "--ids";      arg_type = Int;     nargs = '*';     help = "history ids (default: all hist_*.txt in rundir)"
-    "--n_out";    arg_type = Int;     default = 200;   help = "output rows per segment (log-spaced in segment time)"
+    "--n_out";    arg_type = Int;     default = 200;   help = "output rows per segment on a log grid in segment time, plus every row where the state changed (--save_factor, --save_dlna)"
+    "--save_factor"; arg_type = Float64; default = 5.0; help = "keep a row once a relevant level's Mc/M changed by this factor since the last kept row"
+    "--save_dlna";   arg_type = Float64; default = 1e-3; help = "keep a row once |d ln a| since the last kept row exceeds this"
     "--n_times";  arg_type = Int;     default = 2000;  help = "solver save points per segment"
     "--overwrite"; action = :store_true
 end
@@ -54,16 +56,47 @@ function read_history(path)
     return hdr, isempty(rows) ? zeros(0, 3) : permutedims(hcat(rows...))
 end
 
-"""Up to n indices of t (local segment time), log-spaced, plus first and last."""
-function thin(t, n)
-    length(t) <= n && return collect(eachindex(t))
+"""
+Rows of one segment to keep: up to n on a log grid in segment time t, the first
+and last, and enough others that consecutive kept rows differ by at most a
+factor `factor` in every level within rel_floor of the largest occupation and by
+at most dlna in ln a, wherever the saved rows allow it (row k is kept when the
+next row would exceed that against the last kept row; the solver itself saves
+such points, see solve_system).
+"""
+function thin(t, st, sp, n; factor=5.0, dlna=1e-3, rel_floor=1e-10)
+    nt = length(t)
+    nt <= 2 && return collect(1:nt)
+    grid = Set{Int}()
     tp = t[t .> 0]
-    isempty(tp) && return [1, length(t)]
-    targets = exp10.(range(log10(minimum(tp)), log10(t[end]), length=n))
-    return unique(vcat(1, [clamp(searchsortedfirst(t, x), 1, length(t)) for x in targets], length(t)))
+    if !isempty(tp)
+        for x in exp10.(range(log10(minimum(tp)), log10(t[end]), length=n))
+            push!(grid, clamp(searchsortedfirst(t, x), 1, nt))
+        end
+    end
+    lnf, lnfl = log(factor), log(rel_floor)
+    L(k) = [log(max(s[k], 1e-300)) for s in st]
+    lna(k) = log(max(sp[k], 1e-300))
+    function exceeds(a, la, b, lb)
+        thr = max(maximum(a), maximum(b)) + lnfl
+        abs(la - lb) > dlna || any(abs(max(a[i], thr) - max(b[i], thr)) > lnf for i in eachindex(a))
+    end
+    keep = Int[1]
+    last, last_a = L(1), lna(1)
+    nxt = L(2)
+    for k in 2:(nt - 1)
+        cur = nxt
+        nxt = L(k + 1)
+        if k in grid || exceeds(last, last_a, nxt, lna(k + 1))
+            push!(keep, k)
+            last, last_a = cur, lna(k)
+        end
+    end
+    push!(keep, nt)
+    return keep
 end
 
-function evolve_history(id, rundir, mu, fa, Nmax; n_out=200, n_times=2000)
+function evolve_history(id, rundir, mu, fa, Nmax; n_out=200, n_times=2000, save_factor=5.0, save_dlna=1e-3)
     hdr, episodes = read_history(joinpath(rundir, @sprintf("hist_%04d.txt", id)))
     age_today = parse(Float64, hdr["age_today_yr"])
     M = parse(Float64, hdr["M_seed_Msun"])
@@ -92,6 +125,7 @@ function evolve_history(id, rundir, mu, fa, Nmax; n_out=200, n_times=2000)
             tt, st, md, sp, mb = @suppress_out solve_system(mu, fa, a, M, dur;
                 return_all_info=true, n_times=n_times, Nmax=Nmax, u0_override=u0,
                 acc_dlnM_dt=on ? r_on : 0.0, track_alpha=true, emax2_mode=:evolving,
+                save_factor=save_factor, save_dlna=save_dlna,
                 impose_low_cut=1e-100, eq_threshold=1e-100, abstol=1e-30, non_rel=false,
                 high_p=true, cheby=true, N_pts_interp=100, N_pts_interpL=100)
         catch err
@@ -100,7 +134,7 @@ function evolve_history(id, rundir, mu, fa, Nmax; n_out=200, n_times=2000)
         end
         modes = md
         Mnorm = M
-        for k in thin(tt, n_out)
+        for k in thin(tt, st, sp, n_out; factor=save_factor, dlna=save_dlna)
             Mk = mb[k]
             # cloud mass of level i: N_i mu = u_i G M_norm^2 mu  [M_sun]; written as a fraction of M
             push!(rows, vcat(t1 + tt[k], Mk, sp[k], [st[i][k] * GNew * mu * Mnorm^2 / Mk for i in eachindex(st)]))
@@ -146,7 +180,8 @@ for id in ids
         continue
     end
     st, nseg, M, a, wall = evolve_history(id, rundir, args["mu"], args["f_a"], args["Nmax"];
-                                          n_out=args["n_out"], n_times=args["n_times"])
+                                          n_out=args["n_out"], n_times=args["n_times"],
+                                          save_factor=args["save_factor"], save_dlna=args["save_dlna"])
     @printf("hist %04d: %s, %d segments, M_end = %.4g M_sun, a_end = %.4f, %.0f s\n", id, st, nseg, M, a, wall)
     flush(stdout)
 end
