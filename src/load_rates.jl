@@ -2,6 +2,12 @@ using Glob
 include("state_utils.jl")
 include(joinpath(@__DIR__, "Numerics", "gw_rates.jl"))
 
+# Leaver rate files (rate_sve/*_LvrHc_.dat), read once per session: solve_system
+# with track_alpha evaluates the scattering rates on a grid of BH masses.
+if !@isdefined(LVR_FILE_CACHE)
+    const LVR_FILE_CACHE = Dict{String, Any}()
+end
+
 # Scattering (BH / Inf) rate coefficients. GW annihilations and transitions are
 # not in this dictionary: they come from Numerics/gw_rates.jl (gw_build_cache /
 # gw_rhs!) inside solve_system.
@@ -170,9 +176,12 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
         for i in 1:length(rate_list[:,1])
             nm_tag = string(rate_list[i, 1]) * "_" * string(rate_list[i, 2]) * "^" * string(rate_list[i, 3]) * "^" * string(rate_list[i, 4])
             fileT = dirN * string(rate_list[i, 1]) * "_" * string(rate_list[i, 2]) * "_" * string(rate_list[i, 3]) * "_" * string(rate_list[i, 4]) * ftag * ".dat"
-            if isfile(fileT)
-                data = open(readdlm, fileT)
-                data = data[data[:,2] .!= 0.0, :]
+            data = get!(LVR_FILE_CACHE, fileT) do
+                isfile(fileT) || return nothing
+                d = open(readdlm, fileT)
+                d[d[:, 2] .!= 0.0, :]
+            end
+            if data !== nothing
                 
                 rate_out = 0.0
                 if alph .<= maximum(data[:,1])
