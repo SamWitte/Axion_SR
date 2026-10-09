@@ -44,22 +44,10 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
             get_state_idx(st, Nmax) == -1 && error("rate_input $(rate_input): state $(st) is not among the Nmax = $(Nmax) modes; increase Nmax")
         end
     end
-    cnt = 1
-    
-    kill_lvls = []
-    for nn in 1:Nmax, l in 1:(nn - 1),  m in 1:l
-        if SR_rates[cnt] <= 0
-            push!(kill_lvls, [nn, l, m])
-        end
-    end
-    keep_idx = []
-    for i in 1:length(rate_list[:,1])
-        if !((rate_list[i, 1] in kill_lvls)||(rate_list[i, 2] in kill_lvls)||(rate_list[i, 3] in kill_lvls))
-            push!(keep_idx, i)
-        end
-    end
-    rate_list = rate_list[keep_idx, :]
-    
+    # (SR_rates is no longer used: the former pruning of channels involving non-superradiant levels never
+    #  removed anything, and a static t = 0 pruning would drop physical channels once spin/alpha evolve.
+    #  The argument is kept so existing callers do not change.)
+
     Drate = Dict()
     
     if non_rel && self_grav && !SG_MISSING_WARNED[]
