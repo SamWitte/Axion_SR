@@ -9,23 +9,30 @@ companion encounter first?
 Per realization
 ---------------
 1. SMBH history. Seed at z_seed, grow by episodic accretion at fixed radiative
-   efficiency eps (Eddington ratio lam_on while ON), conditioned so that
-   M(z=0) = M_today. Spin follows Bardeen thin-disk accretion (ISCO specific
-   energy & angular momentum), either coherent or chaotic (random disk sense
-   per episode).
+   efficiency eps (Eddington ratio lam_on while ON). Spin follows Bardeen
+   thin-disk accretion (ISCO specific energy & angular momentum), either
+   coherent or chaotic (random disk sense per episode). Two modes:
+     history_mode="conditioned": M(z=0) = M_today is drawn first and the duty
+       cycle is solved for;
+     history_mode="forward": episodes of fixed length t_ep at a duty cycle drawn
+       from `duty`; the history is kept only if M(z=0) lands in logM_today
+       (rejection sampling; superradiance is ignored for this check).
 2. Injection. Pick a time inside an active AGN episode within the observing
    window z < z_obs_max. M and a are frozen there (inspiral << Salpeter time).
 3. Companion. Seed at r0 drawn from dN/dln r ~ r^r0_slope on [r0_min, r0_max]
-   (units of r_g), migrate via Type I / Type II torques in a steady alpha-disk
-   fed at the SMBH accretion rate, plus GW reaction. When the episode ends the
-   disk is removed and the orbit evolves by GWs only.
-4. Resonances. For every populated state in Params.states, all FINE (same n,
-   different l) and HYPERFINE (same n, l, different m) transitions allowed by
-   the tidal selection rules for multipoles l_stars are computed from the
-   hydrogenic + fine + hyperfine spectrum (fixed boson mass mu):
-   Omega_res = Delta(omega) / Delta(m). Bohr (Delta n != 0) transitions are
-   excluded. Every crossing time is recorded (see crossing_table), and
-   plot_gallery shows f_orb(t) against all resonance lines.
+   (units of r_g), or, if `channels` is set, first pick a formation channel
+   (e.g. disk capture or in-situ formation) by weight and draw r0 on its range.
+   Migrate via Type I / Type II torques in a steady alpha-disk fed at the SMBH
+   accretion rate, plus GW reaction. When the episode ends the disk is removed
+   and the orbit evolves by GWs only.
+4. Resonances. For every populated state in Params.states, the transitions in
+   `kinds` allowed by the tidal selection rules for multipoles l_stars are
+   computed from the hydrogenic + fine + hyperfine spectrum (fixed boson mass
+   mu): Omega_res = Delta(omega) / Delta(m). HYPERFINE: same n, l, different m;
+   FINE: same n, different l; BOHR: different n (final n up to n_final_max).
+   Every crossing time is recorded (see crossing_table), plot_gallery shows
+   f_orb(t) against all resonance lines, and plot_first_resonance_hist gives
+   the distribution of the first transition crossed.
 
 Baseline: superradiance OFF (the spectrum is used kinematically only).
 Generalized: pass a CloudModel to evolve M, a and level masses self-
@@ -128,7 +135,9 @@ class Params:
     mu_eV: float = 1.3e-17              # alpha ~ 0.1 at 1e6 Msun
     # states known to be populated, |n l m> with m along the BH spin
     states: tuple = ((2, 1, 1), (3, 2, 2), (3, 1, 1), (3, 0, 0))
-    kinds: tuple = ("fine", "hyperfine")   # Bohr (Delta n != 0) excluded
+    kinds: tuple = ("fine", "hyperfine")   # add "bohr" for Delta n != 0
+    n_final_max: int = 0                # bohr: highest final n; 0 = l + max(l_stars) + 2 per
+                                        # initial state (includes the outermost line of every Delta m)
     final_in_set_only: bool = False     # True: only transitions between listed states
     l_stars: tuple = (2,)               # tidal multipoles kept (2 = quadrupole)
     equatorial: bool = True             # companion orbit in the spin plane:
@@ -144,6 +153,8 @@ class Params:
     logM_today: tuple = (5.0, 7.0)
     a_seed: tuple = (0.0, 0.5)
     accretion: str = "coherent"         # or "chaotic"
+    history_mode: str = "conditioned"   # or "forward" (see module docstring)
+    duty: tuple = (0.01, 0.05)          # forward: duty-cycle range, uniform per history
     z_obs_max: float = 3.0
     # disk
     alpha_ss: float = 0.01
@@ -153,13 +164,19 @@ class Params:
     r0_min: float = 1e3                 # [r_g]
     r0_max: float = 1e5
     r0_slope: float = 0.0               # dN/dlnr ~ r^slope (0 = log-uniform)
+    channels: tuple = ()                # ((name, r0_min, r0_max, weight), ...) [r_g];
+                                        # empty: one channel on [r0_min, r0_max]
     t_max_inspiral: float = 1 * Gyr
     n_grid: int = 3000
 
 
 # ---------------------------------------------------------------- SMBH history
 def make_history(rng, p):
-    """Episodic growth conditioned on M_today. Returns dict or None."""
+    """Episodic growth history (see history_mode). Returns dict or None."""
+    if p.history_mode == "forward":
+        return _make_history_forward(rng, p)
+    if p.history_mode != "conditioned":
+        raise ValueError(f"unknown history_mode {p.history_mode!r}")
     t_seed = t_of_z(p.z_seed)
     T = T0 - t_seed
     lnMs = np.log(10 ** rng.uniform(*p.logM_seed) * Msun)
@@ -181,6 +198,33 @@ def make_history(rng, p):
         a[k + 1] = spin_after(a[k], s[k], dlnM_ep)
     return dict(starts=starts, t_ep=t_ep, s=s, a=a, lnMs=lnMs, lnMt=lnMt,
                 dlnM_ep=dlnM_ep, lam_bar=lam_bar, n_ep=n_ep)
+
+
+def _make_history_forward(rng, p):
+    """Seed -> episodes of length t_ep at a duty cycle drawn from p.duty (one
+    episode per slot of length T/n_ep, start uniform inside the slot) ->
+    keep only if M(z=0) is in p.logM_today. Returns dict or None."""
+    t_seed = t_of_z(p.z_seed)
+    T = T0 - t_seed
+    lnMs = np.log(10 ** rng.uniform(*p.logM_seed) * Msun)
+    duty = rng.uniform(*p.duty)
+    n_ep = max(1, int(round(T * duty / p.t_ep)))
+    P = T / n_ep
+    if P < p.t_ep:
+        raise ValueError(f"duty cycle {duty} too large for t_ep = {p.t_ep / Myr} Myr")
+    dlnM_ep = p.lam_on * (1 - p.eps) / (p.eps * T_EDD) * p.t_ep
+    lnMt = lnMs + n_ep * dlnM_ep
+    if not p.logM_today[0] <= np.log10(np.exp(lnMt) / Msun) <= p.logM_today[1]:
+        return None
+    starts = t_seed + np.arange(n_ep) * P + rng.uniform(0, P - p.t_ep, n_ep)
+    s = np.ones(n_ep) if p.accretion == "coherent" else rng.choice([-1.0, 1.0], n_ep)
+    a = np.empty(n_ep + 1)
+    a[0] = rng.uniform(*p.a_seed)
+    for k in range(n_ep):
+        a[k + 1] = spin_after(a[k], s[k], dlnM_ep)
+    lam_bar = p.lam_on * n_ep * p.t_ep / T
+    return dict(starts=starts, t_ep=p.t_ep, s=s, a=a, lnMs=lnMs, lnMt=lnMt,
+                dlnM_ep=dlnM_ep, lam_bar=lam_bar, n_ep=n_ep, duty=n_ep * p.t_ep / T)
 
 
 def draw_injection(rng, hist, p):
@@ -258,37 +302,48 @@ def tidal_allowed(l, lp, dm, l_stars):
 
 
 def transitions(alpha, a, p):
-    """Fine (same n, different l) and hyperfine (same n, l; different m)
-    transitions out of every state in p.states, passing the tidal selection
-    rules for p.l_stars. Returns list of dicts with
+    """Transitions of the kinds in p.kinds out of every state in p.states,
+    passing the tidal selection rules for p.l_stars: hyperfine (same n, l;
+    different m), fine (same n, different l) and Bohr (different n; final n up
+    to p.n_final_max, or l + max(l_stars) + 2 if that is 0). Returns list of
+    dicts with
       init, final, kind, Omega (c^3/GM, signed: >0 co-, <0 counter-rotating),
       r_res (r_g), l_star (lowest multipole that allows it)."""
     out = []
+    bohr = "bohr" in p.kinds
     for (n, l, m) in p.states:
         e0 = eps_level(n, l, m, alpha, a)
-        for l2 in range(n):
-            for m2 in range(-l2, l2 + 1):
-                dm = m2 - m
-                kind = "fine" if l2 != l else "hyperfine"
-                if dm == 0 or kind not in p.kinds:
-                    continue
-                if p.final_in_set_only and (n, l2, m2) not in p.states:
-                    continue
-                ls = [L for L in p.l_stars if abs(l - l2) <= L <= l + l2
-                      and (l + l2 + L) % 2 == 0 and abs(dm) <= L
-                      and (not p.equatorial or (L + dm) % 2 == 0)]
-                if not ls:
-                    continue
-                Om = alpha * (eps_level(n, l2, m2, alpha, a) - e0) / dm
-                if Om == 0:
-                    continue
-                out.append(dict(init=(n, l, m), final=(n, l2, m2), kind=kind,
-                                Omega=Om, r_res=abs(Om) ** (-2 / 3), l_star=min(ls)))
+        n_top = max(n, p.n_final_max or l + max(p.l_stars) + 2) if bohr else n
+        for n2 in range(1, n_top + 1):
+            if n2 != n and not bohr:
+                continue
+            for l2 in range(n2):
+                for m2 in range(-l2, l2 + 1):
+                    dm = m2 - m
+                    kind = "bohr" if n2 != n else ("fine" if l2 != l else "hyperfine")
+                    if dm == 0 or kind not in p.kinds:
+                        continue
+                    if p.final_in_set_only and (n2, l2, m2) not in p.states:
+                        continue
+                    ls = [L for L in p.l_stars if abs(l - l2) <= L <= l + l2
+                          and (l + l2 + L) % 2 == 0 and abs(dm) <= L
+                          and (not p.equatorial or (L + dm) % 2 == 0)]
+                    if not ls:
+                        continue
+                    Om = alpha * (eps_level(n2, l2, m2, alpha, a) - e0) / dm
+                    if Om == 0:
+                        continue
+                    out.append(dict(init=(n, l, m), final=(n2, l2, m2), kind=kind,
+                                    Omega=Om, r_res=abs(Om) ** (-2 / 3), l_star=min(ls)))
     return out
 
 
 def ket(s):
-    return "|" + "".join(str(x) if x >= 0 else "̅" + str(-x) for x in s) + "⟩"
+    return "|" + "".join(str(x) if x >= 0 else str(-x) + "̅" for x in s) + "⟩"
+
+
+def ket_tex(s):
+    return r"$|" + "".join(str(x) if x >= 0 else r"\bar{%d}" % -x for x in s) + r"\rangle$"
 
 
 def ket_ascii(s):
@@ -326,12 +381,13 @@ def realize_from_injection(rng, p, inj, populated=None):
     rg = G * M / c**2
     tg = G * M / c**3
     m = p.m_comp_Msun * Msun
+    channel, r_lo, r_hi = draw_channel(rng, p)
     u = rng.uniform()
     if p.r0_slope == 0:
-        r0 = p.r0_min * (p.r0_max / p.r0_min) ** u
+        r0 = r_lo * (r_hi / r_lo) ** u
     else:
         k = p.r0_slope
-        r0 = (p.r0_min**k + u * (p.r0_max**k - p.r0_min**k)) ** (1 / k)
+        r0 = (r_lo**k + u * (r_hi**k - r_lo**k)) ** (1 / k)
     r_stop = r_isco(sigma * min(a, A_MAX))
     t, r, stalled = inspiral(M, m, r0 * rg, r_stop * rg, inj["t_disk"], p)
     alpha = alpha_of(M, p.mu_eV)
@@ -358,6 +414,9 @@ def realize_from_injection(rng, p, inj, populated=None):
         T["crossed"] = reached and T["init_populated"]
     crossed = sorted([T for T in trans if T["crossed"]], key=lambda T: T["t_cross"])
     first = crossed[0] if crossed else None
+    # lines degenerate with the first one (same init, same frequency) are crossed together
+    first_group = [T for T in crossed if T["init"] == first["init"]
+                   and abs(T["f_res"] / first["f_res"] - 1) < 1e-6] if first else []
     if not live:
         outcome = "no_SR_state"
     elif first is not None:
@@ -369,10 +428,30 @@ def realize_from_injection(rng, p, inj, populated=None):
     Omega = np.sqrt(G * M / r**3)
     t_seed = t_of_z(p.z_seed)
     return dict(age_inj=inj["t_inj"] - t_seed, live_states=live, M=M, a=a, sigma=sigma,
-                alpha=alpha, r0=r0, r_end=r_end, stalled=stalled, outcome=outcome,
-                first=first, crossed=crossed, transitions=trans, t=t,
+                alpha=alpha, r0=r0, channel=channel, r_end=r_end, stalled=stalled, outcome=outcome,
+                first=first, first_group=first_group, crossed=crossed, transitions=trans, t=t,
                 f_orb=Omega / (2 * np.pi), sr_ok=sr_ok, t_inj=inj["t_inj"],
                 cloud=inj.get("cloud"))
+
+
+def draw_channel(rng, p):
+    """(name, r0_min, r0_max) of the companion's formation channel. Draws from
+    the rng only if p.channels is set (so legacy runs reproduce exactly)."""
+    if not p.channels:
+        return "default", p.r0_min, p.r0_max
+    w = np.array([ch[3] for ch in p.channels], float)
+    name, lo, hi, _ = p.channels[rng.choice(len(w), p=w / w.sum())]
+    return name, lo, hi
+
+
+def first_label(R, ascii=False):
+    """Name of a realization's first crossed transition (degenerate lines
+    joined, e.g. 322->320/32m2), or its non-resonant outcome."""
+    if not R["first_group"]:
+        return R["outcome"]
+    k = ket_ascii if ascii else ket
+    finals = "/".join(k(T["final"]) for T in R["first_group"])
+    return f"{k(R['first']['init'])}{'->' if ascii else chr(0x2192)}{finals}"
 
 
 def _sr_condition(state, alpha, a):
@@ -388,7 +467,7 @@ def crossing_table(results):
     for i, R in enumerate(results):
         for T in R["crossed"]:
             rows.append(dict(realization=i, M_Msun=R["M"] / Msun, a=R["a"], alpha=R["alpha"],
-                             sigma=R["sigma"], init=ket_ascii(T["init"]),
+                             sigma=R["sigma"], channel=R["channel"], init=ket_ascii(T["init"]),
                              final=ket_ascii(T["final"]), kind=T["kind"], l_star=T["l_star"],
                              r_res_rg=T["r_res"], f_res_Hz=T["f_res"],
                              t_cross_yr=T["t_cross"] / yr,
@@ -545,8 +624,9 @@ def export_histories(N, p, outdir, seed=0):
     os.makedirs(outdir, exist_ok=True)
     rng = np.random.default_rng(seed)
     t_seed = t_of_z(p.z_seed)
-    i = 0
+    i = tries = 0
     while i < N:
+        tries += 1
         hist = make_history(rng, p)
         if hist is None:
             continue
@@ -555,6 +635,7 @@ def export_histories(N, p, outdir, seed=0):
             z_seed=p.z_seed, age_today_yr=(T0 - t_seed) / yr,
             M_seed_Msun=float(np.exp(hist["lnMs"]) / Msun),
             M_today_target_Msun=float(np.exp(hist["lnMt"]) / Msun),
+            history_mode=p.history_mode, duty=float(hist["n_ep"] * hist["t_ep"] / (T0 - t_seed)),
             a_seed=float(hist["a"][0]), eps=p.eps, lam_on=p.lam_on,
             t_Edd_yr=T_EDD / yr,
             dlnM_dt_on_per_yr=p.lam_on * (1 - p.eps) / (p.eps * T_EDD) * yr,
@@ -575,6 +656,7 @@ def export_histories(N, p, outdir, seed=0):
             for e in d["episodes"]:
                 fh.write(f"{e['start_age_yr']!r} {e['end_age_yr']!r} {e['s']}\n")
         i += 1
+    return tries
 
 
 def _hist_from_json(d):
@@ -667,9 +749,17 @@ def write_evolution_csv(track, path, z_seed):
 # ======================================================================
 # Plotting / demo
 # ======================================================================
-KIND_STYLE = {"fine": dict(color="C2", ls="-"), "hyperfine": dict(color="C3", ls="--")}
-OUTCOME_COL = {"hyperfine": "C3", "fine": "C2", "stalled": "0.5",
-               "none_ahead": "0.8", "no_SR_state": "0.3"}
+# Transition kinds take the first three categorical slots of the validated
+# reference palette (CVD-safe as a set); non-resonant outcomes are grays.
+KIND_COL = {"hyperfine": "#2a78d6", "fine": "#eb6834", "bohr": "#1baf7a"}
+KIND_STYLE = {"hyperfine": dict(color=KIND_COL["hyperfine"], ls="--"),
+              "fine": dict(color=KIND_COL["fine"], ls="-"),
+              "bohr": dict(color=KIND_COL["bohr"], ls="-.")}
+OUTCOME_COL = dict(KIND_COL, stalled="#52514e", none_ahead="#c3c2b7", no_SR_state="#898781")
+OUTCOMES = ["hyperfine", "fine", "bohr", "stalled", "none_ahead", "no_SR_state"]
+OUTCOME_NAME = {"stalled": "stalled (no line reached)", "none_ahead": "no line ahead",
+                "no_SR_state": "no cloud"}
+INK, INK2, MUTED, GRID, AXIS = "#0b0b0b", "#52514e", "#898781", "#e1e0d9", "#c3c2b7"
 
 
 def _group_lines(trans, rtol=1e-6):
@@ -743,8 +833,8 @@ def plot_gallery(results, p, fname, n_panels=6, require_crossing=True):
         ax.set_ylabel(r"$f_{\rm orb}$ [Hz]", fontsize=8)
     for ax in axs.flat[len(pick):]:
         ax.axis("off")
-    axs.flat[0].plot([], [], **KIND_STYLE["fine"], label="fine")
-    axs.flat[0].plot([], [], **KIND_STYLE["hyperfine"], label="hyperfine")
+    for k in p.kinds:
+        axs.flat[0].plot([], [], **KIND_STYLE[k], label=k)
     axs.flat[0].legend(fontsize=8, loc="upper left")
     fig.suptitle(f"States: {', '.join(ket(s) for s in p.states)}   "
                  f"μ={p.mu_eV:.1e} eV,  l*∈{p.l_stars}", fontsize=10)
@@ -763,8 +853,8 @@ def plot_baseline(results, p, fname, n_tracks=40):
                        color=KIND_STYLE[T["kind"]]["color"])
     ax[0].set_xlabel("black-hole age [Gyr]")
     ax[0].set_ylabel(r"$f_{\rm orb}=\Omega/2\pi$ [Hz]")
-    ax[0].set_title(f"Orbital tracks (dots: all fine/hyperfine crossings), μ={p.mu_eV:.1e} eV")
-    kinds = ["hyperfine", "fine", "stalled", "none_ahead", "no_SR_state"]
+    ax[0].set_title(f"Orbital tracks (dots: all {'/'.join(p.kinds)} crossings), μ={p.mu_eV:.1e} eV")
+    kinds = OUTCOMES
     frac = [np.mean([R["outcome"] == k for R in results]) for k in kinds]
     ax[1].bar(kinds, frac, color=[OUTCOME_COL[k] for k in kinds])
     ax[1].set_ylabel("fraction")
@@ -772,6 +862,107 @@ def plot_baseline(results, p, fname, n_tracks=40):
     ax[1].tick_params(axis="x", rotation=30)
     fig.tight_layout()
     fig.savefig(fname, dpi=140)
+
+
+def _hbar(ax, y, w, h, color, r_px=4.0):
+    """Bar on [0, w] x [y - h/2, y + h/2] with a rounded data end (radius r_px
+    on screen) and a square baseline end. Call once limits and layout are final."""
+    from matplotlib.patches import FancyBboxPatch, Rectangle
+    if w <= 0:
+        return
+    bb = ax.get_window_extent()
+    (x0, x1), (y0, y1) = ax.get_xlim(), ax.get_ylim()
+    rx = r_px * (x1 - x0) / bb.width
+    ry = min(r_px * abs(y1 - y0) / bb.height, h / 2)
+    if w <= 2 * rx:
+        ax.add_patch(Rectangle((0, y - h / 2), w, h, fc=color, ec="none", zorder=2))
+        return
+    ax.add_patch(FancyBboxPatch((0, y - h / 2), w, h, boxstyle=f"round,pad=0,rounding_size={rx}",
+                                mutation_aspect=ry / rx, fc=color, ec="none", zorder=2))
+    ax.add_patch(Rectangle((0, y - h / 2), rx, h, fc=color, ec="none", zorder=2))
+
+
+def plot_first_resonance_hist(results, p, fname, title_extra=""):
+    """Horizontal histogram of the first transition each companion crosses,
+    one bar per transition (colored by kind), non-resonant outcomes below.
+    One panel for all companions plus one per formation channel; bars give the
+    fraction of that panel's companions, with counts at the tips."""
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Patch
+    if not results:
+        return
+    labels = [first_label(R) for R in results]
+    kind_of = {first_label(R): R["outcome"] for R in results}
+    res_rows = sorted({l for l, R in zip(labels, results) if R["first_group"]},
+                      key=lambda l: (-labels.count(l), l))
+    out_rows = [o for o in ("stalled", "none_ahead", "no_SR_state") if o in labels]
+    rows = res_rows + ([None] if res_rows and out_rows else []) + out_rows   # None = spacer
+    channels = sorted({R["channel"] for R in results})
+    panels = [("all companions", results)]
+    if len(channels) > 1:
+        panels += [(ch, [R for R in results if R["channel"] == ch]) for ch in channels]
+
+    def tick(l):
+        if l is None:
+            return ""
+        if l in OUTCOME_NAME:
+            return OUTCOME_NAME[l]
+        R = next(R for R in results if first_label(R) == l)
+        return (ket_tex(R["first"]["init"]) + r" $\rightarrow$ "
+                + " / ".join(ket_tex(T["final"]) for T in R["first_group"]))
+
+    row_h = 0.3
+    fig, axs = plt.subplots(1, len(panels), sharey=True, squeeze=False,
+                            figsize=(3.3 + 2.6 * len(panels), 1.5 + row_h * len(rows)))
+    axs = axs[0]
+    fig.patch.set_facecolor("#fcfcfb")
+    y = np.arange(len(rows))[::-1].astype(float)
+    fracs = []
+    for name, sub in panels:
+        sl = [first_label(R) for R in sub]
+        cnt = [sl.count(l) if l is not None else 0 for l in rows]
+        fracs.append((cnt, np.array(cnt) / max(len(sub), 1)))
+    x_hi = 1.18 * max(max(fr.max() for _, fr in fracs), 1e-3)      # common scale across panels
+    for ax, (name, sub) in zip(axs, panels):
+        ax.set_facecolor("#fcfcfb")
+        ax.set_xlim(0, x_hi)
+        ax.set_ylim(-0.7, len(rows) - 0.3)
+        ax.set_title(f"{name}  (N = {len(sub)})", fontsize=9, color=INK, loc="left")
+        ax.set_xlabel("fraction of companions", fontsize=8, color=INK2)
+        ax.grid(axis="x", color=GRID, lw=0.8, zorder=0)
+        ax.tick_params(axis="x", labelsize=7.5, colors=MUTED, length=0)
+        ax.tick_params(axis="y", length=0)
+        for side in ("top", "right", "bottom"):
+            ax.spines[side].set_visible(False)
+        ax.spines["left"].set_color(AXIS)
+    axs[0].set_yticks(y)
+    axs[0].set_yticklabels([tick(l) for l in rows], fontsize=8.5, color=INK)
+    tot = {k: np.mean([R["outcome"] == k for R in results]) for k in KIND_COL}
+    nonres = 1 - sum(tot.values())
+    handles = [Patch(fc=KIND_COL[k], label=f"{'Bohr' if k == 'bohr' else k}  {100 * tot[k]:.0f}%")
+               for k in KIND_COL if k in p.kinds]
+    handles.append(Patch(fc=MUTED, label=f"no resonance  {100 * nonres:.0f}%"))
+    H = fig.get_figheight()
+    nbh = len({R.get("id", i) for i, R in enumerate(results)})
+    fig.text(0.01, 1 - 0.12 / H, "First resonance crossed by each companion", ha="left", va="top",
+             fontsize=10.5, color=INK, weight="bold")
+    fig.text(0.01, 1 - 0.34 / H, f"{len(results)} companions around {nbh} black holes,  "
+             f"μ = {p.mu_eV:.2g} eV,  l* ∈ {{{', '.join(map(str, p.l_stars))}}}{title_extra}",
+             ha="left", va="top", fontsize=8.5, color=INK2)
+    fig.legend(handles=handles, loc="upper left", ncol=len(handles), frameon=False, fontsize=8.5,
+               bbox_to_anchor=(0.005, 1 - 0.52 / H), handlelength=1.2, labelcolor=INK2,
+               columnspacing=1.4, borderaxespad=0)
+    fig.tight_layout(rect=(0, 0, 1, 1 - 0.8 / H))
+    for ax, (cnt, fr) in zip(axs, fracs):          # bars after the layout is final
+        x1 = ax.get_xlim()[1]
+        for yy, l, c, f in zip(y, rows, cnt, fr):
+            if l is None or c == 0:
+                continue
+            col = KIND_COL.get(kind_of[l], MUTED)
+            _hbar(ax, yy, f, 0.62, col)
+            ax.text(f + 0.012 * x1, yy, str(c), va="center", ha="left", fontsize=7.5, color=INK2)
+    fig.savefig(fname, dpi=150, facecolor=fig.get_facecolor())
+    plt.close(fig)
 
 
 def plot_cloud_track(track, fname):
@@ -798,7 +989,7 @@ if __name__ == "__main__":
                l_stars=(2, 3))
     res = run_monte_carlo(2000, p, seed=1)
     print("outcome fractions:")
-    for k in ["hyperfine", "fine", "stalled", "none_ahead", "no_SR_state"]:
+    for k in OUTCOMES:
         print(f"  {k:16s} {np.mean([R['outcome'] == k for R in res]):.3f}")
     rows = crossing_table(res)
     with open("crossings.csv", "w", newline="") as fh:
