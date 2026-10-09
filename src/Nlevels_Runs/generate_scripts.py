@@ -7,7 +7,7 @@ parameter sweep.
 Grid:
   MassBH  : [1e8, 1e4, 10]  solar masses
   SpinBH  : 0.99             (fixed)
-  f_a     : [1e18, 1e16, 1e14, 1e12]  eV
+  f_a     : [1e18, 1e16, 1e14, 1e12]  GeV
   alpha   : [0.05, 0.1, 0.25, 0.4, 0.6, 0.9, 1.2, 1.5]
   Nmax    : [3, 4, 5, 6, 7, 8, 15]    (run sequentially in each script)
 
@@ -159,7 +159,7 @@ for MassBH, fa, alpha in itertools.product(MassBH_vals, fa_vals, alpha_vals):
         lines.append(f"export OMP_NUM_THREADS={NCPUS}\n")
         lines.append("\n")
         lines.append(
-            f"# MassBH={fmt(MassBH)} M_sun | f_a={fmt(fa)} eV | alpha={alpha:g}\n"
+            f"# MassBH={fmt(MassBH)} M_sun | f_a={fmt(fa)} GeV | alpha={alpha:g}\n"
         )
         lines.append("\n")
         for Nmax in nmax_list:

@@ -315,7 +315,7 @@ def plot_spin_grid(
         squeeze=False,
     )
     fig.suptitle(
-        rf"Spin evolution — $M={bh_tag(mbh)}\,M_\odot$, $f_a={fa_tag(fa)}\,\mathrm{{eV}}$",
+        rf"Spin evolution — $M={bh_tag(mbh)}\,M_\odot$, $f_a={fa_tag(fa)}\,\mathrm{{GeV}}$",
         fontsize=12,
         y=1.01,
     )
@@ -382,7 +382,7 @@ def plot_states_stack(
     )
     axes = axes[:, 0]
     fig.suptitle(
-        rf"States — $M={bh_tag(mbh)}\,M_\odot$, $f_a={fa_tag(fa)}\,\mathrm{{eV}}$, "
+        rf"States — $M={bh_tag(mbh)}\,M_\odot$, $f_a={fa_tag(fa)}\,\mathrm{{GeV}}$, "
         rf"$\alpha={alpha_tag(alpha)}$",
         fontsize=12,
         y=1.01,

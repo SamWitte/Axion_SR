@@ -21,7 +21,7 @@ function parse_commandline()
         "--f_a"
             arg_type = Float64
             required = true
-            help     = "Axion decay constant (eV)"
+            help     = "Axion decay constant (GeV)"
         "--alpha"
             arg_type = Float64
             required = true
@@ -68,6 +68,21 @@ function parse_commandline()
             arg_type = Float64
             default  = 1e-3
             help     = "Also save a point whenever |d ln a| since the last saved point exceeds this (Inf = off)"
+        "--self_grav"
+            arg_type = Bool
+            default  = false
+            help     = "Add the Newtonian self-gravity contribution (and its interference with self-interactions) to the " *
+                       "scattering rates, from rate_sve/*_LvrHc_SG.dat (Compute_all_rates.jl --self_grav true). " *
+                       "Output files get an _SG tag"
+        "--si_sign"
+            arg_type = Float64
+            default  = 1.0
+            help     = "Sign of the quartic self-interaction in the SI-SG interference (+1 attractive/axion, -1 repulsive)"
+        "--rate_input"
+            arg_type = String
+            default  = ""
+            help     = "Custom channel list (file in rate_sve/ or absolute path) instead of load_rate_input_Nmax_X.txt, " *
+                       "e.g. from rate_sve/gen_custom_input.py. Output files get an _rin_<name> tag"
         "--resume"
             action   = :store_true
             help     = "Continue from last row of existing Time_/States_/Spin_/MassBH_ .dat"
@@ -192,6 +207,9 @@ do_resume = parsed["resume"]
 f_edd   = parsed["f_edd"]
 acc_eta = parsed["acc_eta"]
 f_edd >= 0 || error("--f_edd must be >= 0")
+self_grav  = parsed["self_grav"]
+si_sign    = parsed["si_sign"]
+rate_input = isempty(parsed["rate_input"]) ? nothing : parsed["rate_input"]
 
 # Derive axion mass from alpha = GNew * MassBH * m_a
 m_a = alpha / (GNew * MassBH)
@@ -200,7 +218,7 @@ println("================================================")
 println("  run_Nlevels.jl  started:  ", Dates.now())
 println("  MassBH  = ", MassBH,  "  M_sun")
 println("  SpinBH  = ", SpinBH)
-println("  f_a     = ", f_a,     "  eV")
+println("  f_a     = ", f_a,     "  GeV")
 println("  alpha   = ", alpha,   "  (GNew*M*m_a = ", GNew*MassBH*m_a, ")")
 println("  m_a     = ", m_a,     "  eV")
 println("  Nmax    = ", Nmax)
@@ -208,6 +226,8 @@ println("  tau_max = ", tau_max)
 println("  outdir  = ", outdir)
 println("  lm_only = ", lm_only)
 println("  resume  = ", do_resume)
+println("  self_grav = ", self_grav, self_grav ? "  (si_sign = $(si_sign))" : "")
+println("  rate_input = ", rate_input === nothing ? "default (load_rate_input_Nmax_$(Nmax).txt)" : rate_input)
 println("  f_edd   = ", f_edd, f_edd > 0 ? "  (Mdot = $(f_edd * eddington_rate(MassBH; eta=acc_eta)) M_sun/yr, eta = $(acc_eta))" : "  (no accretion)")
 println("================================================")
 
@@ -215,7 +235,11 @@ println("================================================")
 # With accretion a _fedd_<f_edd> tag goes before _Nmax_ (the *Nmax_N.dat globs and
 # the gw_lines_from_run.jl filename parser still match); without it the name is unchanged.
 fedd_tag = f_edd > 0 ? "_fedd_$(f_edd)" : ""
-fname = "FullRel_fa_$(f_a)_ma_$(m_a)_MBH_$(MassBH)_spin_$(SpinBH)$(fedd_tag)_Nmax_$(Nmax).dat"
+# _SG (self-gravity on) and _rin_<list> (custom channel list) tags also go before _Nmax_, so SI-only and
+# SG runs, or default and custom channel lists, never overwrite each other.
+sg_tag  = self_grav ? "_SG" : ""
+rin_tag = rate_input === nothing ? "" : "_rin_" * splitext(basename(rate_input))[1]
+fname = "FullRel_fa_$(f_a)_ma_$(m_a)_MBH_$(MassBH)_spin_$(SpinBH)$(fedd_tag)$(sg_tag)$(rin_tag)_Nmax_$(Nmax).dat"
 
 spin_path = joinpath(outdir, "Spin_" * fname)
 if isfile(spin_path) && !do_resume
@@ -286,6 +310,9 @@ timeT, StatesOut, modes_out, spin, massB = @time solve_system(
     track_alpha     = !parsed["no_track_alpha"],
     save_factor     = parsed["save_factor"],
     save_dlna       = parsed["save_dlna"],
+    self_grav       = self_grav,
+    si_sign         = si_sign,
+    rate_input      = rate_input,
 )
 
 if do_resume

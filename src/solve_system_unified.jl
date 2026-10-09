@@ -21,6 +21,11 @@ Handles both standard multi-level mode and spinone single-level mode via the spi
 - `stop_on_a::Float64`: Termination spin threshold (default 0)
 - `abstol::Float64`: Absolute tolerance for ODE solver (default 1e-30)
 - `non_rel::Bool`: Use non-relativistic approximation (default true)
+- `self_grav::Bool`: add the Newtonian self-gravity contribution (and its interference with self-interactions)
+  to the scattering rates, from rate_sve/*_LvrHc_SG.dat (Compute_all_rates.jl --self_grav true); requires non_rel=false
+- `si_sign::Float64`: sign of the quartic self-interaction for the SI-SG interference (+1 attractive/axion, -1 repulsive)
+- `rate_input`: custom scattering-channel list (file in rate_sve/ or absolute path) instead of
+  load_rate_input_Nmax_X.txt, e.g. from rate_sve/gen_custom_input.py; its states must be Nmax modes
 - `high_p::Bool`: Use high-precision tolerances (default true)
 - `Nmax::Int`: Maximum principal quantum number 3-8 (default 3)
 - `cheby::Bool`: Use Chebyshev interpolation (default true)
@@ -95,7 +100,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     gw_model=:nonrel, gw_min_rate_per_yr=1e-10, gw_literature=true,
     f_edd=0.0, acc_eta=0.1, acc_dlnM_dt=0.0, track_alpha=nothing, emax2_mode=nothing,
     emax2_taper=0.01, save_factor=5.0, save_dlna=1e-3, save_rel_floor=1e-10, save_max_sub=100,
-    track_alpha_dlnM=(0.0025, 0.05), track_alpha_refresh=1e-5)
+    track_alpha_dlnM=(0.0025, 0.05), track_alpha_refresh=1e-5, self_grav=false, si_sign=1.0, rate_input=nothing)
 
     # ============================================================================
     # PARAMETER SETUP & VALIDATION
@@ -184,7 +189,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         # Under accretion, levels that are not superradiant at t=0 may become so
         # later, so their scattering rates are kept.
         SR_kill = accreting ? ones(length(SR_rates)) : SR_rates
-        rates = load_rate_coeffs(mu, M_BH, aBH, fa, Nmax, SR_kill; non_rel=non_rel, lm_only=lm_only)
+        rates = load_rate_coeffs(mu, M_BH, aBH, fa, Nmax, SR_kill; non_rel=non_rel, lm_only=lm_only, self_grav=self_grav, si_sign=si_sign, rate_input=rate_input)
         Mvars = [mu, fa, Emax2, aBH, M_BH, impose_low_cut]
         rP_initial = 1.0 + sqrt(1.0 - aBH^2)
     end
@@ -211,7 +216,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         (log(M_lo), n_sr, d_sr, collect(Ms_sr),
          [compute_sr_rates_smooth(modes, Mj, aBH, GNew * Mj * mu, cheby=cheby)[2] for Mj in Ms_sr],
          n_sc, d_sc,
-         [load_rate_coeffs(mu, Mj, aBH, fa, Nmax, SR_kill; non_rel=non_rel, lm_only=lm_only) for Mj in Ms_sc])
+         [load_rate_coeffs(mu, Mj, aBH, fa, Nmax, SR_kill; non_rel=non_rel, lm_only=lm_only, self_grav=self_grav, si_sign=si_sign, rate_input=rate_input) for Mj in Ms_sc])
     else
         (0.0, 2, 1.0, Float64[], Vector{Any}[], 2, 1.0, Dict[])
     end

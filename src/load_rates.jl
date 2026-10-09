@@ -8,16 +8,42 @@ if !@isdefined(LVR_FILE_CACHE)
     const LVR_FILE_CACHE = Dict{String, Any}()
 end
 
+# Channels requested with self_grav=true but lacking an SG table (warned about once per session).
+if !@isdefined(SG_MISSING_WARNED)
+    const SG_MISSING_WARNED = Ref(false)
+end
+
 # Scattering (BH / Inf) rate coefficients. GW annihilations and transitions are
 # not in this dictionary: they come from Numerics/gw_rates.jl (gw_build_cache /
 # gw_rhs!) inside solve_system.
-function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=false)
+#
+# self_grav = true adds the Newtonian self-gravity contribution to every channel with an SG table
+# (rate_sve/<...>_LvrHc_SG.dat, written by Compute_all_rates.jl --self_grav true). The SI and SG
+# amplitudes interfere, so
+#     Gamma(f_a) = Gamma_SI (M_pl/f_a)^4 + si_sign * 2 kappa sqrt(Gamma_SI Gamma_SG) (M_pl/f_a)^2 + Gamma_SG,
+# with kappa = cos(relative phase) = +-1 tabulated per channel and si_sign = +1 for an attractive
+# quartic (axion cosine potential), -1 for a repulsive one. Only available with non_rel = false.
+#
+# rate_input: custom channel list (file name in rate_sve/ or absolute path, same format as
+# load_rate_input_Nmax_X.txt, e.g. written by rate_sve/gen_custom_input.py) used instead of the default
+# list for this Nmax. Every state in it must be one of the Nmax modes (standard or truncation).
+function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=false, self_grav=false, si_sign=1.0, rate_input=nothing)
     alph = mu * GNew * M
     rP = 1 + sqrt.(1 - a^2)
     faFac = (M_pl ./ f_a)^4
 
     input_suffix = lm_only ? "_lm" : ""
-    rate_list = readdlm(joinpath(@__DIR__, "rate_sve/load_rate_input_Nmax_$(Nmax)$(input_suffix).txt"))
+    rate_file = if rate_input === nothing
+        joinpath(@__DIR__, "rate_sve/load_rate_input_Nmax_$(Nmax)$(input_suffix).txt")
+    else
+        isabspath(rate_input) ? rate_input : joinpath(@__DIR__, "rate_sve", rate_input)
+    end
+    rate_list = readdlm(rate_file)
+    if rate_input !== nothing
+        for st in unique(string.(vec(rate_list[:, 1:3])))
+            get_state_idx(st, Nmax) == -1 && error("rate_input $(rate_input): state $(st) is not among the Nmax = $(Nmax) modes; increase Nmax")
+        end
+    end
     cnt = 1
     
     kill_lvls = []
@@ -36,6 +62,11 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
     
     Drate = Dict()
     
+    if non_rel && self_grav && !SG_MISSING_WARNED[]
+        println("load_rate_coeffs: self-gravity rates are only tabulated for non_rel=false (Leaver tables); ignoring self_grav.")
+        SG_MISSING_WARNED[] = true
+    end
+
     if non_rel
         include_m1 = true
         include_m2 = true
@@ -163,6 +194,7 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
         end
             
     elseif !non_rel
+        n_sg_missing = 0
         
         # Drate["211_211_211^Inf"] = 1.5e-8 * alph^21 .* faFac
         
@@ -181,18 +213,41 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
                 d = open(readdlm, fileT)
                 d[d[:, 2] .!= 0.0, :]
             end
-            if data !== nothing
-                
+            sg = nothing
+            if self_grav
+                fileSG = dirN * string(rate_list[i, 1]) * "_" * string(rate_list[i, 2]) * "_" * string(rate_list[i, 3]) * "_" * string(rate_list[i, 4]) * ftag * "SG.dat"
+                sg = get!(LVR_FILE_CACHE, fileSG) do
+                    isfile(fileSG) || return nothing
+                    d = open(readdlm, fileSG)        # alpha, Gamma_SI, Gamma_SG, Gamma_x, kappa
+                    d[d[:, 3] .> 0.0, :]
+                end
+                sg === nothing && (n_sg_missing += 1)
+            end
+            if data !== nothing || sg !== nothing
+
                 rate_out = 0.0
-                if alph .<= maximum(data[:,1])
+                g_si = 0.0
+                if data !== nothing && alph .<= maximum(data[:,1])
                     itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
-                    rate_out = 10 .^itp(log10.(alph)) .* faFac
-                    if string(rate_list[i, 4]) == "BH"
-                        rate_out *= rP_ratio
-                    end
+                    g_si = 10 .^itp(log10.(alph))
+                    rate_out = g_si .* faFac
+                end
+                if sg !== nothing && size(sg, 1) >= 2 && alph .<= maximum(sg[:, 1])
+                    itp_sg = LinearInterpolation(log10.(sg[:, 1]), log10.(sg[:, 3]), extrapolation_bc=Line())
+                    itp_ka = LinearInterpolation(log10.(sg[:, 1]), sg[:, 5], extrapolation_bc=Flat())
+                    g_sg = 10 .^itp_sg(log10.(alph))
+                    rate_out += si_sign * 2 * itp_ka(log10.(alph)) * sqrt(g_si * g_sg) * sqrt(faFac) + g_sg
+                end
+                if string(rate_list[i, 4]) == "BH"
+                    rate_out *= rP_ratio
                 end
                 Drate[nm_tag] = rate_out
             end
+        end
+        if self_grav && n_sg_missing > 0 && !SG_MISSING_WARNED[]
+            println("load_rate_coeffs: self_grav=true but $(n_sg_missing) channel(s) have no *_LvrHc_SG.dat table; ",
+                    "those use the self-interaction rate only (warned once per session).")
+            SG_MISSING_WARNED[] = true
         end
     end
 
