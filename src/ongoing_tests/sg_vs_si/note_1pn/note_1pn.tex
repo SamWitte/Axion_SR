@@ -1,0 +1,181 @@
+\documentclass[11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=blue!45!black,citecolor=blue!45!black,urlcolor=blue!45!black]{hyperref}
+
+\newcommand{\bx}{\mathbf{x}}
+\newcommand{\by}{\mathbf{y}}
+\newcommand{\bj}{\mathbf{j}}
+\newcommand{\bA}{\mathbf{A}}
+\newcommand{\dd}{\mathrm{d}}
+
+\title{\textbf{Post-Newtonian self-gravity in $2\to2$ cloud transitions:\\ the $h_{0i}$ and $h_{ij}$ contributions}}
+\author{Internal note (sg\_vs\_si project)}
+\date{9 October 2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+The self-gravity (SG) contribution to $2\to2$ level transitions such as $211\times211\to322\times{\rm BH}$ has so far been computed with the Newtonian ($\mathfrak h_{00}$) kernel only. This note works out the first post-Newtonian (1PN, relative $O(\alpha^2)$) corrections to that amplitude from the gravitomagnetic field $h_{0i}$ and the spatial metric $h_{ij}$. For comparison it also evaluates the remaining pieces of the harmonic-gauge one-graviton exchange: the kinetic correction to $T_{00}$, retardation, and the nonlinear black-hole$\times$cloud ($G^2$) terms. Each piece is evaluated for four channels using the same Kerr Green's function as the self-interaction (SI) rates. \textbf{Result:}
+\begin{itemize}
+\item The $h_{0i}$ term is the largest 1PN correction. It is negative, $\delta_{\rm GM}\simeq-1.1\,\alpha^2$ for the $211/322$ channels and $\simeq-0.33\,\alpha^2$ for the $322/544$ channels. It reduces $\Gamma_{\rm SG}$ by about 20\% at $\alpha=0.3$ for $211\times211\to322$.
+\item The $h_{ij}$ term is about $5\times$ smaller and positive.
+\item The sum of all computed pieces moves the SG/SI crossover in $f_a$ by $\lesssim10\%$.
+\end{itemize}
+The corrections are of the same size as the effect of using Kerr instead of hydrogenic eigenfunctions in the Newtonian term. A gauge-consistent 1PN treatment is therefore needed for $\lesssim 20\%$ accuracy on $\Gamma_{\rm SG}$ at $\alpha\gtrsim0.3$, but not for the qualitative SG-vs-SI picture.
+\end{abstract}
+
+\section{One-graviton exchange at 1PN}
+
+Conventions: signature $(-,+,+,+)$, $c=\hbar=1$, $G=1/M_{\rm Pl}^2$. Matter couples to $g_{\mu\nu}=\eta_{\mu\nu}+h_{\mu\nu}$ through $S_{\rm int}=\tfrac12\int h_{\mu\nu}T^{\mu\nu}$. In harmonic gauge, $\bar h_{\mu\nu}\equiv h_{\mu\nu}-\tfrac12\eta_{\mu\nu}h$ obeys $\Box\bar h_{\mu\nu}=-16\pi G\,T_{\mu\nu}$. Integrating out the potential graviton (on shell, the quadratic action is $-\tfrac12$ of the coupling) gives
+\begin{equation}
+S_{\rm eff}=G\!\int\!\dd t\!\int\!\dd^3x\,\dd^3y\;\frac{T_{\mu\nu}(\bx)T^{\mu\nu}(\by)-\tfrac12T(\bx)T(\by)}{|\bx-\by|}\;+\;\text{retardation}.
+\label{eq:Seff}
+\end{equation}
+Expanding in $v^2\sim\alpha^2$ (so $T_{0i}\sim\rho v$, $T_{ij}\sim\rho v^2$):
+\begin{equation}
+L_{\rm eff}=G\!\int\!\!\int\frac{1}{r}\Big[\tfrac12T_{00}T_{00}'\;+\;\tfrac12\big(T_{00}T_{kk}'+T_{kk}T_{00}'\big)\;-\;2\,T_{0i}T_{0i}'\Big]+O(v^4),\qquad r=|\bx-\by|.
+\label{eq:L1PN}
+\end{equation}
+The three structures in \eqref{eq:L1PN} map onto the metric components as follows, using $h_{00}=\tfrac12(\bar h_{00}+\bar h_{kk})$, $h_{0i}=\bar h_{0i}$, $h_{ij}=\bar h_{ij}+\tfrac12\delta_{ij}(\bar h_{00}-\bar h_{kk})$:
+\begin{itemize}
+\item $\tfrac12T_{00}T_{00}'$: Newtonian $h_{00}$ sourced by $T_{00}$, including the $O(v^2)$ part of $T_{00}$.
+\item $\tfrac12(T_{00}T_{kk}'+T_{kk}T_{00}')$: half of it is \textbf{$h_{ij}$}. That is $h_{ij}=-2\Phi\,\delta_{ij}$, sourced by $T_{00}$, coupling to the cloud's stresses $T^{ij}$. The other, equal, half is $h_{00}$ sourced by $T_{kk}$: pressure contributes to the active mass, $\rho\to\rho+3p$. Only the sum is fixed in harmonic gauge; both halves give identical transition amplitudes.
+\item $-2T_{0i}T_{0i}'$: \textbf{gravitomagnetic $h_{0i}$} exchange between mass currents.
+\end{itemize}
+Bo\v{s}kovi\'c--Savi\'c (v2, Eqs.~27--29) write $\nabla^2h_{00}=-8\pi T^{00}$, $\nabla^2 h_{0i}=16\pi T^{0i}$, $\nabla^2h_{ij}=-8\pi\delta_{ij}T^{00}$. These are the leading sources, and they stop at the Newtonian term. At 1PN, $h_{00}$ also receives the $T_{kk}$ source above. Retardation, $1/(\mathbf{k}^2-k_0^2)=1/\mathbf{k}^2+k_0^2/\mathbf{k}^4+\dots$, replaces $1/r\to1/r-\tfrac12k_0^2r$ in the $T_{00}T_{00}$ term.
+
+\paragraph{Point-particle check.} For $T^{00}=m(1+\tfrac12v^2)\delta^3$, $T^{0i}=mv^i\delta^3$, $T^{ij}=mv^iv^j\delta^3$, Eq.~\eqref{eq:L1PN} plus retardation gives, for one pair,
+\[
+\frac{Gm_1m_2}{r}\Big[1+\underbrace{\tfrac12(v_1^2+v_2^2)}_{T_{00}}+\underbrace{(v_1^2+v_2^2)}_{h_{ij}+h_{00}[T_{kk}]}\underbrace{-4\,\mathbf v_1\!\cdot\mathbf v_2}_{h_{0i}}+\underbrace{\tfrac12\big(\mathbf v_1\!\cdot\mathbf v_2-(\mathbf n\!\cdot\mathbf v_1)(\mathbf n\!\cdot\mathbf v_2)\big)}_{\rm retardation}\Big],
+\]
+i.e.\ the Einstein--Infeld--Hoffmann coefficients $\tfrac32(v_1^2+v_2^2)-\tfrac72\mathbf v_1\!\cdot\mathbf v_2-\tfrac12(\mathbf n\!\cdot\mathbf v_1)(\mathbf n\!\cdot\mathbf v_2)$ (Landau--Lifshitz \S106). The EIH Lagrangian also contains $G^2$ terms. Of these, the ones involving two cloud quanta and the hole are
+\begin{equation}
+L_{G^2}=-\frac{G^2M\mu^2}{2}\int\!\!\int|\psi(\bx)|^2|\psi(\by)|^2\Big[\frac{1}{r_xr_y}+\Big(\frac1{r_x}+\frac1{r_y}\Big)\frac1{|\bx-\by|}\Big],
+\label{eq:G2}
+\end{equation}
+which are of the same order, $GM/r\sim v^2$.
+
+\section{Stress tensor of the cloud}
+With $\phi=(\psi e^{-i\mu t}+\bar\psi e^{i\mu t})/\sqrt{2\mu}$ and keeping the non-oscillating parts, the leading terms are:
+\begin{align}
+T_{00}&=\mu|\psi|^2+\tfrac{1}{2\mu}|\nabla\psi|^2+\dots,\\
+T_{0i}&=-j_i,\qquad \bj=-\tfrac{i}{2}\big(\bar\psi\nabla\psi-\psi\nabla\bar\psi\big)\quad(\text{mass current}),\\
+T_{kk}&=\tfrac1\mu|\nabla\psi|^2-\tfrac{3}{4\mu}\nabla^2|\psi|^2 .
+\end{align}
+The form of $T_{kk}$ includes the $O(\Phi_{\rm BH})$ metric factors. In flat space one would get an extra $3V|\psi|^2$. With the metric factors included, $\int T_{kk}=2K$, matching $\sum mv^2$ for particles. For a transition, every bilinear is taken between an absorbed state $A$ and an emitted state $B$: $\rho^{BA}=\bar\psi_B\psi_A$, $\bj^{BA}=-\tfrac i2(\bar\psi_B\nabla\psi_A-\psi_A\nabla\bar\psi_B)$, $t^{BA}\equiv\mu T_{kk}^{BA}=\nabla\bar\psi_B\!\cdot\!\nabla\psi_A-\tfrac34\nabla^2(\bar\psi_B\psi_A)$.
+
+\section{Amplitudes for $1+1\to3+4$}
+Each term of $-L_{\rm eff}$ gives an amplitude with the same combinatorial factor as the Newtonian and SI vertices. Mode~4 is absorbed at the horizon or escapes to infinity. The bilinears are $(41)$ at $\bx$ and $(31)$ at $\by$:
+\begin{align}
+A_{\rm N}&=-G\mu^2\!\int\!\!\int\frac{\rho^{41}(\bx)\rho^{31}(\by)}{|\bx-\by|},\\
+A_{h_{0i}}&=+4G\!\int\!\!\int\frac{\bj^{41}(\bx)\cdot\bj^{31}(\by)}{|\bx-\by|},\\
+A_{h_{ij}}&=A_{h_{00}[T_{kk}]}=-\frac{G}{2}\!\int\!\!\int\frac{\rho^{41}t^{31\prime}+t^{41}\rho^{31\prime}}{|\bx-\by|},\\
+A_{T_{00}}&=-\frac{G}{2}\!\int\!\!\int\frac{\rho^{41}(\nabla\bar\psi_3\!\cdot\!\nabla\psi_1)'+(\nabla\bar\psi_4\!\cdot\!\nabla\psi_1)\rho^{31\prime}}{|\bx-\by|},\\
+A_{\rm ret}&=+\frac{G\mu^2k_0^2}{2}\!\int\!\!\int\rho^{41}\rho^{31\prime}\,|\bx-\by|,\qquad k_0=\omega_1-\omega_3,\\
+A_{G^2}&=+G^2M\mu^2\!\int\!\!\int\rho^{41}\rho^{31\prime}\Big[\frac1{r_xr_y}+\Big(\frac1{r_x}+\frac1{r_y}\Big)\frac1{|\bx-\by|}\Big].
+\end{align}
+The Newtonian line is the kernel $K_{\rm SG}=-G\mu^2/|\bx-\by|$ used in the SG/SI comparison. We report $\delta_X\equiv A_X/A_{\rm N}$, so $\Gamma_{\rm SG}\to\Gamma_{\rm SG}|1+\sum_X\delta_X|^2$.
+
+\paragraph{Sources for mode 4.} Mode 4 is not normalisable: it is a Green's-function solution with ingoing or outgoing boundary conditions. Every derivative is therefore moved off $\bar\psi_4$ by parts, giving $A_X=\int\dd^3x\,\bar\psi_4\,S_X$. With $\Phi\equiv\int\rho^{31}/|\bx-\by|$ and $\bA\equiv\int\bj^{31}/|\bx-\by|$:
+\begin{align}
+S_{\rm N}&=-G\mu^2\,\psi_1\Phi,\\
+S_{h_{0i}}&=-4iG\,\bA\cdot\nabla\psi_1-2iG\,\psi_1\nabla\!\cdot\!\bA
+=-4iG\,\bA\cdot\nabla\psi_1+2G\mu\,k_0\,\psi_1\Phi,\\
+2S_{h_{ij}}&=G\Big[-\psi_1\!\int\!\frac{\nabla\bar\psi_3\!\cdot\!\nabla\psi_1}{|\bx-\by|}+\nabla\Phi\!\cdot\!\nabla\psi_1+\Phi\,\nabla^2\psi_1-6\pi\,\psi_1^2\bar\psi_3\Big],
+\end{align}
+and similarly for the rest. The $h_{0i}$ step uses current conservation for the transition current, $\nabla\!\cdot\bj^{31}=i\mu k_0\rho^{31}$. The $h_{ij}$ step uses $\int\nabla^2\rho/|\bx-\by|=-4\pi\rho$.
+
+The last term of $S_{h_{ij}}$ is a \emph{local} quartic piece generated by gravity at 1PN. It has the same form as the axion contact interaction, with effective strength $1/(8f^2)\leftrightarrow3\pi G$ for $h_{ij}$ alone.
+
+\section{Physics of the two pieces}
+\paragraph{$h_{0i}$ (gravitomagnetism).} Co-moving mass currents repel: the $h_{0i}$ term in the EIH Lagrangian is $-4Gm_1m_2\,\mathbf v_1\!\cdot\mathbf v_2/r$. For transitions out of the superradiant states, both transition currents $\bj^{41}$ and $\bj^{31}$ inherit the azimuthal flow of $\psi_1$. They are therefore aligned in the same way as the transition densities. The gravitomagnetic amplitude then opposes the attractive Newtonian one, $\delta_{h_{0i}}<0$, with size $\sim4\langle v_1v_3\rangle$:
+\begin{itemize}
+\item $4(\alpha/2)(\alpha/3)\simeq0.67\alpha^2$ for $211\to322$, against the computed $1.1\alpha^2$;
+\item $4(\alpha/3)(\alpha/5)\simeq0.27\alpha^2$ for the $322/544$ channels, against the computed $0.32\alpha^2$.
+\end{itemize}
+The suppression for higher-$n$ states is simply their smaller orbital velocity, $v\sim\alpha/n$.
+
+\paragraph{$h_{ij}$ (stresses).} The Newtonian potential also curves space, $h_{ij}=-2\Phi\delta_{ij}$. This couples to the kinetic stress $T^{ij}$ of the cloud, which acts like a pressure and adds to the active mass. It therefore strengthens the attraction, $\delta_{h_{ij}}>0$. Its size is $\sim\tfrac12\langle v^2\rangle$, roughly a quarter of the $h_{0i}$ term.
+
+\section{Everything else at the same order}
+The pieces of \eqref{eq:Seff} are individually gauge dependent; only the full $O(\alpha^2)$ amplitude is physical. Besides $h_{0i}$ and $h_{ij}$ it contains:
+\begin{enumerate}
+\item the kinetic correction to $T_{00}$, whose local form and the $O(v^2)$ normalisation of $\psi$ are convention dependent;
+\item retardation, which is small because the energy carried by the graviton is only the level spacing $k_0=\omega_1-\omega_3$;
+\item the $G^2$ black-hole$\times$cloud terms \eqref{eq:G2}, which are \emph{not} small;
+\item the coordinate mismatch: the eigenfunctions are in Boyer--Lindquist coordinates, the kernels in harmonic ones ($r_h\simeq r_{\rm BL}-M$), an $O(M/r)\sim\alpha^2$ effect;
+\item the $O(\alpha^2)$ corrections to the eigenfunctions themselves, which already enter the Newtonian term through the Kerr eigenfunctions;
+\item frame-dragging (BH spin) terms at 1.5PN, $O(\tilde a\alpha^3)$;
+\item the oscillating ($2\mu$) parts of $T_{\mu\nu}$ for a real scalar, which radiate rather than mediate the potential exchange.
+\end{enumerate}
+Items 1--3 are computed below as indications of size. Items 4--5 are represented by the Kerr-versus-hydrogenic difference of the Newtonian amplitude, shown for comparison.
+
+\section{Method and checks}
+\begin{itemize}
+\item The corrections are evaluated with hydrogenic eigenfunctions. They are themselves $O(\alpha^2)$, so using Kerr eigenfunctions would change them only at $O(\alpha^4)$. Mode~4 uses the Kerr Green's function of \texttt{gf\_radial}, as in the SG/SI rate comparison, and is projected onto its leading multipole with the $\Sigma=r^2+a^2\cos^2\theta$ weight.
+\item Potentials are built multipole by multipole on an $(r,\theta)$ grid: 3000 log-spaced radii and 40 Gauss--Legendre nodes. $\bA$ is computed from the Cartesian spherical components $j_\pm=j_x\pm ij_y$ and $j_z$, each with a definite azimuthal number. The $|\bx-\by|$ kernel uses $|\bx-\by|=\sum_LP_L(\cos\gamma)\big[r_<^{L+2}/((2L+3)r_>^{L+1})-r_<^{L}/((2L-1)r_>^{L-1})\big]$.
+\item \textbf{Integration by parts and continuity.} Replacing mode 4 by a bound state ($|320\rangle$), $\int\bar\psi_4S_X$ was compared with the original double integrals, in which the derivatives act on $\psi_4$. They agree to $6\times10^{-7}$ for $h_{0i}$ and $5\times10^{-6}$ for the stress term, at $\alpha=0.05$ and $0.2$.
+\item All $\delta_X$ scale as $\alpha^2$ at small $\alpha$, and their imaginary parts are $\lesssim10^{-13}$.
+\end{itemize}
+Code: \texttt{src/ongoing\_tests/sg\_vs\_si/sg\_1pn.jl} (\texttt{julia sg\_1pn.jl test} runs the self-test) and \texttt{plot\_1pn.py}.
+
+\section{Results}
+\begin{figure}[h]
+\centering
+\includegraphics[width=\textwidth]{fig_1pn.pdf}
+\caption{Fractional corrections $\delta_X=A_X/A_{\rm N}$ to the Newtonian SG amplitude (Kerr BH, $\tilde a=0.95$). Thick lines are $h_{0i}$ and $h_{ij}$. The $h_{ij}$ line is $h_{ij}$ alone; the stress-sourced $h_{00}$ adds an identical amount. The dashed line is the amplitude change in the \emph{Newtonian} term from Kerr instead of hydrogenic eigenfunctions, $\sqrt{C_{\rm Kerr}/C_{\rm hyd}}-1$, which represents the other $O(\alpha^2)$ effects (items 4--5).}
+\label{fig:1pn}
+\end{figure}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+channel & $h_{0i}$ & $h_{ij}$ & $T_{00}$ & ret. & $G^2$ BH$\times$cloud & sum$^\dagger$\\
+\midrule
+\input{coeffs.tex}
+\bottomrule
+\end{tabular}
+\caption{Small-$\alpha$ coefficients $\delta_X/\alpha^2$ (at $\alpha=0.03$). $^\dagger$Sum $=h_{0i}+2h_{ij}+T_{00}+{\rm ret}+G^2$, i.e.\ all computed harmonic-gauge pieces, with $h_{ij}$ counted together with its equal $h_{00}[T_{kk}]$ partner.}
+\end{table}
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+channel & $\alpha$ & $\delta_{h_{0i}}$ [\%] & $\delta_{h_{ij}}$ [\%] & $\Delta\Gamma_{\rm SG}$ from $h_{0i}$ [\%] & from $h_{ij}$ [\%] & sum$^\dagger$ [\%]\\
+\midrule
+\input{values_at_03.tex}
+\bottomrule
+\end{tabular}
+\caption{Values at $\alpha\simeq0.3$. $\Delta\Gamma_{\rm SG}=|1+\delta|^2-1$.}
+\end{table}
+
+\paragraph{Conclusions.}
+\begin{enumerate}
+\item \textbf{$h_{0i}$ is the largest 1PN correction} to the SG-induced $2\to2$ amplitude. It is negative: $-1.1\alpha^2$ for $211\times211\to322\times{\rm BH}$ and $322\times322\to211\times\infty$, and $-0.33\alpha^2$ for the $322/544$ channels. It lowers $\Gamma_{\rm SG}$ by $\simeq20\%$ at $\alpha=0.3$ in the former and $\simeq6\%$ in the latter. At $\alpha\simeq0.7$ the $322/544$ channels reach $\delta_{h_{0i}}\simeq-18\%$.
+\item \textbf{$h_{ij}$ is $\sim4$--$5\times$ smaller and positive}: $+0.25\alpha^2$ and $+0.09\alpha^2$ respectively, or $+0.5\alpha^2$ and $+0.18\alpha^2$ if counted together with the stress-sourced $h_{00}$.
+\item The $G^2$ black-hole$\times$cloud terms are the second-largest piece and also negative. Retardation and the $T_{00}$ kinetic term are at the 1\% level for $\alpha\lesssim0.3$.
+\item The sum of the computed pieces is $-9\%$, $-2\%$, $-6\%$ and $-1\%$ in amplitude at $\alpha=0.3$, for the four channels in table order. Because $\Gamma_{\rm SG}/\Gamma_{\rm SI}\propto C$, the crossover $f_a\propto C^{-1/4}$ moves up by only $|1+\delta|^{-1/2}-1\lesssim5\%$ at $\alpha=0.3$, and $\lesssim10\%$ over the full $\alpha$ range of each channel. The SG-vs-SI conclusions are therefore robust.
+\item These graviton-side corrections are comparable to the Kerr-versus-hydrogenic change of the Newtonian term. That change is $-14\%$ in amplitude at $\alpha=0.3$ for $211\to322$, but $\lesssim+2\%$ for $544\to322$. A consistent 1PN calculation would combine both, with eigenfunctions and kernels in the same coordinates, and is required before quoting $\Gamma_{\rm SG}$ to better than $\sim20\%$ at $\alpha\gtrsim0.3$.
+\item The same kernels give the 1PN corrections to the self-gravity \emph{level splittings} of Bo\v{s}kovi\'c--Savi\'c (direct and exchange) by replacing mode~4 with a bound state. The $h_{0i}$ exchange graph there is the missing diagram discussed earlier. This has not been evaluated here.
+\end{enumerate}
+
+\appendix
+\section{Code fixes made alongside this note}
+\sloppy
+\begin{itemize}
+\item \texttt{spheroidals(l,m,a,erg)} passed $c=a\omega$, the massless convention of \texttt{SpinWeightedSpheroidalHarmonics}, so $c^2=a^2\omega^2$. The massive angular equation needs $c^2=a^2(\omega^2-\mu^2)$. It is now \texttt{spheroidals(l,m,a,erg,alph)} with $c=a\sqrt{\omega^2-\alpha^2}$ in $GM$ units, in \texttt{solve\_sr\_rates.jl} and \texttt{MatterCouplings/sr\_matter\_ints.jl}. The call sites in \texttt{freq\_shifts}, \texttt{s\_rate\_bnd} and \texttt{s\_rate\_inf}, which had passed $\omega$ in eV (i.e.\ $c\approx0$), now pass dimensionless energies. Effect on \texttt{gf\_radial}: $+0.08\%$ ($211\times211\to322$, $\alpha=0.10$), $+2.1\%$ ($322\times322\to544$, $\alpha=0.48$).
+\item In the $\infty$ branch of \texttt{gf\_radial}, the flux radius was \texttt{itp\_rrstar(itp\_rrstar(r*))}, which maps $r_*\to r$ twice. It is now mapped once. Together with the above: $+0.7\%$ for $322\times322\to211\times\infty$ at $\alpha=0.17$.
+\end{itemize}
+
+\end{document}
