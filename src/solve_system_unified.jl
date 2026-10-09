@@ -186,10 +186,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     else
         # Standard: Compute interpolated rates using smooth symlog interpolation
         SR_rates, interp_funcs, interp_dict = compute_sr_rates_smooth(modes, M_BH, aBH, alph, cheby=cheby)
-        # Under accretion, levels that are not superradiant at t=0 may become so
-        # later, so their scattering rates are kept.
-        SR_kill = accreting ? ones(length(SR_rates)) : SR_rates
-        rates = load_rate_coeffs(mu, M_BH, aBH, fa, Nmax, SR_kill; non_rel=non_rel, lm_only=lm_only, self_grav=self_grav, si_sign=si_sign, rate_input=rate_input)
+        rates = load_rate_coeffs(mu, M_BH, aBH, fa, Nmax, SR_rates; non_rel=non_rel, lm_only=lm_only, self_grav=self_grav, si_sign=si_sign, rate_input=rate_input)
         Mvars = [mu, fa, Emax2, aBH, M_BH, impose_low_cut]
         rP_initial = 1.0 + sqrt(1.0 - aBH^2)
     end
@@ -216,7 +213,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         (log(M_lo), n_sr, d_sr, collect(Ms_sr),
          [compute_sr_rates_smooth(modes, Mj, aBH, GNew * Mj * mu, cheby=cheby)[2] for Mj in Ms_sr],
          n_sc, d_sc,
-         [load_rate_coeffs(mu, Mj, aBH, fa, Nmax, SR_kill; non_rel=non_rel, lm_only=lm_only, self_grav=self_grav, si_sign=si_sign, rate_input=rate_input) for Mj in Ms_sc])
+         [load_rate_coeffs(mu, Mj, aBH, fa, Nmax, SR_rates; non_rel=non_rel, lm_only=lm_only, self_grav=self_grav, si_sign=si_sign, rate_input=rate_input) for Mj in Ms_sc])
     else
         (0.0, 2, 1.0, Float64[], Vector{Any}[], 2, 1.0, Dict[])
     end
@@ -754,6 +751,16 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
 
     end
 
+    # Minimum step. The OrdinaryDiffEq default, dtmin = eps(t_end), is ~2e-6 yr for t_end = 1e10 yr: longer than
+    # the fastest transients (e.g. the 322 burst at alpha = 0.2, f_a = 1e16 GeV, e-folding ~1 min), which then
+    # abort with DtLessThanMin. Use no fixed floor (dtmin = floatmin) and instead stop once a step can no longer
+    # advance t, i.e. dt is below the floating-point resolution at the current t.
+    cback_stall = DiscreteCallback((u, t, integrator) -> integrator.t + integrator.dt == integrator.t,
+                                   integrator -> (debug && println("dt = ", integrator.dt, " no longer advances t = ",
+                                                                   integrator.t, "; stopping"); terminate!(integrator)),
+                                   save_positions=(false, false))
+    cbset = CallbackSet(cbset, cback_stall)
+
     # ============================================================================
     # SOLVE ODE
     # ============================================================================
@@ -767,7 +774,8 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=reltol, abstol=1e-10)
     end
     t_solve0 = time()
-    sol = solve(prob, TRBDF2(autodiff=false), dt=dt_guess, saveat=saveat, callback=cbset, maxiters=5e6)
+    sol = solve(prob, TRBDF2(autodiff=false), dt=dt_guess, dtmin=floatmin(Float64), saveat=saveat, callback=cbset,
+                maxiters=5e6)
     debug && println("solver retcode: ", sol.retcode, "  t_end = ", sol.t[end], " of ", t_max,
                      "  [setup ", round(t_solve0 - t_setup0, digits=1), " s, integration ",
                      round(time() - t_solve0, digits=1), " s, ", sol.stats.naccept, " steps, ",

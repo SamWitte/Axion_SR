@@ -38,7 +38,7 @@ for s, c in zip(STATES, COLORS):
 ax1.plot([], [], color=INK2, lw=1.6, ls="-", label="SI only")
 ax1.plot([], [], color=INK2, lw=1.6, ls=(0, (4, 2)), label="SI + self-gravity")
 ax1.set_xscale("log"); ax1.set_yscale("log"); ax1.set_ylim(1e-12, 2)
-ax1.set_ylabel("occupation (fraction of BH mass)")
+ax1.set_ylabel(r"occupation  $N/(GM_0^2)$")
 ax1.legend(ncol=2, fontsize=8.5, frameon=True, facecolor="white", edgecolor=GRID, loc="lower left")
 ax1.grid(True, color=GRID, lw=0.6); ax1.set_axisbelow(True)
 ax2.set_xscale("log"); ax2.set_xlabel("t  [yr]"); ax2.set_ylabel(r"$\tilde a$")
