@@ -6,6 +6,14 @@ load_rate_input_Nmax_18.dat.
 Each array task covers one (S1, S2, S3, S4) combination and uses NCPUS cores.
 Jobs whose output .dat already exists are skipped at submission time (to keep
 the array compact) and also at runtime as a safety net.
+
+Options:
+  --input FILE        channel list (default load_rate_input_Nmax_18.dat)
+  --no-submit         write the array script but do not sbatch it
+  --self-grav         also compute the self-gravity tables (<...>_LvrHc_SG.dat); the pending
+                      list and the runtime skip then key on the SG file, so channels whose SI
+                      table already exists are recomputed only to add self-gravity
+  --ang-method M      angular overlaps in gf_radial: mc (default) or gl (exact quadrature)
 """
 
 import os
@@ -29,6 +37,9 @@ ALPHA_PTS  = 14
 RUN_LEAVER = True
 CHECK_ERR  = False
 SUBMIT     = "--no-submit" not in sys.argv
+SELF_GRAV  = "--self-grav" in sys.argv
+ANG_METHOD = next((sys.argv[i+1] for i, a in enumerate(sys.argv) if a == "--ang-method" and i+1 < len(sys.argv)), "mc")
+OUT_SUFFIX = FTAG + ("SG" if SELF_GRAV else "")      # file whose existence marks a channel as done
 
 # ---------------------------------------------------------------------------
 # Read input and filter already-computed entries
@@ -38,7 +49,7 @@ with open(INPUT_FILE) as fh:
 
 pending = [
     (s1, s2, s3, s4) for s1, s2, s3, s4 in all_entries
-    if not os.path.isfile(os.path.join(RATE_DIR, f"{s1}_{s2}_{s3}_{s4}{FTAG}.dat"))
+    if not os.path.isfile(os.path.join(RATE_DIR, f"{s1}_{s2}_{s3}_{s4}{OUT_SUFFIX}.dat"))
 ]
 
 n_total   = len(all_entries)
@@ -92,7 +103,7 @@ with open(array_script, "w") as f:
     f.write(f"read S1 S2 S3 S4 < <(sed -n \"$((SLURM_ARRAY_TASK_ID + 1))p\" {pending_file})\n")
     f.write("\n")
     f.write("# Safety-net skip if output appeared since submission\n")
-    f.write(f'outfile="{RATE_DIR}/${{S1}}_${{S2}}_${{S3}}_${{S4}}{FTAG}.dat"\n')
+    f.write(f'outfile="{RATE_DIR}/${{S1}}_${{S2}}_${{S3}}_${{S4}}{OUT_SUFFIX}.dat"\n')
     f.write('if [ -f "$outfile" ]; then\n')
     f.write('    echo "Already exists, skipping: $outfile"\n')
     f.write('    exit 0\n')
@@ -106,6 +117,7 @@ with open(array_script, "w") as f:
     f.write( "    --S1 $S1 --S2 $S2 --S3 $S3 --S4 $S4 \\\n")
     f.write(f'    --ftag "{FTAG}" \\\n')
     f.write(f"    --run_leaver {rl_str} \\\n")
+    f.write(f"    --self_grav {'true' if SELF_GRAV else 'false'} --ang_method {ANG_METHOD} \\\n")
     f.write(f"    --check_err {ce_str}\n")
 
 os.chmod(array_script, 0o755)
