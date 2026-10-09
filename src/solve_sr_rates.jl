@@ -164,7 +164,7 @@ function freq_shifts(mu, M, a, n1, l1, m1, n2, l2, m2;  rpts=500, rmaxT=100, Nan
     rl, r1, erg_1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true)
     itp = LinearInterpolation(log10.(rl), log10.(r1), extrapolation_bc=Line())
     rf_1 = 10 .^itp(log10.(rlist))
-    Z1 = spheroidals(l1, m1, a, erg_1 ./ (GNew .* M))
+    Z1 = spheroidals(l1, m1, a, erg_1, alph)
     
     # rf_1 = radial_bound_NR(n1, l1, m1, mu, M, rlist)
 
@@ -178,7 +178,7 @@ function freq_shifts(mu, M, a, n1, l1, m1, n2, l2, m2;  rpts=500, rmaxT=100, Nan
         rl, r2, erg_2 = solve_radial(mu, M, a, n2, l2, m2; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true)
         itp = LinearInterpolation(log10.(rl), log10.(r2), extrapolation_bc=Line())
         rf_2 = 10 .^itp(log10.(rlist))
-        Z2 = spheroidals(l2, m2, a, erg_2 ./ (GNew .* M))
+        Z2 = spheroidals(l2, m2, a, erg_2, alph)
         mult_fac = 1.0
     end
     
@@ -270,9 +270,9 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=10, rpts=
     k_ind_2 = mu.^2 .- (erg_ind ./ (GNew .* M)).^2
     
 
-    Z1 = spheroidals(l1, m1, a, erg_1 ./ (GNew .* M))
-    Z2 = spheroidals(l2, m2, a, erg_2 ./ (GNew .* M))
-    Z3 = spheroidals(l3, m3, a, erg_3 ./ (GNew .* M))
+    Z1 = spheroidals(l1, m1, a, erg_1, alph)
+    Z2 = spheroidals(l2, m2, a, erg_2, alph)
+    Z3 = spheroidals(l3, m3, a, erg_3, alph)
     
     
         
@@ -323,7 +323,7 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=10, rpts=
         end
         
         
-        Z4 = spheroidals(0, 0, a, erg_4 ./ (GNew .* M))
+        Z4 = spheroidals(0, 0, a, erg_4, alph)
         
         thetaV = acos.(1.0 .- 2.0 .* rand(Nang))
         phiV = rand(Nang) .* 2*pi
@@ -381,7 +381,7 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=10, rpts=
         for i in 1:kpts
             k = kk_list[i] ./ (GNew .* M) # physical units
             erg_New = sqrt.(k.^2 .+ mu.^2)
-            Z4 = spheroidals(0, 0, a, erg_New)
+            Z4 = spheroidals(0, 0, a, erg_New .* GNew .* M, alph)
         
             thetaV = acos.(1.0 .- 2.0 .* rand(Nang))
             phiV = rand(Nang) .* 2*pi
@@ -480,10 +480,10 @@ function s_rate_inf(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3, lF_min; rpts=4
     # print("New erg \t", erg_New .* GNew .* M, "\n")
 
 
-    Z1 = spheroidals(l1, m1, a, erg_1)
-    Z2 = spheroidals(l2, m2, a, erg_2)
-    Z3 = spheroidals(l3, m3, a, erg_3)
-    Z4 = spheroidals(lF, mF, a, erg_New)
+    Z1 = spheroidals(l1, m1, a, erg_1 .* GNew .* M, alph)
+    Z2 = spheroidals(l2, m2, a, erg_2 .* GNew .* M, alph)
+    Z3 = spheroidals(l3, m3, a, erg_3 .* GNew .* M, alph)
+    Z4 = spheroidals(lF, mF, a, erg_New .* GNew .* M, alph)
    
     thetaV = acos.(1.0 .- 2.0 .* rand(Nang))
     phiV = rand(Nang) .* 2*pi
@@ -1072,8 +1072,16 @@ function radial_inf(erg, mu, M, a, l, m; rpts=1000, rmax_val=1e4, debug=false, i
     end
 end
 
-function spheroidals(l, m, a, erg)
-    # pass erg in normalized units
+"""
+    spheroidals(l, m, a, erg, alph)
+
+Spin-0 spheroidal harmonic S_lm for a *massive* scalar on Kerr. `erg` = omega*G*M and
+`alph` = mu*G*M (both dimensionless). The angular equation of a massive field has
+spheroidicity c^2 = a^2 (omega^2 - mu^2), i.e. c = a*sqrt(erg^2 - alph^2): imaginary for
+bound states, real for unbound ones. (SpinWeightedSpheroidalHarmonics uses c = a*omega,
+the massless convention, so c must be built here rather than passing a*erg.)
+"""
+function spheroidals(l, m, a, erg, alph)
     if abs.(m) > l
         return 0.0
     end
@@ -1085,7 +1093,8 @@ function spheroidals(l, m, a, erg)
         return (theta, phi) -> sphericalY(l, m, theta, phi)
     end
 
-    Zlm = spin_weighted_spheroidal_harmonic(0, l, m, a .* erg)
+    c = Float64(a) * sqrt(complex(Float64(real(erg))^2 - Float64(alph)^2))
+    Zlm = spin_weighted_spheroidal_harmonic(0, l, m, c)
     return Zlm
 end
 
@@ -1798,9 +1807,9 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         println("BH multipoles summed: l = ", l_list, "   (BHlmax = ", BHlmax, ", m = ", m, ")")
     end
 
-    Z1 = spheroidals(l1, m1, a, erg_1)
-    Z2 = spheroidals(l2, m2, a, erg_2)
-    Z3 = spheroidals(l3, m3, a, erg_3)
+    Z1 = spheroidals(l1, m1, a, erg_1, alph)
+    Z2 = spheroidals(l2, m2, a, erg_2, alph)
+    Z3 = spheroidals(l3, m3, a, erg_3, alph)
 
     lam_eff = 1.0e0
     if (n1==n2)&&(l1==l2)&&(m1==m2)
@@ -1827,7 +1836,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
 
     function mode_amplitude(l)
 
-        Z4 = spheroidals(l, m, a, erg)
+        Z4 = spheroidals(l, m, a, erg, alph)
 
         function compute_angular_integral_adaptive(Z1, Z2, Z3, Z4, use_spherical_fallback=false, timeout_seconds=180.0, nang_max=Nang)
             """
@@ -2203,7 +2212,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         lam = (mu ./ (M_pl .* 1e9))^2
         kk = real(sqrt.(erg.^2 .- alph.^2))
         # println("1/kk \t", 1 ./ kk)
-        rate_out = 2 .* alph .* kk .* (maxV .* itp_rrstar.(itp_rrstar.(rvals_end)).^2) .* lam^2
+        rate_out = 2 .* alph .* kk .* (maxV .* itp_rrstar.(rvals_end).^2) .* lam^2
         out_gamma = rate_out ./ mu^2 .* (GNew * M^2 * M_to_eV)^2
     else
         lam = (mu ./ (M_pl .* 1e9))^2

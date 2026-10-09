@@ -209,7 +209,7 @@ function radial_inf(erg, mu, M, a, l, m; rpts=1000, rmax_val=1e4,
 end
 
 """
-    spheroidals(l, m, a, erg) -> coefficients
+    spheroidals(l, m, a, erg, alph) -> coefficients
 
 Compute spheroidal harmonic expansion coefficients.
 
@@ -220,12 +220,13 @@ spheroidal harmonics in Kerr geometry.
 - `l::Int` - Orbital angular momentum
 - `m::Int` - Azimuthal quantum number
 - `a::Float64` - Black hole spin
-- `erg::Complex` - Eigenvalue (frequency)
+- `erg::Complex` - Eigenvalue (frequency), omega*G*M
+- `alph::Real` - mu*G*M; spheroidicity c = a*sqrt(erg^2 - alph^2)
 
 **Returns**:
 - `coefficients` - Spheroidal harmonic coefficients
 """
-function spheroidals(l, m, a, erg)
+function spheroidals(l, m, a, erg, alph)
     error("This function must be called from solve_sr_rates context")
 end
 
