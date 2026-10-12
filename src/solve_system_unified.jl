@@ -2,6 +2,196 @@ using DelimitedFiles
 using Interpolations
 include(joinpath(@__DIR__, "Core", "accretion.jl"))
 
+# ============================================================================
+# RHS / JACOBIAN KERNELS (standard mode)
+# ============================================================================
+# The hot loops of solve_system's RHS live here, behind function barriers with
+# typed arguments. Inside the solve_system closure several captured variables
+# are assigned more than once (idx_lvl, m_list, bn_list in both branches of
+# `if spinone`, track_alpha reassigned), so Julia boxes them and every access in
+# a loop is a dynamic dispatch: the scattering loop alone cost ~420 ns per
+# channel (17 ms per RHS call at Nmax 8, 42k channels). Same operations in the
+# same order, so the trajectory is unchanged to the bit.
+#
+# xfl: occupation at or below which a level counts as at the seed floor; a
+# channel with >= 2 floor participants is skipped (-Inf: never skip).
+
+function _scatter_terms!(du, X, rate_cache, sc_rates, track_alpha::Bool, idx_lvl::Int, massI::Int,
+                         rP_ratio::Float64, alph::Float64, omH::Float64, xfl::Float64)
+    for (kk, (idxV, sgn, is_bh_final, base_rate, m_drag)) in enumerate(rate_cache)
+        nfl = 0
+        for j in 1:length(sgn)
+            k = idxV[j]
+            (k <= idx_lvl && k > 0 && X[k] <= xfl) && (nfl += 1)
+        end
+        nfl >= 2 && continue
+        if track_alpha
+            base_rate = sc_rates[kk]
+        end
+        u_term_tot = 1.0
+        for j in 1:length(sgn)
+            if (idxV[j] <= idx_lvl) && (idxV[j] > 0)
+                u_term_tot *= X[idxV[j]]
+            end
+        end
+        kH = (is_bh_final && m_drag != 0) ? (alph - m_drag * omH) : 1.0
+        rate_val = base_rate * (is_bh_final ? rP_ratio : 1.0) * kH
+        for j in 1:length(sgn)
+            idx_j = idxV[j]
+            if idx_j == 0; continue; end
+            if idx_j == -1; idx_j = massI; end
+            du[idx_j] += sgn[j] * rate_val * u_term_tot
+        end
+    end
+    return
+end
+
+# gw_rhs! (Numerics/gw_rates.jl) with the floor skip
+function _gw_terms!(du, X, c::GWCache, α, a, xfl::Float64)
+    @inbounds for i in eachindex(c.n)
+        c.ω[i] = gw_omega(c.n[i], c.l[i], c.m[i], α, a)
+    end
+    @inbounds for k in eachindex(c.ann_i)
+        i, j = c.ann_i[k], c.ann_j[k]
+        (X[i] <= xfl && X[j] <= xfl) && continue
+        r = c.ann_C[k] * α^c.ann_p[k] * X[i] * X[j]
+        du[i] -= r
+        du[j] -= r        # i == j: -2r, two quanta per annihilation
+    end
+    @inbounds for t in eachindex(c.tr_i)
+        i, j = c.tr_i[t], c.tr_j[t]
+        (X[i] <= xfl && X[j] <= xfl) && continue
+        δ = c.ω[i] - c.ω[j]
+        δ == 0 && continue
+        r = gw_transition_rate_cached(c, t, α, abs(δ)) * X[i] * X[j]
+        hi, lo = δ > 0 ? (i, j) : (j, i)
+        du[hi] -= r
+        du[lo] += r
+    end
+    return du
+end
+
+# sanitize_state! for the standard mode
+function _sanitize_levels!(X, spinI::Int, n::Int, e_init::Float64, bn::Vector{Float64})
+    if X[spinI] > maxSpin
+        X[spinI] = maxSpin
+    elseif X[spinI] < 0.0
+        X[spinI] = 0.0
+    end
+    for i in 1:n
+        if X[i] < e_init
+            X[i] = e_init
+        end
+        if X[i] > bn[i]
+            X[i] = bn[i]
+        end
+    end
+    return
+end
+
+function _sr_terms!(du, X, SR::Vector{Float64}, ml::Vector{Int}, mu::Real, n::Int, spinI::Int, massI::Int)
+    du[spinI] = 0.0
+    du[massI] = 0.0
+    for i in 1:n
+        du[i] = SR[i] .* X[i] ./ mu
+        du[spinI] += -ml[i] * SR[i] .* X[i] ./ mu
+        du[massI] += -SR[i] .* X[i] ./ mu
+    end
+    return
+end
+
+# bosenova cap / seed floor switches and the unit conversion of the level rows
+function _level_units!(du, u, ln_bn::Vector{Float64}, ln_e0::Float64, thr::Float64, mu::Real, n::Int)
+    for i in 1:n
+        if ((abs(u[i] - ln_bn[i]) < thr) || (u[i] > ln_bn[i])) && (du[i] > 0)
+            du[i] = 0.0
+        elseif (abs(u[i] - ln_e0) < thr) && (du[i] < 0)
+            du[i] = 0.0
+        else
+            du[i] *= mu ./ hbar .* 3.15e7
+        end
+    end
+    return
+end
+
+function _zero_off!(du, off, n::Int)
+    for i in 1:n
+        off[i] && (du[i] = 0.0)
+    end
+    return
+end
+
+# Jacobian of the scattering terms in ln N: d(prod N)/d ln N_k = prod N, once per
+# occurrence of k. D accumulates the raw terms (as _scatter_terms! does into du).
+function _scatter_jac!(J, D, X, live, rate_cache, sc_rates, track_alpha::Bool, idx_lvl::Int, massI::Int,
+                       rP_ratio::Float64, alph::Float64, omH::Float64, xfl::Float64)
+    for (kk, (idxV, sgn, is_bh_final, base_rate, m_drag)) in enumerate(rate_cache)
+        nfl = 0
+        for j in 1:length(sgn)
+            k = idxV[j]
+            (k <= idx_lvl && k > 0 && X[k] <= xfl) && (nfl += 1)
+        end
+        nfl >= 2 && continue
+        if track_alpha
+            base_rate = sc_rates[kk]
+        end
+        P = 1.0
+        for j in 1:length(sgn)
+            if (idxV[j] <= idx_lvl) && (idxV[j] > 0)
+                P *= X[idxV[j]]
+            end
+        end
+        kH = (is_bh_final && m_drag != 0) ? (alph - m_drag * omH) : 1.0
+        v = base_rate * (is_bh_final ? rP_ratio : 1.0) * kH * P
+        for jt in 1:length(sgn)
+            it = idxV[jt]
+            it == 0 && continue
+            it == -1 && (it = massI)
+            c = sgn[jt] * v
+            D[it] += c
+            for jj in 1:length(sgn)
+                k = idxV[jj]
+                if (k <= idx_lvl) && (k > 0) && live[k]
+                    J[it, k] += c
+                end
+            end
+        end
+    end
+    return
+end
+
+function _gw_jac!(J, D, X, live, c::GWCache, α, a, xfl::Float64)
+    for i in eachindex(c.n)
+        c.ω[i] = gw_omega(c.n[i], c.l[i], c.m[i], α, a)
+    end
+    for k in eachindex(c.ann_i)
+        i, j = c.ann_i[k], c.ann_j[k]
+        (X[i] <= xfl && X[j] <= xfl) && continue
+        r = c.ann_C[k] * α^c.ann_p[k] * X[i] * X[j]
+        D[i] -= r; D[j] -= r
+        for o in (i, j)
+            if live[o]
+                J[i, o] -= r; J[j, o] -= r
+            end
+        end
+    end
+    for t in eachindex(c.tr_i)
+        i, j = c.tr_i[t], c.tr_j[t]
+        (X[i] <= xfl && X[j] <= xfl) && continue
+        δ = c.ω[i] - c.ω[j]
+        δ == 0 && continue
+        r = gw_transition_rate_cached(c, t, α, abs(δ)) * X[i] * X[j]
+        hi, lo = δ > 0 ? (i, j) : (j, i)
+        D[hi] -= r; D[lo] += r
+        for o in (i, j)
+            if live[o]
+                J[hi, o] -= r; J[lo, o] += r
+            end
+        end
+    end
+    return
+end
+
 
 """
     solve_system(mu, fa_or_nothing, aBH, M_BH, t_max; spinone=false, ...)
@@ -37,12 +227,17 @@ Handles both standard multi-level mode and spinone single-level mode via the spi
   (default 0 = off; use either this or f_edd)
 
 - `track_alpha`: let the SR rates (tabulated on a grid in M) and the scattering
-  rates (interpolated in log alpha between grid masses, refreshed whenever ln M
-  has moved by more than 1e-5) follow M(t). Default (`nothing`) = on (off in
-  spinone mode); with it off they stay at the initial alpha, as in the original
-  code. `track_alpha_dlnM` = (SR, scattering) grid spacing in ln M (default
-  (0.0025, 0.05), converged in tests; 0.01 for SR shifted late spins by ~5e-3)); `track_alpha_refresh` = change in ln M that triggers a refresh of
-  the scattering rates (default 1e-5; 0 = every RHS call). The GW rates always follow M(t);
+  rates (interpolated in log alpha between grid masses) follow M(t). Default
+  (`nothing`) = on (off in spinone mode); with it off they stay at the initial
+  alpha, as in the original code. `track_alpha_dlnM` = (SR, scattering) grid
+  spacing in ln M (default (0.0025, 0.05), converged in tests; 0.01 for SR shifted
+  late spins by ~5e-3)); `track_alpha_refresh` = change in ln M that triggers a
+  refresh of the scattering rates (default 0 = whenever M changes, i.e. every RHS
+  call; one exp per channel). A finite value holds the rates fixed in between, and
+  each refresh is a jump in the RHS: the levels relax to the new rates through a
+  fast transient that collapses the step size, a sawtooth in ln N of ~1e-4-1e-3
+  (BH 10, alpha 1, f_a 1e14, Nmax 8, refresh 1e-5), and the jump times depend on
+  the solver's trial states, so the small modes are not reproducible. The GW rates always follow M(t);
   the bosenova caps and Emax2 always use the initial alpha. With track_alpha the
   cloud's back-reaction on M and a also uses the occupation normalisation
   u = N/(G M_BH^2) correctly (without it the old approximation M ~ M_BH is kept:
@@ -71,6 +266,23 @@ Handles both standard multi-level mode and spinone single-level mode via the spi
   thresholds, extra points inside it are taken from the step's interpolant (as
   for saveat), at most save_max_sub per step. No extra RHS evaluations; the
   solution is unchanged. Set save_factor = save_dlna = Inf to switch it off.
+- `skip_floor_channels`: skip scattering and GW channels with two or more
+  participating levels at the seed floor (u <= e_init, within the solver's floor
+  band). Such a channel adds at most ~e_init (relative) to any d ln N/dt, below
+  double precision next to the other terms; identical trajectories in tests
+  (Nmax 8 and 15), and most channels at large Nmax (default true).
+- `solver`: :trbdf2 (default) or :radau (RadauIIA5, 5th order; far fewer steps at
+  these tolerances, best with `analytic_jac`). Agreed with :trbdf2 to ~1e-8 in the
+  final spin at Nmax 15 and 18; the final BH mass differed by 5e-8 (Nmax 15,
+  alpha 0.2, f_a 1e14) and 3.2e-7 (Nmax 18, alpha 1.3, f_a 1e16, with either
+  Jacobian), not yet understood.
+- `analytic_jac`: exact Jacobian for the level columns (one pass over the
+  channels; in ln N every term is a rate times a product of N's), finite
+  differences for the spin and mass columns (2 RHS calls), instead of finite
+  differences in every column (one RHS call per state). Matches finite
+  differences to ~1e-5 (their own error) along an Nmax 8 run to 5e6 yr. A
+  Jacobian error would only slow Newton; the solution is controlled by the error
+  estimate on the RHS. Default false.
 
 # Arguments - Spinone Mode (spinone=true)
 - `mu::Float64`: Axion mass (eV)
@@ -100,7 +312,8 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     gw_model=:nonrel, gw_min_rate_per_yr=1e-10, gw_literature=true,
     f_edd=0.0, acc_eta=0.1, acc_dlnM_dt=0.0, track_alpha=nothing, emax2_mode=nothing,
     emax2_taper=0.01, save_factor=5.0, save_dlna=1e-3, save_rel_floor=1e-10, save_max_sub=100,
-    track_alpha_dlnM=(0.0025, 0.05), track_alpha_refresh=1e-5, self_grav=false, si_sign=1.0, rate_input=nothing)
+    track_alpha_dlnM=(0.0025, 0.05), track_alpha_refresh=0.0, self_grav=false, si_sign=1.0, rate_input=nothing,
+    skip_floor_channels=true, solver=:trbdf2, analytic_jac=false)
 
     # ============================================================================
     # PARAMETER SETUP & VALIDATION
@@ -330,6 +543,15 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     turn_off = fill(false, idx_lvl)
     turn_off_M = false
 
+    # Typed, singly-assigned copies for the RHS kernels (see the note above _scatter_terms!)
+    n_lvl = Int(idx_lvl)
+    m_vec = spinone ? Int[] : Int[m for m in m_list]
+    bn_vec = spinone ? Float64[] : Float64[b for b in bn_list]
+    ln_bn_vec = log.(bn_vec)
+    ln_e0 = log(e_init)
+    track_alpha_on = track_alpha === true
+    x_floor = skip_floor_channels ? e_init * exp(SOLVER_TOLERANCES.bosenova_threshold) : -Inf
+
     # ============================================================================
     # SHARED HELPERS: used by both RHS and check_timescale to keep logic identical
     # ============================================================================
@@ -401,27 +623,34 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # ============================================================================
     function RHS_ax!(du, u, Mvars, t)
         u_real = exp.(u)
-        sanitize_state!(u_real)
-        
+        if spinone
+            sanitize_state!(u_real)
+        else
+            _sanitize_levels!(u_real, spinI, n_lvl, e_init, bn_vec)
+        end
 
         SR_rates_local, should_zero = compute_SR_rates_local(u_real)
-        
+
         if spinone && should_zero
             du .*= 0.0
             return
         end
 
         # Superradiance terms
-        du[spinI] = 0.0
-        du[massI] = 0.0
-
-        for i in 1:idx_lvl
-            du[i] = SR_rates_local[i] .* u_real[i] ./ mu
-            du[spinI] += -m_list[i] * SR_rates_local[i] .* u_real[i] ./ mu
-            du[massI] += -SR_rates_local[i] .* u_real[i] ./ mu
+        if spinone
+            du[spinI] = 0.0
+            du[massI] = 0.0
+            for i in 1:idx_lvl
+                du[i] = SR_rates_local[i] .* u_real[i] ./ mu
+                du[spinI] += -m_list[i] * SR_rates_local[i] .* u_real[i] ./ mu
+                du[massI] += -SR_rates_local[i] .* u_real[i] ./ mu
+            end
+        else
+            _sr_terms!(du, u_real, SR_rates_local isa Vector{Float64} ? SR_rates_local : Float64.(SR_rates_local),
+                       m_vec, mu, n_lvl, spinI, massI)
         end
 
-        # Scattering terms (standard mode only)
+        # Scattering and GW terms (standard mode only)
         if !spinone
             rP_now = 1.0 + sqrt(1.0 - u_real[spinI]^2)
             rP_ratio_now = rP_now / rP_initial
@@ -429,46 +658,22 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
             omH_now = a_now / (rP_now^2 + a_now^2)
             alph_now = GNew * u_real[massI] * mu
             track_alpha && refresh_sc_rates!(u_real[massI])
-            for (kk, (idxV, sgn, is_bh_final, base_rate, m_drag)) in enumerate(rate_cache)
-                if track_alpha
-                    base_rate = sc_rates_now[kk]
-                end
-                u_term_tot = 1.0
-                for j in 1:length(sgn)
-                    if (idxV[j] <= idx_lvl) && (idxV[j] > 0)
-                        u_term_tot *= u_real[idxV[j]]
-                    end
-                end
-                kH = (is_bh_final && m_drag != 0) ? (alph_now - m_drag * omH_now) : 1.0
-                rate_val = base_rate * (is_bh_final ? rP_ratio_now : 1.0) * kH
-                for j in 1:length(sgn)
-                    idx_j = idxV[j]
-                    if idx_j == 0; continue; end
-                    if idx_j == -1; idx_j = massI; end
-                    du[idx_j] += sgn[j] * rate_val * u_term_tot
-                end
-            end
-            gw_rhs!(du, u_real, gw_cache, alph_now, a_now)
+            _scatter_terms!(du, u_real, rate_cache, sc_rates_now, track_alpha_on, n_lvl, massI,
+                            rP_ratio_now, alph_now, omH_now, x_floor)
+            _gw_terms!(du, u_real, gw_cache, alph_now, a_now, x_floor)
         end
 
         # Unit corrections
-        for i in 1:idx_lvl
-            if spinone
+        if spinone
+            for i in 1:idx_lvl
                 if u_real[i] < e_init
                     du[i] = 0.0
                 else
                     du[i] *= mu ./ hbar .* 3.15e7
                 end
-            else
-                if ((abs(u[i] - log(bn_list[i])) < SOLVER_TOLERANCES.bosenova_threshold) ||
-                    (u[i] > log(bn_list[i]))) && (du[i] > 0)
-                    du[i] = 0.0
-                elseif (abs(u[i] - log(e_init)) < SOLVER_TOLERANCES.bosenova_threshold) && (du[i] < 0)
-                    du[i] = 0.0
-                else
-                    du[i] *= mu ./ hbar .* 3.15e7
-                end
             end
+        else
+            _level_units!(du, u, ln_bn_vec, ln_e0, SOLVER_TOLERANCES.bosenova_threshold, mu, n_lvl)
         end
 
         du[spinI] *= mu ./ hbar .* 3.15e7
@@ -488,10 +693,69 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
 
         du ./= u_real
 
-        for i in 1:idx_lvl
-            if turn_off[i]
-                du[i] = 0.0
+        _zero_off!(du, turn_off, n_lvl)
+        return
+    end
+
+    # Analytic Jacobian (analytic_jac): level columns exact in ln N, spin and mass
+    # columns by forward differences (SR interpolants, rate grids in M). Mirrors
+    # RHS_ax!: D holds the raw terms before the unit factors.
+    jac_f0 = zeros(massI); jac_f1 = zeros(massI); jac_up = zeros(massI)
+    function jac_ax!(J, u, Mvars, t)
+        n = length(u)
+        fill!(J, 0.0)
+        X0 = exp.(u)
+        X = copy(X0)
+        _sanitize_levels!(X, spinI, n_lvl, e_init, bn_vec)
+        live = [X0[i] == X[i] for i in 1:n]      # clamped components do not move
+        SR, _ = compute_SR_rates_local(X)
+        D = zeros(n)
+        for i in 1:n_lvl
+            g = SR[i] * X[i] / mu
+            D[i] += g; D[spinI] += -m_vec[i] * g; D[massI] += -g
+            if live[i]
+                J[i, i] += g; J[spinI, i] += -m_vec[i] * g; J[massI, i] += -g
             end
+        end
+        a_now = X[spinI]
+        rP_now = 1.0 + sqrt(1.0 - a_now^2)
+        omH_now = a_now / (rP_now^2 + a_now^2)
+        alph_now = GNew * X[massI] * mu
+        track_alpha && refresh_sc_rates!(X[massI])
+        _scatter_jac!(J, D, X, live, rate_cache, sc_rates_now, track_alpha_on, n_lvl, massI,
+                      rP_now / rP_initial, alph_now, omH_now, x_floor)
+        _gw_jac!(J, D, X, live, gw_cache, alph_now, a_now, x_floor)
+        K = mu ./ hbar .* 3.15e7
+        thr = SOLVER_TOLERANCES.bosenova_threshold
+        for i in 1:n_lvl
+            if ((abs(u[i] - ln_bn_vec[i]) < thr) || (u[i] > ln_bn_vec[i])) && (D[i] > 0)
+                D[i] = 0.0; J[i, :] .= 0.0
+            elseif (abs(u[i] - ln_e0) < thr) && (D[i] < 0)
+                D[i] = 0.0; J[i, :] .= 0.0
+            else
+                D[i] *= K; @views J[i, 1:n_lvl] .*= K
+            end
+        end
+        fs = track_alpha ? K * (M_BH / X[massI])^2 : K
+        fm = track_alpha ? (mu .* M_BH) .* (mu .* GNew .* M_BH) ./ hbar .* 3.15e7 :
+                           (mu .* X[massI]) .* (mu .* GNew .* X[massI]) ./ hbar .* 3.15e7
+        D[spinI] *= fs; @views J[spinI, 1:n_lvl] .*= fs
+        D[massI] *= fm; @views J[massI, 1:n_lvl] .*= fm
+        for i in 1:n                              # f = D / X
+            @views J[i, 1:n_lvl] ./= X[i]
+            (i <= n_lvl && live[i]) && (J[i, i] -= D[i] / X[i])
+        end
+        for i in 1:n_lvl
+            turn_off[i] && (@views J[i, :] .= 0.0)
+        end
+        RHS_ax!(jac_f0, u, Mvars, t)
+        jac_up .= u
+        for j in (spinI, massI)
+            h = 1e-7 * max(1.0, abs(u[j]))
+            jac_up[j] = u[j] + h
+            RHS_ax!(jac_f1, jac_up, Mvars, t)
+            jac_up[j] = u[j]
+            @views J[:, j] .= (jac_f1 .- jac_f0) ./ h
         end
         return
     end
@@ -745,7 +1009,13 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     else
         # Standard: full callback set
         callbackTIME = DiscreteCallback(time_limit_callback, affect_time!, save_positions=(false, false))
-        cbackdt = DiscreteCallback(check_timescale, affect_timescale!, save_positions=(false, true))
+        # affect_timescale! never changes u. With :radau tell the integrator so
+        # (a DiscreteCallback otherwise flags u as modified, which marks the
+        # Jacobian stale); :trbdf2 keeps the original behaviour.
+        cbackdt = solver === :radau ?
+            DiscreteCallback(check_timescale, itg -> (affect_timescale!(itg); u_modified!(itg, false)),
+                             save_positions=(false, false)) :
+            DiscreteCallback(check_timescale, affect_timescale!, save_positions=(false, true))
         cbackspin = DiscreteCallback(check_spin, affect_spin!, save_positions=(false, true))
         cbset = CallbackSet(cback_change, cbackspin, cbackdt, callbackTIME, cback_lower)
 
@@ -771,10 +1041,14 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         # Standard uses adaptive reltol array
         # println(reltol)
         # prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=reltol, abstol=1e-10)
-        prob = ODEProblem(RHS_ax!, y0, tspan, Mvars, reltol=reltol, abstol=1e-10)
+        prob = ODEProblem(analytic_jac ? ODEFunction(RHS_ax!; jac=jac_ax!) : RHS_ax!, y0, tspan, Mvars,
+                          reltol=reltol, abstol=1e-10)
     end
+    solver in (:trbdf2, :radau) || error("solver must be :trbdf2 or :radau")
+    (analytic_jac && spinone) && error("analytic_jac is not implemented for spinone mode")
+    alg = solver === :radau ? RadauIIA5(autodiff=false) : TRBDF2(autodiff=false)
     t_solve0 = time()
-    sol = solve(prob, TRBDF2(autodiff=false), dt=dt_guess, dtmin=floatmin(Float64), saveat=saveat, callback=cbset,
+    sol = solve(prob, alg, dt=dt_guess, dtmin=floatmin(Float64), saveat=saveat, callback=cbset,
                 maxiters=5e6)
     debug && println("solver retcode: ", sol.retcode, "  t_end = ", sol.t[end], " of ", t_max,
                      "  [setup ", round(t_solve0 - t_setup0, digits=1), " s, integration ",

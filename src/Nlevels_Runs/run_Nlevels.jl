@@ -83,6 +83,18 @@ function parse_commandline()
             default  = ""
             help     = "Custom channel list (file in rate_sve/ or absolute path) instead of load_rate_input_Nmax_X.txt, " *
                        "e.g. from rate_sve/gen_custom_input.py. Output files get an _rin_<name> tag"
+        "--track_alpha_refresh"
+            arg_type = Float64
+            default  = 0.0
+            help     = "Change in ln M that triggers a refresh of the scattering rates under track_alpha " *
+                       "(0 = every RHS call, default; the former default 1e-5 puts jumps in the RHS, see solve_system)"
+        "--solver"
+            arg_type = String
+            default  = "trbdf2"
+            help     = "trbdf2 (default) or radau (RadauIIA5; use with --analytic_jac)"
+        "--analytic_jac"
+            action   = :store_true
+            help     = "Analytic Jacobian for the level columns instead of finite differences in every column"
         "--resume"
             action   = :store_true
             help     = "Continue from last row of existing Time_/States_/Spin_/MassBH_ .dat"
@@ -210,6 +222,8 @@ f_edd >= 0 || error("--f_edd must be >= 0")
 self_grav  = parsed["self_grav"]
 si_sign    = parsed["si_sign"]
 rate_input = isempty(parsed["rate_input"]) ? nothing : parsed["rate_input"]
+solver  = Symbol(parsed["solver"])
+solver in (:trbdf2, :radau) || error("--solver must be trbdf2 or radau")
 
 # Derive axion mass from alpha = GNew * MassBH * m_a
 m_a = alpha / (GNew * MassBH)
@@ -228,6 +242,8 @@ println("  lm_only = ", lm_only)
 println("  resume  = ", do_resume)
 println("  self_grav = ", self_grav, self_grav ? "  (si_sign = $(si_sign))" : "")
 println("  rate_input = ", rate_input === nothing ? "default (load_rate_input_Nmax_$(Nmax).txt)" : rate_input)
+println("  solver  = ", solver, parsed["analytic_jac"] ? " (analytic Jacobian)" : "",
+        "  track_alpha_refresh = ", parsed["track_alpha_refresh"])
 println("  f_edd   = ", f_edd, f_edd > 0 ? "  (Mdot = $(f_edd * eddington_rate(MassBH; eta=acc_eta)) M_sun/yr, eta = $(acc_eta))" : "  (no accretion)")
 println("================================================")
 
@@ -313,6 +329,9 @@ timeT, StatesOut, modes_out, spin, massB = @time solve_system(
     self_grav       = self_grav,
     si_sign         = si_sign,
     rate_input      = rate_input,
+    track_alpha_refresh = parsed["track_alpha_refresh"],
+    solver          = solver,
+    analytic_jac    = parsed["analytic_jac"],
 )
 
 if do_resume
