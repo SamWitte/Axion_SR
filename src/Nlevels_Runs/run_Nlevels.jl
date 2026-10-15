@@ -83,6 +83,11 @@ function parse_commandline()
             default  = ""
             help     = "Custom channel list (file in rate_sve/ or absolute path) instead of load_rate_input_Nmax_X.txt, " *
                        "e.g. from rate_sve/gen_custom_input.py. Output files get an _rin_<name> tag"
+        "--dlnM_sc"
+            arg_type = Float64
+            default  = 0.05
+            help     = "Spacing in ln M of the mass grid on which the scattering rates are tabulated under track_alpha " *
+                       "(see solve_system track_alpha_dlnM); use ~0.002 to resolve an SI-SG cancellation in f_a"
         "--resume"
             action   = :store_true
             help     = "Continue from last row of existing Time_/States_/Spin_/MassBH_ .dat"
@@ -308,6 +313,7 @@ timeT, StatesOut, modes_out, spin, massB = @time solve_system(
     f_edd           = f_edd,
     acc_eta         = acc_eta,
     track_alpha     = !parsed["no_track_alpha"],
+    track_alpha_dlnM = (0.0025, parsed["dlnM_sc"]),
     save_factor     = parsed["save_factor"],
     save_dlna       = parsed["save_dlna"],
     self_grav       = self_grav,

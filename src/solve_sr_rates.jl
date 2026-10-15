@@ -1596,7 +1596,9 @@ end
 
 # multipole L of the Coulomb potential of a radial profile f on the (log) grid r:
 #   Q_L(r) = r^{-L-1} ∫_{r0}^r r'^{L+2} f + r^L ∫_r^∞ r'^{1-L} f
-function sg_coulomb_radial(f, r, L)
+# recoil = true (L = 1 only) subtracts the BH's acceleration: in the BH frame the kernel x.y/r_>^3 becomes
+# x.y (1/r_>^3 - 1/|y|^3), i.e. Q_1(r) -> Q_1(r) - r ∫_{r0}^∞ f (the uniform field of the exterior cloud drops out).
+function sg_coulomb_radial(f, r, L; recoil=false)
     n = length(r)
     ci = zeros(ComplexF64, n); co = zeros(ComplexF64, n)
     g_in = f .* r .^ (L + 2); g_out = f .* r .^ (1 - L)
@@ -1606,18 +1608,20 @@ function sg_coulomb_radial(f, r, L)
     for i in n-1:-1:1
         co[i] = co[i+1] + 0.5 * (g_out[i] + g_out[i+1]) * (r[i+1] - r[i])
     end
+    recoil && L == 1 && (co .-= co[1])
     return r .^ (-(L + 1)) .* ci .+ r .^ L .* co
 end
 
 # potential of the transition density conj(psi3) psi_b, multipole by multipole:
 #   Phi_b3(r, theta) e^{i M phi} = sum_L cL[L] * QL[L](r) * Y_{L M}(theta),   M = m_b - m3
 # contact = true returns the density itself in the same form (unit contact kernel; for tests)
-function sg_transition(rf_b, rf_3, Zb_prof, Z3_prof, mb, m3, lb, l3, r; contact=false)
+# recoil = true includes the BH's recoil (indirect term) in the dipole, L = 1, part (see sg_coulomb_radial)
+function sg_transition(rf_b, rf_3, Zb_prof, Z3_prof, mb, m3, lb, l3, r; contact=false, recoil=false)
     M_ = mb - m3
     Ls = [L for L in abs(M_):(lb + l3 + 4) if iseven(lb + l3 + L)]
     rho = rf_b .* conj.(rf_3)
     cL = Dict(L => sg_ang([Zb_prof, conj.(Z3_prof), conj.(sg_Y_profile(L, M_))], [mb, -m3, -M_]) for L in Ls)
-    QL = Dict(L => (contact ? rho : (4pi / (2L + 1)) .* sg_coulomb_radial(rho, r, L)) for L in Ls)
+    QL = Dict(L => (contact ? rho : (4pi / (2L + 1)) .* sg_coulomb_radial(rho, r, L; recoil=recoil)) for L in Ls)
     return (; M_, Ls, cL, QL)
 end
 
@@ -1635,7 +1639,7 @@ function sg_radial_source(tr, Za_prof, ma, rf_a, Z4_prof, m4, r, a)
     return rf_a .* T
 end
 
-function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, debug=false, Ntot_safe=10000,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=500000, eps_fac=1e-10, NON_REL=false, h_mve=1, to_inf=false, rmaxT=100, prec=200, cvg_acc=1e-4, NptsCh=60, iterC=40, Lcheb=4, run_leaver=false, der_acc=1e-20, use_heunc=false, pre_erg1=nothing, pre_erg2=nothing, pre_erg3=nothing, BHlmax=0, self_grav=false, sg_test_contact=false, ang_method=:mc)
+function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, debug=false, Ntot_safe=10000,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=500000, eps_fac=1e-10, NON_REL=false, h_mve=1, to_inf=false, rmaxT=100, prec=200, cvg_acc=1e-4, NptsCh=60, iterC=40, Lcheb=4, run_leaver=false, der_acc=1e-20, use_heunc=false, pre_erg1=nothing, pre_erg2=nothing, pre_erg3=nothing, BHlmax=0, self_grav=false, sg_test_contact=false, sg_recoil=false, ang_method=:mc)
 
     
     rp = BigFloat(1.0 .+ sqrt.(1.0 .- a.^2))
@@ -1911,8 +1915,8 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         identical_in = (n1==n2)&&(l1==l2)&&(m1==m2)
         rlistF = Float64.(rlist)
         rf1F = ComplexF64.(rf_1); rf2F = ComplexF64.(rf_2); rf3F = ComplexF64.(rf_3)
-        sg_tr_23 = sg_transition(rf2F, rf3F, Z2p, Z3p, m2, m3, l2, l3, rlistF; contact=sg_test_contact)  # 2 -> 3, acts on 1
-        sg_tr_13 = identical_in ? sg_tr_23 : sg_transition(rf1F, rf3F, Z1p, Z3p, m1, m3, l1, l3, rlistF; contact=sg_test_contact)
+        sg_tr_23 = sg_transition(rf2F, rf3F, Z2p, Z3p, m2, m3, l2, l3, rlistF; contact=sg_test_contact, recoil=sg_recoil)  # 2 -> 3, acts on 1
+        sg_tr_13 = identical_in ? sg_tr_23 : sg_transition(rf1F, rf3F, Z1p, Z3p, m1, m3, l1, l3, rlistF; contact=sg_test_contact, recoil=sg_recoil)
         sg_pref = Float64(preFac .* unitMatch) * 0.5 * (sg_test_contact ? 1.0 : 8.0 * Float64(alph)^2)
     end
     
