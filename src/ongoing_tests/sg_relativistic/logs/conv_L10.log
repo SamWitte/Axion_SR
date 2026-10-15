@@ -1,0 +1,5 @@
+modes: w1 = 0.199549146770+1.73e-14i (res 3.8e-14)   w3 = 0.198959055136+1.60e-09i (res 1.7e-14)
+  rhs 0.2s  assemble 42.1s  solve 9.0s  N=366 NC=128 nnz=41861248
+  Lorenz condition |Z|/|∇h|: max over cloud region 5.03e-05 (median 2.74e-07)
+  alpha=0.2000 l4=3: A_GR/A_N = -0.403155-0.518454i (|.|^2 = 0.43133)   A_NR/A_N = -0.552158-0.000004i (|.|^2 = 0.30488)   A_GR/A_NR |.|^2 = 1.41476   C_N = 7.8940e+08
+  total time 98.0 s

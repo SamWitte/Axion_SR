@@ -1,0 +1,15 @@
+=== (zeta = 1.0, wfac = 30.0, csfac = 1.5)
+modes: w1 = 0.199549146770+1.73e-14i (res 3.8e-14)   w3 = 0.198959055136+1.60e-09i (res 1.7e-14)
+  rhs 0.1s  assemble 18.9s  solve 1.0s  N=275 NC=68 nnz=8868900
+  Lorenz condition |Z|/|∇h|: max over cloud region 5.75e-03 (median 2.55e-05)
+  alpha=0.2000 l4=3: A_GR/A_N = 0.971769+0.023482i (|.|^2 = 0.94489)   A_NR/A_N = -0.552158-0.000004i (|.|^2 = 0.30488)   A_GR/A_NR |.|^2 = 3.09922   C_N = 7.8940e+08
+=== (zeta = 2.0, wfac = 30.0, csfac = 1.5)
+modes: w1 = 0.199549146770+1.73e-14i (res 3.8e-14)   w3 = 0.198959055136+1.60e-09i (res 1.7e-14)
+  rhs 0.1s  assemble 17.0s  solve 1.0s  N=275 NC=68 nnz=8868900
+  Lorenz condition |Z|/|∇h|: max over cloud region 5.75e-03 (median 2.55e-05)
+  alpha=0.2000 l4=3: A_GR/A_N = 0.971770+0.023482i (|.|^2 = 0.94489)   A_NR/A_N = -0.552158-0.000004i (|.|^2 = 0.30488)   A_GR/A_NR |.|^2 = 3.09922   C_N = 7.8940e+08
+=== (zeta = 1.0, wfac = 15.0, csfac = 1.5)
+modes: w1 = 0.199549146770+1.73e-14i (res 3.8e-14)   w3 = 0.198959055136+1.60e-09i (res 1.7e-14)
+  rhs 0.1s  assemble 15.9s  solve 1.0s  N=259 NC=68 nnz=8351012
+  Lorenz condition |Z|/|∇h|: max over cloud region 5.75e-03 (median 2.52e-05)
+  alpha=0.2000 l4=3: A_GR/A_N = 0.971740+0.023467i (|.|^2 = 0.94483)   A_NR/A_N = -0.552158-0.000004i (|.|^2 = 0.30488)   A_GR/A_NR |.|^2 = 3.09903   C_N = 7.8940e+08

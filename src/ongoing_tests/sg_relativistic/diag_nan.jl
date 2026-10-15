@@ -1,0 +1,22 @@
+include("exchange.jl"); include("hybrid.jl"); include("pinned.jl")
+const SRC = normpath(joinpath(@__DIR__, "..", ".."))
+include(joinpath(SRC, "Core/constants.jl")); include(joinpath(SRC, "solve_sr_rates.jl"))
+alph = 0.1; a = 0.0; mu = alph / GNew
+g1 = find_im_part(mu, 1.0, 0.5, 3, 2, 2; Ntot_force=5000, for_s_rates=true, return_both=true)
+g3 = find_im_part(mu, 1.0, 0.5, 2, 1, 1; Ntot_force=5000, for_s_rates=true, return_both=true)
+md1, _ = kerr_mode(3, 2, 2, alph, a, ComplexF64(Float64(g1[1]) + im * Float64(g1[2])))
+md3, _ = kerr_mode(2, 1, 1, alph, a, ComplexF64(Float64(g3[1]) + im * Float64(g3[2])))
+for Lmax in (10, 12)
+    es = setup(md1, md3; Lmax=Lmax, drho=0.05, ord=8)
+    ab = es.ab
+    println("Lmax=$Lmax nth=$(length(ab.T.th)) NC=$(NC(ab))  any NaN in tables: ", any(any(isnan, v) for v in values(ab.T.Y)), " ", any(any(isnan, v) for v in values(ab.T.d2Y)))
+    println("  B/P NaN: ", any(any(isnan, b) for b in ab.B), " ", any(any(isnan, p) for p in ab.P), "  max |B| ", maximum(maximum(abs, b) for b in ab.B))
+    A = assemble(es.a, es.wg, es.mg, es.ab, es.rg)
+    println("  A has NaN: ", any(isnan, nonzeros(A)), "  max ", maximum(abs, nonzeros(A)))
+    b = rhs_T31(es); println("  rhs NaN: ", any(isnan, b))
+end
+es = setup(md1, md3; Lmax=12, drho=0.05, ord=8)
+println("S1 NaN: ", [any(isnan, x) for x in es.S1], "  S3 NaN: ", [any(isnan, x) for x in es.S3])
+b = rhs_T31(es)
+ib = findall(i -> any(isnan, b[:, i]), 1:size(b, 2)); println("NaN radial idx: ", ib[1:min(5,end)], " r = ", real.(es.rg.r[ib[1:min(3,end)]]))
+println("f1 at that r: ", radial_f(md1, real(es.rg.r[ib[1]])), "  f3: ", radial_f(md3, real(es.rg.r[ib[1]])))

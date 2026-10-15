@@ -1,0 +1,12 @@
+=== a=0.0 (Lextra = 4, drho = 0.03)
+modes: w1 = 0.199548511205-4.66e-14i (res 6.2e-13)   w3 = 0.198952661253-4.06e-08i (res 4.4e-14)
+  assemble 9.7s  zeta-source 8.8s  solve 2.9s  beta = -320.49150018405373 - 114.78872870235281im
+  Lorenz condition |Z|/|∇h|: max over cloud region 3.65e-03 (median 5.22e-04)
+  alpha=0.2000 l4=3: A_GR/A_N = 51.175260-3.656032i (|.|^2 = 2632.27381)   A_NR/A_N = -0.549584+0.000106i (|.|^2 = 0.30204)   A_GR/A_NR |.|^2 = 8714.91037   C_N = 7.7563e+08
+  time 59.9
+=== a=0.0 (Lextra = 4, drho = 0.025)
+modes: w1 = 0.199548511205-4.66e-14i (res 6.2e-13)   w3 = 0.198952661253-4.06e-08i (res 4.4e-14)
+  assemble 10.3s  zeta-source 1.1s  solve 2.1s  beta = 5.61723697294559 + 2.6148084738849633im
+  Lorenz condition |Z|/|∇h|: max over cloud region 1.39e-03 (median 1.72e-04)
+  alpha=0.2000 l4=3: A_GR/A_N = 0.174584+0.019533i (|.|^2 = 0.03086)   A_NR/A_N = -0.549584+0.000106i (|.|^2 = 0.30204)   A_GR/A_NR |.|^2 = 0.10217   C_N = 7.7563e+08
+  time 22.9
