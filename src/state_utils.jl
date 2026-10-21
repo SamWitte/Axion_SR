@@ -135,3 +135,35 @@ function format_state_for_filename(n::Int, l::Int, m::Int)
         return format_state_string(n, l, m)
     end
 end
+
+
+"""
+    rate_input_path(Nmax; lm_only=false, rate_input=nothing) -> String
+
+Scattering channel list read by load_rate_coeffs: rate_sve/load_rate_input_Nmax_<Nmax>[_lm].txt,
+or `rate_input` (a file name in rate_sve/ or an absolute path).
+"""
+function rate_input_path(Nmax; lm_only=false, rate_input=nothing)
+    rate_input === nothing && return joinpath(@__DIR__, "rate_sve", "load_rate_input_Nmax_$(Nmax)$(lm_only ? "_lm" : "").txt")
+    return isabspath(rate_input) ? rate_input : joinpath(@__DIR__, "rate_sve", rate_input)
+end
+
+
+"""
+    scattering_levels(Nmax; lm_only=false, rate_input=nothing) -> Set{NTuple{3,Int}}
+
+The (n, l, m) levels named in that channel list (its first three columns). GW
+channels are only kept between these levels (gw_build_cache `levels`): a level
+with no self-interaction / self-gravity channel gets no GW population either.
+"""
+function scattering_levels(Nmax; lm_only=false, rate_input=nothing)
+    lv = Set{NTuple{3,Int}}()
+    for line in eachline(rate_input_path(Nmax; lm_only=lm_only, rate_input=rate_input))
+        f = split(line)
+        (length(f) >= 3 && !startswith(f[1], "#")) || continue
+        for s in f[1:3]
+            push!(lv, parse_state_string(String(s)))
+        end
+    end
+    return lv
+end

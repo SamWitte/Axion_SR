@@ -26,6 +26,9 @@ s = ArgParseSettings()
     "--n_out";     arg_type = Int; default = 2000; help = "number of log-spaced output times"
     "--gw_model";  arg_type = String; default = "nonrel"
     "--no_cloud_shifts"; action = :store_true; help = "omit self-gravity and self-interaction frequency shifts"
+    "--rate_input"; arg_type = String; default = ""; help = "the run's custom channel list (run_Nlevels.jl --rate_input)"
+    "--lm_only";   action = :store_true; help = "the run used --lm_only"
+    "--all_levels"; action = :store_true; help = "lines between all levels, not only those in the channel list (runs made before gw_si_levels_only)"
 end
 args = parse_args(s)
 dir, fname = args["outdir"], args["fname"]
@@ -40,10 +43,16 @@ spin = vec(rd("Spin_")); mass = vec(rd("MassBH_"))
 ndims(modes_m) == 1 && (modes_m = reshape(modes_m, 1, :))
 ndims(states) == 1 && (states = reshape(states, 1, :))
 modes = [(round(Int, modes_m[i, 1]), round(Int, modes_m[i, 2]), round(Int, modes_m[i, 3])) for i in 1:size(modes_m, 1)]
+# GW lines only between levels in the run's scattering channel list, as in the evolution
+rate_input = isempty(args["rate_input"]) ? nothing : args["rate_input"]
+(occursin("_rin_", fname) && rate_input === nothing && !args["all_levels"]) &&
+    error("$fname used a custom channel list; pass it with --rate_input")
+levels = args["all_levels"] ? nothing : scattering_levels(Nmax; lm_only=args["lm_only"], rate_input=rate_input)
 
 tgw, lines = gw_lines(timeT, states, modes, spin, mass, mu, Nmax; d_kpc=args["d_kpc"],
                       rel_floor=args["rel_floor"], n_out=args["n_out"], gw_model=Symbol(args["gw_model"]),
-                      self_gravity=!args["no_cloud_shifts"], fa=args["no_cloud_shifts"] ? nothing : fa)
+                      self_gravity=!args["no_cloud_shifts"], fa=args["no_cloud_shifts"] ? nothing : fa,
+                      levels=levels)
 println("$(length(lines)) GW lines (m_a = $mu eV, Nmax = $Nmax, d = $(args["d_kpc"]) kpc)")
 
 meta = [Any[String(L.kind), L.a..., L.b..., maximum(L.P), maximum(L.h0), L.f[1], L.f[end]] for L in lines]

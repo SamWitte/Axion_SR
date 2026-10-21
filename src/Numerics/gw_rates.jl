@@ -613,7 +613,7 @@ gw_empty_cache(modes) = GWCache([md[1] for md in modes], [md[2] for md in modes]
 
 """
     gw_build_cache(Nmax, modes, mu, M, a; gw_model=:nonrel, min_rate_per_yr=1e-10,
-                   literature_overrides=true) -> GWCache
+                   literature_overrides=true, M_cut=M, levels=nothing) -> GWCache
 
 Resolve the GW table for `Nmax` onto the solver's level list `modes`
 ((n,l,m,...) tuples, as from setup_quantum_levels_standard).
@@ -629,9 +629,13 @@ u = 1 (α only decreases during spin-down, so this stays conservative). At
 BH-potential-corrected α^14 result (gw_literature_annihilation).
 With accretion the BH can grow: pass the largest mass reached as `M_cut`, and
 a channel is kept if it passes the cut at either M or M_cut.
+`levels` (a set of (n, l, m), e.g. scattering_levels(Nmax)) keeps only channels
+whose levels are all in it; `nothing` keeps every level in `modes`. The table
+covers every level of gw_state_list(Nmax), so this is where a run's channel list
+restricts GW emission.
 """
 function gw_build_cache(Nmax, modes, mu, M, a; gw_model=:nonrel, min_rate_per_yr=1e-10,
-                        literature_overrides=true, M_cut=M)
+                        literature_overrides=true, M_cut=M, levels=nothing)
     c = gw_empty_cache(modes)
     gw_model == :off && return c
     gw_model == :rel && return gw_rates_relativistic(Nmax, modes, mu, M, a)
@@ -639,7 +643,8 @@ function gw_build_cache(Nmax, modes, mu, M, a; gw_model=:nonrel, min_rate_per_yr
     path = gw_table_path(Nmax)
     isfile(path) || error("GW table $(path) missing; build it with `julia src/scripts/build_gw_tables.jl $(Nmax)`")
     ann, trans = gw_load_table(path)
-    idx = Dict((md[1], md[2], md[3]) => i for (i, md) in enumerate(modes))
+    idx = Dict((md[1], md[2], md[3]) => i for (i, md) in enumerate(modes)
+               if levels === nothing || (md[1], md[2], md[3]) in levels)
     α = GNew * M * mu
     αc = GNew * max(M, M_cut) * mu
     floor_rate = min_rate_per_yr / (mu / hbar * YEAR_IN_SECONDS)
@@ -738,7 +743,7 @@ const GW_KPC_CM = 3.0857e21
 """
     gw_lines(timeT, states, modes, spin, mass, mu, Nmax; d_kpc=1.0, rel_floor=1e-8,
              n_peak_samples=400, gw_model=:nonrel, min_rate_per_yr=1e-10,
-             literature_overrides=true)
+             literature_overrides=true, levels=nothing)
 
 GW lines of an evolved cloud. `states[i, k]` is u_i at time `timeT[k]` (years) for
 level `modes[i]` = (n, l, m, ...) (rows of a Modes_ file; pruned lists are fine),
@@ -761,16 +766,18 @@ quartic self-interaction level shifts (cloud_shifts.jl) from every level
 occupied above occ_rel × the largest occupation; `df_cloud` is that cloud part
 of f. Powers use the unshifted spectrum, as in the evolution. `M0` is the BH mass
 that normalises u (the initial mass of the run); pass it when `timeT` etc. are a
-late-time slice of the run.
+late-time slice of the run. `levels` restricts the lines to those levels, as in
+gw_build_cache; pass the run's scattering_levels so that the lines match the
+evolution.
 """
 function gw_lines(timeT, states, modes, spin, mass, mu, Nmax; d_kpc=1.0, rel_floor=1e-8,
                   n_peak_samples=400, n_out=2000, gw_model=:nonrel, min_rate_per_yr=1e-10,
                   literature_overrides=true, self_gravity=true, fa=nothing, occ_rel=1e-8,
-                  M0=mass[1])
+                  M0=mass[1], levels=nothing)
     nt = length(timeT)
     c = gw_build_cache(Nmax, modes, mu, mass[1], spin[1]; gw_model=gw_model,
                        min_rate_per_yr=min_rate_per_yr, literature_overrides=literature_overrides,
-                       M_cut=maximum(mass))
+                       M_cut=maximum(mass), levels=levels)
     nlines = length(c.ann_i) + length(c.tr_i)
     ω = zeros(length(c.n))
     peak = zeros(nlines)
