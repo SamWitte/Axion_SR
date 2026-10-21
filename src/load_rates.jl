@@ -32,12 +32,7 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
     rP = 1 + sqrt.(1 - a^2)
     faFac = (M_pl ./ f_a)^4
 
-    input_suffix = lm_only ? "_lm" : ""
-    rate_file = if rate_input === nothing
-        joinpath(@__DIR__, "rate_sve/load_rate_input_Nmax_$(Nmax)$(input_suffix).txt")
-    else
-        isabspath(rate_input) ? rate_input : joinpath(@__DIR__, "rate_sve", rate_input)
-    end
+    rate_file = rate_input_path(Nmax; lm_only=lm_only, rate_input=rate_input)
     rate_list = readdlm(rate_file)
     if rate_input !== nothing
         for st in unique(string.(vec(rate_list[:, 1:3])))
@@ -241,6 +236,9 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
 
     return Drate
 end
+
+# (n, l, m) of every bound state named in a rate key ("a_b^c^BH", "a_b^c^Inf", "a_b_c^Inf", ...).
+rate_key_levels(k) = [parse_state_string(String(s)) for s in split(k, ['_', '^']) if !(s in ("BH", "Inf", "GW"))]
 
 function key_to_indx(keyN, Nmax)
     # Parse rate dictionary keys like "211_322^GW" or "211_211^322^BH"

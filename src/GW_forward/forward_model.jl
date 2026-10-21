@@ -155,7 +155,7 @@ function forward_model(p; mu, fa, Nmax=3, n_times=4000, window=0.9, rel_floor=1e
     tw = t[ks]
     res = gw_lines(tw, states[:, ks], modes, sp[ks], mb[ks], mu, Nmax; d_kpc=p.d_kpc,
                    rel_floor=0.0, n_out=length(ks), gw_model=gw_model, min_rate_per_yr=0.0,
-                   self_gravity=self_gravity, fa=fa, M0=p.M)
+                   self_gravity=self_gravity, fa=fa, M0=p.M, levels=scattering_levels(Nmax))
     α = GNew * mb[end] * mu
     kp = max(1, searchsortedlast(res.t, (1 - fdot_frac) * res.t[end]))
     dt_s = (res.t[end] - res.t[kp]) * YEAR_IN_SECONDS

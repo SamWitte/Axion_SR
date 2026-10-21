@@ -216,6 +216,11 @@ Handles both standard multi-level mode and spinone single-level mode via the spi
 - `si_sign::Float64`: sign of the quartic self-interaction for the SI-SG interference (+1 attractive/axion, -1 repulsive)
 - `rate_input`: custom scattering-channel list (file in rate_sve/ or absolute path) instead of
   load_rate_input_Nmax_X.txt, e.g. from rate_sve/gen_custom_input.py; its states must be Nmax modes
+- `gw_si_levels_only::Bool`: GW annihilations/transitions only between levels that appear in the
+  scattering channel list (scattering_levels; the hard-coded rate keys for non_rel=true), so a level
+  without self-interaction channels is not populated by GW either (default true). The Nmax level list
+  and GW table contain more levels (e.g. the (19,18,18) truncation mode at Nmax = 18); false keeps
+  them all, as before.
 - `high_p::Bool`: Use high-precision tolerances (default true)
 - `Nmax::Int`: Maximum principal quantum number 3-8 (default 3)
 - `cheby::Bool`: Use Chebyshev interpolation (default true)
@@ -309,7 +314,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     eq_threshold=1e-100, stop_on_a=0, abstol=1e-30, non_rel=true, high_p=true,
     N_pts_interp=200, N_pts_interpL=200, Nmax=3, cheby=true, spinone=false, lm_only=false,
     u0_override=nothing, t_start=0.0,
-    gw_model=:nonrel, gw_min_rate_per_yr=1e-10, gw_literature=true,
+    gw_model=:nonrel, gw_min_rate_per_yr=1e-10, gw_literature=true, gw_si_levels_only=true,
     f_edd=0.0, acc_eta=0.1, acc_dlnM_dt=0.0, track_alpha=nothing, emax2_mode=nothing,
     emax2_taper=0.01, save_factor=5.0, save_dlna=1e-3, save_rel_floor=1e-10, save_max_sub=100,
     track_alpha_dlnM=(0.0025, 0.05), track_alpha_refresh=0.0, self_grav=false, si_sign=1.0, rate_input=nothing,
@@ -438,15 +443,25 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         return j, clamp(x - (j - 1), 0.0, 1.0)
     end
 
-    # GW annihilations/transitions for every pair of levels; gw_rhs! re-evaluates
-    # them each RHS call at the current BH mass and spin (single assignment keeps
-    # the RHS closure type-stable).
+    # GW annihilations/transitions for every pair of levels that take part in the
+    # scattering channels (gw_si_levels_only); gw_rhs! re-evaluates them each RHS
+    # call at the current BH mass and spin (single assignment keeps the RHS
+    # closure type-stable).
+    gw_levels = if spinone || !gw_si_levels_only
+        nothing
+    elseif non_rel
+        Set(lv for k in keys(rates) for lv in rate_key_levels(k))
+    else
+        scattering_levels(Nmax; lm_only=lm_only, rate_input=rate_input)
+    end
     gw_cache = spinone ? gw_empty_cache(Tuple{Int,Int,Int}[]) :
                gw_build_cache(Nmax, modes, mu, M_BH, aBH; gw_model=gw_model,
                               min_rate_per_yr=gw_min_rate_per_yr, literature_overrides=gw_literature,
-                              M_cut=M_hi)
+                              M_cut=M_hi, levels=gw_levels)
     if debug && !spinone
-        println("GW ($(gw_model)): $(length(gw_cache.ann_i)) annihilation + $(length(gw_cache.tr_i)) transition channels")
+        lv_note = gw_levels === nothing ? "all $(length(modes)) levels" :
+                  "$(count(md -> (md[1], md[2], md[3]) in gw_levels, modes)) of $(length(modes)) levels (those in scattering channels)"
+        println("GW ($(gw_model)): $(length(gw_cache.ann_i)) annihilation + $(length(gw_cache.tr_i)) transition channels, $(lv_note)")
     end
 
     # ============================================================================
