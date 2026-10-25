@@ -90,8 +90,8 @@ function parse_commandline()
                        "(0 = every RHS call, default; the former default 1e-5 puts jumps in the RHS, see solve_system)"
         "--solver"
             arg_type = String
-            default  = "trbdf2"
-            help     = "trbdf2 (default) or radau (RadauIIA5; use with --analytic_jac)"
+            default  = "radau"
+            help     = "radau (RadauIIA5, default; use with --analytic_jac) or trbdf2"
         "--analytic_jac"
             action   = :store_true
             help     = "Analytic Jacobian for the level columns instead of finite differences in every column"
