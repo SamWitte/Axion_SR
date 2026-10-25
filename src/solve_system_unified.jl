@@ -914,6 +914,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
                 end
             end
         elseif (integrator.dt .<= 1e-13)
+            debug && println("affect_timescale!: dt = ", integrator.dt, " <= 1e-13 at t = ", integrator.t, "; stopping")
             terminate!(integrator)
         end
     end
@@ -967,6 +968,13 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
             end
         end
     end
+
+    # :radau only: a step that ends with a level more than an e-fold above its bosenova cap is
+    # rejected and retried with a smaller dt. Above the cap the RHS is clamped flat (X = bn, no
+    # growth), so the error estimate cannot see such an overshoot: at BH 10, f_a = 1e12,
+    # alpha = 1.3 one accepted step took (n,8,8) from ~1e-14 to ~1e190 and the run then stalled.
+    # :trbdf2 keeps the original behaviour.
+    radau_out_of_domain(u, p, t) = any(i -> u[i] > ln_bn_vec[i] + 1.0, 1:idx_lvl)
 
     # ============================================================================
     # BUILD CALLBACK SET
@@ -1063,8 +1071,9 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     (analytic_jac && spinone) && error("analytic_jac is not implemented for spinone mode")
     alg = solver === :radau ? RadauIIA5(autodiff=false) : TRBDF2(autodiff=false)
     t_solve0 = time()
+    domain_kw = (solver === :radau && !spinone) ? (isoutofdomain=radau_out_of_domain,) : NamedTuple()
     sol = solve(prob, alg, dt=dt_guess, dtmin=floatmin(Float64), saveat=saveat, callback=cbset,
-                maxiters=5e6)
+                maxiters=5e6; domain_kw...)
     debug && println("solver retcode: ", sol.retcode, "  t_end = ", sol.t[end], " of ", t_max,
                      "  [setup ", round(t_solve0 - t_setup0, digits=1), " s, integration ",
                      round(time() - t_solve0, digits=1), " s, ", sol.stats.naccept, " steps, ",
