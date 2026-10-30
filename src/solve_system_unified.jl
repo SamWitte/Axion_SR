@@ -281,6 +281,9 @@ Handles both standard multi-level mode and spinone single-level mode via the spi
   final spin at Nmax 15 and 18; the final BH mass differed by 5e-8 (Nmax 15,
   alpha 0.2, f_a 1e14) and 3.2e-7 (Nmax 18, alpha 1.3, f_a 1e16, with either
   Jacobian), not yet understood.
+  With :radau the saved points between step ends are bounded, level by level,
+  by the values at the two ends of their step (see cback_saveat): the stage
+  values of stiff levels are not accurate, and the raw interpolant overflowed.
 - `analytic_jac`: exact Jacobian for the level columns (one pass over the
   channels; in ln N every term is a rate times a product of N's), finite
   differences for the spin and mass columns (2 RHS calls), instead of finite
@@ -983,6 +986,43 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     dt_guess = abs.((maximum(SR_rates) ./ hbar .* 3.15e7)^(-1) ./ 5.0)
     cback_lower = DiscreteCallback(check_lower_bound, affect_lower_bound!, save_positions=(false, false))
 
+    # :radau only: the saveat points, and the save-on-change points inside a step, are taken
+    # here (cback_saveat, affect_change!) from the step's interpolant with every level bounded
+    # by its values at the two ends of the step, instead of by solve(saveat). The RadauIIA5
+    # interpolant runs through the stage values, which are not accurate for a stiff level held
+    # in quasi-equilibrium (only the step ends are): at BH 10, f_a = 1e14, alpha = 1.6 the
+    # accepted steps kept (15,10,10) at ln N = -32.1 while the interpolant inside the same steps
+    # swung between -42 and -16, and in other steps far above the bosenova cap, up to overflow
+    # (~1e5 saved points). Only the saved points change; the integration does not.
+    bounded_saves = solver === :radau && !spinone
+    function save_interp(integrator, tk)
+        tk == integrator.t && return copy(integrator.u)
+        v = integrator(tk)
+        if bounded_saves
+            for i in 1:idx_lvl
+                a, b = integrator.uprev[i], integrator.u[i]
+                v[i] = clamp(v[i], min(a, b), max(a, b))
+            end
+        end
+        return v
+    end
+    next_save = Ref(1)
+    check_saveat(u, t, integrator) = next_save[] <= length(saveat) && saveat[next_save[]] <= t
+    function affect_saveat!(integrator)
+        sol = integrator.sol
+        while next_save[] <= length(saveat) && saveat[next_save[]] <= integrator.t
+            tk = saveat[next_save[]]
+            if (isempty(sol.t) || tk > sol.t[end]) && integrator.saveiter == length(sol.t)
+                push!(sol.t, tk)
+                push!(sol.u, save_interp(integrator, tk))
+                integrator.saveiter += 1
+            end
+            next_save[] += 1
+        end
+        u_modified!(integrator, false)
+    end
+    cback_saveat = DiscreteCallback(check_saveat, affect_saveat!, save_positions=(false, false))
+
     # Save-on-change (see docstring), in log space against the last saved point
     # (saveat or callback). change_units = change in units of the thresholds; only
     # the part of a level's change above save_rel_floor * (largest occupation)
@@ -1011,13 +1051,13 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         sol = integrator.sol
         t1 = integrator.t
         t0 = max(sol.t[end], integrator.tprev)             # the interpolant covers [tprev, t]
-        u0 = t0 == sol.t[end] ? sol.u[end] : integrator(t0)
+        u0 = t0 == sol.t[end] ? sol.u[end] : save_interp(integrator, t0)
         n = min(ceil(Int, change_units(integrator.u, u0)), save_max_sub)
         if n > 1 && integrator.saveiter == length(sol.t)
             for k in 1:(n - 1)
                 tk = t0 + (t1 - t0) * k / n
                 push!(sol.t, tk)
-                push!(sol.u, copy(integrator(tk)))
+                push!(sol.u, save_interp(integrator, tk))
                 integrator.saveiter += 1
             end
         end
@@ -1040,7 +1080,8 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
                              save_positions=(false, false)) :
             DiscreteCallback(check_timescale, affect_timescale!, save_positions=(false, true))
         cbackspin = DiscreteCallback(check_spin, affect_spin!, save_positions=(false, true))
-        cbset = CallbackSet(cback_change, cbackspin, cbackdt, callbackTIME, cback_lower)
+        cbset = bounded_saves ? CallbackSet(cback_saveat, cback_change, cbackspin, cbackdt, callbackTIME, cback_lower) :
+                                CallbackSet(cback_change, cbackspin, cbackdt, callbackTIME, cback_lower)
 
     end
 
@@ -1072,8 +1113,11 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     alg = solver === :radau ? RadauIIA5(autodiff=false) : TRBDF2(autodiff=false)
     t_solve0 = time()
     domain_kw = (solver === :radau && !spinone) ? (isoutofdomain=radau_out_of_domain,) : NamedTuple()
-    sol = solve(prob, alg, dt=dt_guess, dtmin=floatmin(Float64), saveat=saveat, callback=cbset,
-                maxiters=5e6; domain_kw...)
+    # :radau saves the saveat grid itself (cback_saveat, bounded interpolant). As with solve(saveat), t_start
+    # (not on the grid) is not saved, and the end point is (t_max, or the wall-clock stop)
+    save_kw = bounded_saves ? (saveat=Float64[], save_everystep=false, save_start=false, save_end=true) : (saveat=saveat,)
+    sol = solve(prob, alg, dt=dt_guess, dtmin=floatmin(Float64), callback=cbset,
+                maxiters=5e6; save_kw..., domain_kw...)
     debug && println("solver retcode: ", sol.retcode, "  t_end = ", sol.t[end], " of ", t_max,
                      "  [setup ", round(t_solve0 - t_setup0, digits=1), " s, integration ",
                      round(time() - t_solve0, digits=1), " s, ", sol.stats.naccept, " steps, ",
