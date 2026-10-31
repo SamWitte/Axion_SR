@@ -91,6 +91,11 @@ function parse_commandline()
         "--resume"
             action   = :store_true
             help     = "Continue from last row of existing Time_/States_/Spin_/MassBH_ .dat"
+        "--n_times"
+            arg_type = Int
+            default  = 1000000
+            help     = "Number of log-spaced output times in (t_max*1e-9, t_max); transients are still resolved by the " *
+                       "save_factor / save_dlna adaptive saves. 1e6 (default) writes ~14 GB per Nmax 15 run, 2e4 ~0.3 GB"
     end
     return parse_args(s)
 end
@@ -231,6 +236,7 @@ println("  tau_max = ", tau_max)
 println("  outdir  = ", outdir)
 println("  lm_only = ", lm_only)
 println("  resume  = ", do_resume)
+println("  n_times = ", parsed["n_times"])
 println("  self_grav = ", self_grav, self_grav ? "  (si_sign = $(si_sign))" : "")
 println("  rate_input = ", rate_input === nothing ? "default (load_rate_input_Nmax_$(Nmax).txt)" : rate_input)
 println("  f_edd   = ", f_edd, f_edd > 0 ? "  (Mdot = $(f_edd * eddington_rate(MassBH; eta=acc_eta)) M_sun/yr, eta = $(acc_eta))" : "  (no accretion)")
@@ -257,7 +263,7 @@ mkpath(outdir)
 # Fixed numerical parameters -- taken from single_BH.jl
 impose_low_cut   = 1e-100
 return_all_info  = true
-n_times          = 1000000
+n_times          = parsed["n_times"]
 eq_threshold     = 1e-100
 stop_on_a        = 0.0
 abstol           = 1e-30

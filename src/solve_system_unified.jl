@@ -654,8 +654,17 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     println("ODE wall-clock limit: $(max_real_time / 3600.0) h (then save and exit)")
     flush(stdout)
 
+    # Optional heartbeat: NL_PROGRESS_SEC=<s> prints t, spin, mass, dt every s seconds of wall time (0/unset = off).
+    progress_sec = parse(Float64, get(ENV, "NL_PROGRESS_SEC", "0"))
+    next_progress = Ref(progress_sec)
     function time_limit_callback(u, t, integrator)
         elapsed_time = Dates.now() - start_time
+        if progress_sec > 0 && Dates.value(elapsed_time) >= next_progress[] * 1e3
+            next_progress[] = Dates.value(elapsed_time) / 1e3 + progress_sec
+            println("progress: t = ", t, " yr  spin = ", exp(u[spinI]), "  M = ", exp(u[massI]), " Msun  dt = ",
+                    integrator.dt, " yr  elapsed ", round(Dates.value(elapsed_time) / 3.6e6, digits=2), " h")
+            flush(stdout)
+        end
         if Dates.value(elapsed_time) > max_real_time * 1e3
             println("Terminating integration due to wall-clock limit at t=", t,
                     " after ", Dates.value(elapsed_time) / 3.6e6, " h")
