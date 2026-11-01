@@ -321,7 +321,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     f_edd=0.0, acc_eta=0.1, acc_dlnM_dt=0.0, track_alpha=nothing, emax2_mode=nothing,
     emax2_taper=0.01, save_factor=5.0, save_dlna=1e-3, save_rel_floor=1e-10, save_max_sub=100,
     track_alpha_dlnM=(0.0025, 0.05), track_alpha_refresh=0.0, self_grav=false, si_sign=1.0, rate_input=nothing,
-    skip_floor_channels=true, solver=:trbdf2, analytic_jac=false)
+    skip_floor_channels=true, solver=:trbdf2, analytic_jac=false, radau_kappa=nothing)
 
     # ============================================================================
     # PARAMETER SETUP & VALIDATION
@@ -1110,7 +1110,15 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     end
     solver in (:trbdf2, :radau) || error("solver must be :trbdf2 or :radau")
     (analytic_jac && spinone) && error("analytic_jac is not implemented for spinone mode")
-    alg = solver === :radau ? RadauIIA5(autodiff=false) : TRBDF2(autodiff=false)
+    # radau_kappa: RadauIIA5's Newton stopping tolerance kappa (OrdinaryDiffEq default 1/100). The first
+    # Newton iterate is accepted when eta_old * |correction| < kappa, with eta_old carried over from earlier
+    # steps (~1e-6 in quiet phases) and |correction| the RMS over the full basis, so one level's whole change
+    # over the step can pass unchecked: at BH 10, f_a = 1e14, alpha = 0.8 (T1620) the step t = 64.155 ->
+    # 81.33 was accepted after one iteration with (16,6,6) grown 38 e-folds at its start rate (+2.2/yr) past
+    # the point (ln N ~ -19) where it levels off; its rate at the accepted end was -4.4e4/yr. A smaller
+    # kappa makes such a step take a second iteration, which sees that rate and rejects the step.
+    alg = solver === :radau ? (radau_kappa === nothing ? RadauIIA5(autodiff=false) :
+                               RadauIIA5(autodiff=false, κ=radau_kappa)) : TRBDF2(autodiff=false)
     t_solve0 = time()
     domain_kw = (solver === :radau && !spinone) ? (isoutofdomain=radau_out_of_domain,) : NamedTuple()
     # :radau saves the saveat grid itself (cback_saveat, bounded interpolant). As with solve(saveat), t_start

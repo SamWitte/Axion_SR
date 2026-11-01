@@ -95,6 +95,12 @@ function parse_commandline()
         "--analytic_jac"
             action   = :store_true
             help     = "Analytic Jacobian for the level columns instead of finite differences in every column"
+        "--radau_kappa"
+            arg_type = Float64
+            default  = 0.0
+            help     = "radau only: Newton stopping tolerance kappa of RadauIIA5 (0 = the OrdinaryDiffEq default, " *
+                       "1/100). Smaller values make a step whose first Newton correction is large take another " *
+                       "iteration instead of being accepted unchecked"
         "--resume"
             action   = :store_true
             help     = "Continue from last row of existing Time_/States_/Spin_/MassBH_ .dat"
@@ -243,6 +249,7 @@ println("  resume  = ", do_resume)
 println("  self_grav = ", self_grav, self_grav ? "  (si_sign = $(si_sign))" : "")
 println("  rate_input = ", rate_input === nothing ? "default (load_rate_input_Nmax_$(Nmax).txt)" : rate_input)
 println("  solver  = ", solver, parsed["analytic_jac"] ? " (analytic Jacobian)" : "",
+        parsed["radau_kappa"] > 0 ? " (kappa = $(parsed["radau_kappa"]))" : "",
         "  track_alpha_refresh = ", parsed["track_alpha_refresh"])
 println("  f_edd   = ", f_edd, f_edd > 0 ? "  (Mdot = $(f_edd * eddington_rate(MassBH; eta=acc_eta)) M_sun/yr, eta = $(acc_eta))" : "  (no accretion)")
 println("================================================")
@@ -332,6 +339,7 @@ timeT, StatesOut, modes_out, spin, massB = @time solve_system(
     track_alpha_refresh = parsed["track_alpha_refresh"],
     solver          = solver,
     analytic_jac    = parsed["analytic_jac"],
+    radau_kappa     = parsed["radau_kappa"] > 0 ? parsed["radau_kappa"] : nothing,
 )
 
 if do_resume
