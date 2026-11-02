@@ -480,6 +480,12 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
             du[massI] *= (mu .* u_real[massI]) .* (mu .* GNew .* u_real[massI]) ./ hbar .* 3.15e7
         end
 
+        # a = J / (G M^2), so da/dt = Jdot/(G M^2) - 2 a Mdot/M. The terms above give only the
+        # Jdot part; add the mass part for the cloud's own mass changes (superradiant extraction,
+        # quanta absorbed by the horizon). Accretion carries its own -2a term (accretion_rhs),
+        # so this goes before it.
+        du[spinI] -= 2 * u_real[spinI] * du[massI] / u_real[massI]
+
         if accreting   # already per year
             dM_acc, da_acc = accretion_rhs(u_real[massI], u_real[spinI], acc_mdot(u_real[massI]))
             du[massI] += dM_acc
