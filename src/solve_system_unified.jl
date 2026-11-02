@@ -1117,8 +1117,13 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # 81.33 was accepted after one iteration with (16,6,6) grown 38 e-folds at its start rate (+2.2/yr) past
     # the point (ln N ~ -19) where it levels off; its rate at the accepted end was -4.4e4/yr. A smaller
     # kappa makes such a step take a second iteration, which sees that rate and rejects the step.
-    alg = solver === :radau ? (radau_kappa === nothing ? RadauIIA5(autodiff=false) :
-                               RadauIIA5(autodiff=false, κ=radau_kappa)) : TRBDF2(autodiff=false)
+    # linsolve: LUFactorization (LinearAlgebra.lu!, OpenBLAS) for both the real W1 and the complex W2. The default
+    # sends W1 to MKL and W2 to OpenBLAS; the two 10-thread pools, called alternately, slowed every factorization
+    # ~11x (at BH 10, f_a = 1e14, alpha = 0.6, towers45: 88% of the solve in LU, 0.67 s per step vs 0.17 s with
+    # this; same steps, states equal to 2e-11 relative).
+    radau_lin = OrdinaryDiffEq.LinearSolve.LUFactorization()
+    alg = solver === :radau ? (radau_kappa === nothing ? RadauIIA5(autodiff=false, linsolve=radau_lin) :
+                               RadauIIA5(autodiff=false, κ=radau_kappa, linsolve=radau_lin)) : TRBDF2(autodiff=false)
     t_solve0 = time()
     domain_kw = (solver === :radau && !spinone) ? (isoutofdomain=radau_out_of_domain,) : NamedTuple()
     # :radau saves the saveat grid itself (cback_saveat, bounded interpolant). As with solve(saveat), t_start
