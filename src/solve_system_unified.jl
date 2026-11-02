@@ -2,6 +2,14 @@ using DelimitedFiles
 using Interpolations
 include(joinpath(@__DIR__, "Core", "accretion.jl"))
 
+# RMS error norm over the full-basis length n (keep_levels): dropped levels would
+# contribute zero, so step-size control matches a full-basis run.
+function full_basis_norm(n)
+    fnorm(u::AbstractArray, t) = sqrt(real(sum(abs2, u)) / n)
+    fnorm(u::Number, t) = abs(u)
+    return fnorm
+end
+
 # ============================================================================
 # RHS / JACOBIAN KERNELS (standard mode)
 # ============================================================================
@@ -321,7 +329,8 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     f_edd=0.0, acc_eta=0.1, acc_dlnM_dt=0.0, track_alpha=nothing, emax2_mode=nothing,
     emax2_taper=0.01, save_factor=5.0, save_dlna=1e-3, save_rel_floor=1e-10, save_max_sub=100,
     track_alpha_dlnM=(0.0025, 0.05), track_alpha_refresh=0.0, self_grav=false, si_sign=1.0, rate_input=nothing,
-    skip_floor_channels=true, solver=:trbdf2, analytic_jac=false, radau_kappa=nothing)
+    skip_floor_channels=true, solver=:trbdf2, analytic_jac=false, keep_levels=nothing, maxiters=5e6, timescale_saves=true, gw_table_nmax=nothing, regime_split=true,
+    radau_kappa=nothing)
 
     # ============================================================================
     # PARAMETER SETUP & VALIDATION
@@ -362,6 +371,23 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         # STANDARD MODE: Multiple quantum levels
         fa = fa_or_nothing  # Unpack the fa parameter
         idx_lvl, m_list, bn_list, modes = setup_quantum_levels_standard(Nmax, fa, M_pl, alph, aBH)
+
+        # Truncated basis (keep_levels; an approximation): evolve only the levels (n,l,m)
+        # for which keep_levels returns true. SR rates and the GW cache below are built
+        # from the kept modes; scattering channels touching a dropped level are removed
+        # (and the rest renumbered) where rate_cache is built. A resume u0_override must
+        # already be restricted to the kept levels, in basis order (run_Nlevels.jl does this).
+        if keep_levels !== nothing
+            keep = BitVector([keep_levels(md[1], md[2], md[3]) for md in modes])
+            n_full_lvl = idx_lvl
+            kidx = findall(keep)
+            full_to_red = zeros(Int, n_full_lvl)
+            full_to_red[kidx] .= 1:length(kidx)
+            idx_lvl = length(kidx)
+            m_list = m_list[kidx]
+            bn_list = bn_list[kidx]
+            modes = modes[kidx]
+        end
 
         # Compute Emax2 cutoff for 211 level
         Emax2 = 1.0
@@ -407,7 +433,8 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     else
         # Standard: Compute interpolated rates using smooth symlog interpolation
         SR_rates, interp_funcs, interp_dict = compute_sr_rates_smooth(modes, M_BH, aBH, alph, cheby=cheby)
-        rates = load_rate_coeffs(mu, M_BH, aBH, fa, Nmax, SR_rates; non_rel=non_rel, lm_only=lm_only, self_grav=self_grav, si_sign=si_sign, rate_input=rate_input)
+        rates = load_rate_coeffs(mu, M_BH, aBH, fa, Nmax, SR_rates; non_rel=non_rel, lm_only=lm_only, self_grav=self_grav, si_sign=si_sign, rate_input=rate_input,
+                                 regime_split=regime_split)
         Mvars = [mu, fa, Emax2, aBH, M_BH, impose_low_cut]
         rP_initial = 1.0 + sqrt(1.0 - aBH^2)
     end
@@ -434,7 +461,9 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         (log(M_lo), n_sr, d_sr, collect(Ms_sr),
          [compute_sr_rates_smooth(modes, Mj, aBH, GNew * Mj * mu, cheby=cheby)[2] for Mj in Ms_sr],
          n_sc, d_sc,
-         [load_rate_coeffs(mu, Mj, aBH, fa, Nmax, SR_rates; non_rel=non_rel, lm_only=lm_only, self_grav=self_grav, si_sign=si_sign, rate_input=rate_input) for Mj in Ms_sc])
+         # regime-split halves unmasked here; refresh_sc_rates! switches them at alpha_c
+         [load_rate_coeffs(mu, Mj, aBH, fa, Nmax, SR_rates; non_rel=non_rel, lm_only=lm_only, self_grav=self_grav, si_sign=si_sign, rate_input=rate_input,
+                           regime_split=regime_split, regime_mask=false) for Mj in Ms_sc])
     else
         (0.0, 2, 1.0, Float64[], Vector{Any}[], 2, 1.0, Dict[])
     end
@@ -458,7 +487,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         scattering_levels(Nmax; lm_only=lm_only, rate_input=rate_input)
     end
     gw_cache = spinone ? gw_empty_cache(Tuple{Int,Int,Int}[]) :
-               gw_build_cache(Nmax, modes, mu, M_BH, aBH; gw_model=gw_model,
+               gw_build_cache(gw_table_nmax === nothing ? Nmax : gw_table_nmax, modes, mu, M_BH, aBH; gw_model=gw_model,
                               min_rate_per_yr=gw_min_rate_per_yr, literature_overrides=gw_literature,
                               M_cut=M_hi, levels=gw_levels)
     if debug && !spinone
@@ -478,12 +507,25 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # computed for is_bh keys: non-BH keys (e.g. "*_*^Inf") don't have a
     # state label in the trailing slot, so get_m would fail to parse it there.
     get_m(s) = occursin("-", s) ? parse(Int, split(s, "-")[3]) : parse(Int, s[end:end])
+    if keep_levels !== nothing && !spinone
+        # key_to_indx numbers levels in the full basis: drop channels that touch a dropped
+        # level (before rate_keys/lnR_sc are taken from `rates`); the rest are renumbered below.
+        for k in collect(keys(rates))
+            idxV_k, _ = key_to_indx(k, Nmax)
+            any(j -> 0 < j <= n_full_lvl && full_to_red[j] == 0, idxV_k) && delete!(rates, k)
+        end
+        println("keep_levels: evolving ", idx_lvl, " of ", n_full_lvl, " levels, ",
+                length(rates), " scattering channels")
+    end
     rate_cache = if !spinone
         map(collect(keys(rates))) do k
             if abs.(rates[k]) .> 1e20
                 rates[k] = 0.0
             end
             idxV, sgn = key_to_indx(k, Nmax)
+            if keep_levels !== nothing   # 0 (Inf/GW) and -1 (BH) keep their meaning
+                idxV = Int[(0 < j <= n_full_lvl) ? full_to_red[j] : j for j in idxV]
+            end
             is_bh = any(idxV .== -1)
             m_drag = 0
             if is_bh
@@ -515,14 +557,40 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # moved by more than 1e-5 since the last refresh (rates ~ alpha^p with p <~ 11,
     # so the error is <~ 1e-4), instead of one exp per rate in every RHS call.
     sc_rates_now = [r[4] for r in rate_cache]
+    # Regime-split channels (rate_sve/regime_split.txt): each half is on only on its side of
+    # alpha_c, i.e. of the mass sc_Mc; it may be off (zero) at the initial mass, so its sign
+    # comes from the grid.
+    sc_Mc = zeros(length(rate_keys))
+    sc_below = falses(length(rate_keys))
+    sc_sign = [sign(r[4]) for r in rate_cache]
+    if track_alpha && regime_split && !spinone
+        split_tab = regime_split_table(joinpath(@__DIR__, "rate_sve/"))
+        for (kk, k) in enumerate(rate_keys)
+            parts = split(k, "_", limit=2)
+            caret = length(parts) == 2 ? split(parts[2], "^") : String[]
+            length(caret) == 3 || continue
+            sp = get(split_tab, parts[1] * "_" * caret[1] * "_" * caret[2], nothing)
+            sp === nothing && continue
+            sc_Mc[kk] = sp[1] / (GNew * mu)
+            sc_below[kk] = caret[3] == sp[2]
+            if sc_sign[kk] == 0.0
+                j0 = findfirst(j -> get(rates_sc[j], k, 0.0) != 0.0, 1:nM_sc)
+                j0 === nothing || (sc_sign[kk] = sign(rates_sc[j0][k]))
+            end
+        end
+    end
     sc_lnM = Ref(-Inf)
     function refresh_sc_rates!(M)
         lnM = log(M)
         abs(lnM - sc_lnM[]) <= track_alpha_refresh && lnM == lnM && return
         j, w = mass_bracket(M, nM_sc, dlnM_sc)
         for kk in eachindex(sc_rates_now)
-            b = rate_cache[kk][4]
-            sc_rates_now[kk] = b == 0.0 ? 0.0 : sign(b) * exp((1 - w) * lnR_sc[kk, j] + w * lnR_sc[kk, j + 1])
+            s = sc_sign[kk]
+            if s == 0.0 || (sc_Mc[kk] > 0 && (M < sc_Mc[kk]) != sc_below[kk])
+                sc_rates_now[kk] = 0.0
+            else
+                sc_rates_now[kk] = s * exp((1 - w) * lnR_sc[kk, j] + w * lnR_sc[kk, j + 1])
+            end
         end
         sc_lnM[] = lnM
         return
@@ -920,6 +988,12 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
             debug && println("affect_timescale!: dt = ", integrator.dt, " <= 1e-13 at t = ", integrator.t, "; stopping")
             terminate!(integrator)
         end
+        if nl_diag
+            imin = argmin(abs.(tlist))
+            lab = imin <= length(indx_list) ? modes[indx_list[imin]][1:3] : "spin"
+            println("diag timescale: t = ", integrator.t, "  dt = ", integrator.dt, "  tmin = ", tmin, " (", lab,
+                    ")  dt/tmin = ", integrator.dt / tmin, "  wait = ", wait)
+        end
     end
 
     # Shared: wall-clock limit. Must be shorter than the Slurm wall so the
@@ -936,9 +1010,21 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     start_time = Dates.now()
     println("ODE wall-clock limit: $(max_real_time / 3600.0) h (then save and exit)")
     flush(stdout)
+    # Progress line every progress_sec of wall time (NL_PROGRESS_SEC overrides; default 1 h),
+    # since nothing else is written until the run ends.
+    progress_sec = parse(Float64, get(ENV, "NL_PROGRESS_SEC", "3600"))
+    next_progress_ms = progress_sec * 1e3
 
     function time_limit_callback(u, t, integrator)
         elapsed_time = Dates.now() - start_time
+        if Dates.value(elapsed_time) > next_progress_ms
+            println("progress: wall ", round(Dates.value(elapsed_time) / 3.6e6, digits=2), " h  t = ", t,
+                    " of ", t_max, " (log10 t = ", round(log10(max(t, 1e-300)), digits=3), ")  spin = ",
+                    exp(u[spinI]), "  M = ", exp(u[massI]), "  saved = ", length(integrator.sol.t),
+                    "  steps = ", integrator.stats.naccept)
+            flush(stdout)
+            next_progress_ms += progress_sec * 1e3
+        end
         if Dates.value(elapsed_time) > max_real_time * 1e3
             println("Terminating integration due to wall-clock limit at t=", t,
                     " after ", Dates.value(elapsed_time) / 3.6e6, " h")
@@ -983,6 +1069,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # BUILD CALLBACK SET
     # ============================================================================
     def_spin_tol = 1e-3
+    nl_diag = !isempty(get(ENV, "NL_DIAG", ""))
     dt_guess = abs.((maximum(SR_rates) ./ hbar .* 3.15e7)^(-1) ./ 5.0)
     cback_lower = DiscreteCallback(check_lower_bound, affect_lower_bound!, save_positions=(false, false))
 
@@ -1078,7 +1165,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         cbackdt = solver === :radau ?
             DiscreteCallback(check_timescale, itg -> (affect_timescale!(itg); u_modified!(itg, false)),
                              save_positions=(false, false)) :
-            DiscreteCallback(check_timescale, affect_timescale!, save_positions=(false, true))
+            DiscreteCallback(check_timescale, affect_timescale!, save_positions=(false, timescale_saves))
         cbackspin = DiscreteCallback(check_spin, affect_spin!, save_positions=(false, true))
         cbset = bounded_saves ? CallbackSet(cback_saveat, cback_change, cbackspin, cbackdt, callbackTIME, cback_lower) :
                                 CallbackSet(cback_change, cbackspin, cbackdt, callbackTIME, cback_lower)
@@ -1089,6 +1176,34 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # the fastest transients (e.g. the 322 burst at alpha = 0.2, f_a = 1e16 GeV, e-folding ~1 min), which then
     # abort with DtLessThanMin. Use no fixed floor (dtmin = floatmin) and instead stop once a step can no longer
     # advance t, i.e. dt is below the floating-point resolution at the current t.
+    # NL_DIAG=1: print every accepted step (t, dt, error estimate) and every timescale-callback action.
+    # NL_DIAG_LEVEL=n-l-m with NL_DIAG_T=t0,t1: also that level's ln N at both step ends and the
+    # step's interpolant at a few interior points, for steps ending in [t0, t1]. With NL_DIAG_T
+    # given, only steps ending in [t0, t1] are printed at all.
+    diag_nlm = get(ENV, "NL_DIAG_LEVEL", "")
+    diag_i = isempty(diag_nlm) ? 0 :
+        something(findfirst(md -> Tuple(md[1:3]) == Tuple(parse.(Int, split(diag_nlm, "-"))), modes), 0)
+    diag_t = parse.(Float64, split(get(ENV, "NL_DIAG_T", "0,Inf"), ","))
+    function diag_step!(integrator)
+        if !(diag_t[1] <= integrator.t <= diag_t[2])
+            u_modified!(integrator, false)
+            return
+        end
+        println("diag step: t = ", integrator.t, "  dt = ", integrator.dt, "  EEst = ", integrator.EEst,
+                "  naccept = ", integrator.stats.naccept, "  nreject = ", integrator.stats.nreject)
+        if diag_i > 0
+            t0, t1 = integrator.tprev, integrator.t
+            mid = [round(integrator(t0 + (t1 - t0) * th)[diag_i], digits=3) for th in (0.155, 0.3, 0.5, 0.645, 0.8, 0.95)]
+            println("diag level ", diag_nlm, ": [", t0, ", ", t1, "]  ln N ", round(integrator.uprev[diag_i], digits=3),
+                    " -> ", round(integrator.u[diag_i], digits=3), "  (cap ", round(ln_bn_vec[diag_i], digits=3),
+                    ")  interpolant at 0.155/0.3/0.5/0.645/0.8/0.95: ", mid)
+        end
+        u_modified!(integrator, false)
+    end
+    if nl_diag
+        cback_diag = DiscreteCallback((u, t, integrator) -> true, diag_step!, save_positions=(false, false))
+        cbset = CallbackSet(cbset, cback_diag)
+    end
     cback_stall = DiscreteCallback((u, t, integrator) -> integrator.t + integrator.dt == integrator.t,
                                    integrator -> (debug && println("dt = ", integrator.dt, " no longer advances t = ",
                                                                    integrator.t, "; stopping"); terminate!(integrator)),
@@ -1129,8 +1244,13 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # :radau saves the saveat grid itself (cback_saveat, bounded interpolant). As with solve(saveat), t_start
     # (not on the grid) is not saved, and the end point is (t_max, or the wall-clock stop)
     save_kw = bounded_saves ? (saveat=Float64[], save_everystep=false, save_start=false, save_end=true) : (saveat=saveat,)
-    sol = solve(prob, alg, dt=dt_guess, dtmin=floatmin(Float64), callback=cbset,
-                maxiters=5e6; save_kw..., domain_kw...)
+    sol = if keep_levels === nothing || spinone
+        solve(prob, alg, dt=dt_guess, dtmin=floatmin(Float64), callback=cbset,
+              maxiters=maxiters; save_kw..., domain_kw...)
+    else
+        solve(prob, alg, dt=dt_guess, dtmin=floatmin(Float64), callback=cbset,
+              maxiters=maxiters, internalnorm=full_basis_norm(n_full_lvl + 2); save_kw..., domain_kw...)
+    end
     debug && println("solver retcode: ", sol.retcode, "  t_end = ", sol.t[end], " of ", t_max,
                      "  [setup ", round(t_solve0 - t_setup0, digits=1), " s, integration ",
                      round(time() - t_solve0, digits=1), " s, ", sol.stats.naccept, " steps, ",

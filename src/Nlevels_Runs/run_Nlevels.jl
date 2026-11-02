@@ -101,6 +101,33 @@ function parse_commandline()
             help     = "radau only: Newton stopping tolerance kappa of RadauIIA5 (0 = the OrdinaryDiffEq default, " *
                        "1/100). Smaller values make a step whose first Newton correction is large take another " *
                        "iteration instead of being accepted unchecked"
+        "--maxiters"
+            arg_type = Float64
+            default  = 5e6
+            help     = "Maximum solver iterations before the run stops (then marked incomplete; continue with --resume)"
+        "--timescale_saves"
+            arg_type = Bool
+            default  = true
+            help     = "With trbdf2, also save a point whenever the timescale callback fires (default; in strongly " *
+                       "oscillating phases that is nearly every step). false saves only the regular grid and " *
+                       "save-on-change points; the trajectory is unchanged"
+        "--gw_table_nmax"
+            arg_type = String
+            default  = ""
+            help     = "Take the GW channels from gw_nr_rates_Nmax_<this>.txt instead of the run's Nmax " *
+                       "(empty = same as Nmax; e.g. 18 or a custom table tag like 45_T1020); " *
+                       "levels outside that table get no GW"
+        "--regime_split"
+            arg_type = Bool
+            default  = true
+            help     = "Use rate_sve/regime_split.txt: channels whose fourth quantum changes between bound (BH) " *
+                       "and escaping (Inf) at alpha_c use their BH half on one side and Inf half on the other " *
+                       "(false: each channel keeps its list label at every alpha, as before 2026-10-22)"
+        "--keep_levels"
+            arg_type = String
+            default  = ""
+            help     = "Truncate the basis (approximate): \"lm\" keeps l == m levels, optionally plus a list, " *
+                       "e.g. \"lm,8-7-6,8-7-5\" (pair with a matching --rate_input). Empty = full basis"
         "--resume"
             action   = :store_true
             help     = "Continue from last row of existing Time_/States_/Spin_/MassBH_ .dat"
@@ -114,10 +141,13 @@ function _mode_key(row)::Tuple{Int,Int,Int}
 end
 
 """
-Load prior trajectory and rebuild log-space u0 from the last saved time.
+Read the last saved point of a run (resume), streaming the .dat files: a States_ row holds
+one value per saved time (~1e6), so the history is never loaded into memory.
 
 Archives may be pruned (only active modes kept). Inactive modes are restored
 to e_floor / e_init so u0 matches setup_quantum_levels_standard(Nmax, ...).
+Returns t_last, u0 (full Nmax spectrum), idx_lvl, modes_full, the Modes_ rows of
+the files, the number of saved times, and the last spin and mass.
 """
 function load_resume_state(outdir::String, fname::String, e_floor::Float64,
                            Nmax::Int, fa::Float64, alph::Float64, aBH::Float64)
@@ -132,24 +162,18 @@ function load_resume_state(outdir::String, fname::String, e_floor::Float64,
         isfile(p) || error("--resume requested but missing $k file: $p")
     end
 
-    time_old   = vec(readdlm(paths[:time]))
-    states_old = readdlm(paths[:states])          # (n_kept, n_times)
-    modes_old  = readdlm(paths[:modes])
-    spin_old   = vec(readdlm(paths[:spin]))
-    mass_old   = vec(readdlm(paths[:mass]))
+    n_times = _count_rows(paths[:time])
+    for k in (:spin, :mass)
+        n = _count_rows(paths[k])
+        n == n_times || error("$(k) has $n rows but Time has $n_times")
+    end
+    t_last = parse(Float64, strip(_last_row(paths[:time])))
+    a_last = parse(Float64, strip(_last_row(paths[:spin])))
+    M_last = parse(Float64, strip(_last_row(paths[:mass])))
 
-    n_kept, n_times = size(states_old)
-    if length(time_old) != n_times
-        error("Time length $(length(time_old)) != States cols $n_times")
-    end
-    if length(spin_old) != n_times || length(mass_old) != n_times
-        error("Spin/MassBH length mismatch vs States cols $n_times")
-    end
+    modes_old = readdlm(paths[:modes])
     if ndims(modes_old) == 1
         modes_old = reshape(modes_old, 1, :)
-    end
-    if size(modes_old, 1) != n_kept
-        error("Modes rows $(size(modes_old,1)) != States rows $n_kept")
     end
 
     idx_lvl, _, _, modes_full = setup_quantum_levels_standard(Nmax, fa, M_pl, alph, aBH)
@@ -158,57 +182,98 @@ function load_resume_state(outdir::String, fname::String, e_floor::Float64,
         full_index[(Int(md[1]), Int(md[2]), Int(md[3]))] = i
     end
 
-    # Expand pruned States to full spectrum (inactive = e_floor for all times).
-    states_full = fill(e_floor, idx_lvl, n_times)
-    n_mapped = 0
-    for j in 1:n_kept
-        key = _mode_key(modes_old[j, :])
+    # Last value of each States_ row (inactive / pruned modes stay at e_floor).
+    E_last = fill(e_floor, idx_lvl)
+    n_kept = 0
+    for ln in eachline(paths[:states])
+        isempty(strip(ln)) && continue
+        n_kept += 1
+        n_kept <= size(modes_old, 1) || error("States has more rows than Modes ($(size(modes_old, 1)))")
+        key = _mode_key(modes_old[n_kept, :])
         haskey(full_index, key) || error("Resume mode $key not in Nmax=$Nmax spectrum")
-        i = full_index[key]
-        @inbounds for t in 1:n_times
-            states_full[i, t] = Float64(states_old[j, t])
-        end
-        n_mapped += 1
+        E_last[full_index[key]] = max(_last_number(ln), e_floor)
     end
-    if n_kept < idx_lvl
-        println("  pruned archive: mapped $n_mapped/$idx_lvl modes; ",
-                "padded $(idx_lvl - n_mapped) inactive with e_floor")
-    elseif n_kept != idx_lvl
-        error("States has $n_kept modes but Nmax=$Nmax expects $idx_lvl")
-    end
+    n_kept == size(modes_old, 1) || error("States rows $n_kept != Modes rows $(size(modes_old, 1))")
+    n_kept < idx_lvl && println("  pruned archive: mapped $n_kept/$idx_lvl modes; ",
+                                "padded $(idx_lvl - n_kept) inactive with e_floor")
 
-    t_last = Float64(time_old[end])
-    E_last = [max(Float64(states_full[j, end]), e_floor) for j in 1:idx_lvl]
-    a_last = max(Float64(spin_old[end]), e_floor)
-    M_last = max(Float64(mass_old[end]), e_floor)
-    u0 = log.([E_last; a_last; M_last])
-
-    return time_old, states_full, modes_full, spin_old, mass_old, t_last, u0, idx_lvl
+    u0 = log.([E_last; max(a_last, e_floor); max(M_last, e_floor)])
+    return t_last, u0, idx_lvl, modes_full, modes_old, n_times, a_last, M_last
 end
 
-function concat_trajectories(time_old, states_old, spin_old, mass_old,
-                             time_new, states_new, spin_new, mass_new)
-    # Drop duplicate t_last if the new segment starts at the same time.
-    start = 1
-    if !isempty(time_new) && !isempty(time_old) && time_new[1] == time_old[end]
-        start = 2
+function _count_rows(path)
+    n = 0
+    for ln in eachline(path)
+        isempty(strip(ln)) || (n += 1)
     end
-    if start > length(time_new)
-        return time_old, states_old, spin_old, mass_old
+    return n
+end
+
+function _last_row(path)
+    last = ""
+    for ln in eachline(path)
+        isempty(strip(ln)) || (last = ln)
+    end
+    return last
+end
+
+# Last tab/space-separated number of a (long) line.
+function _last_number(line::AbstractString)
+    s = rstrip(line)
+    i = findlast(c -> c == '\t' || c == ' ', s)
+    return parse(Float64, i === nothing ? s : s[nextind(s, i):end])
+end
+
+"""
+Append a resumed segment to the run's .dat files in place. Time_/Spin_/MassBH_ get the
+new rows; each States_ row (in the solver's mode order, modes_out) is the old row followed
+by the new values, written row by row from the old file, so memory stays at one row.
+A mode missing from the old files (pruned archive) gets e_floor at the earlier times.
+"""
+function append_resumed_segment(outdir, fname, modes_old, n_old, e_floor, t_last,
+                                timeT, StatesOut, modes_out, spin, massB)
+    start = (!isempty(timeT) && timeT[1] == t_last) ? 2 : 1   # drop the duplicate t_last
+    for (prefix, v) in (("Time_", timeT), ("Spin_", spin), ("MassBH_", massB))
+        open(joinpath(outdir, prefix * fname), "a") do io
+            for x in @view v[start:end]
+                println(io, x)
+            end
+        end
     end
 
-    time_out = vcat(time_old, time_new[start:end])
-    spin_out = vcat(spin_old, spin_new[start:end])
-    mass_out = vcat(mass_old, mass_new[start:end])
-
-    n_modes = size(states_old, 1)
-    # states_new from solve_system is Vector of Vectors (one per mode)
-    states_out = similar(states_old, n_modes, length(time_out))
-    for j in 1:n_modes
-        new_row = states_new[j][start:end]
-        states_out[j, :] = vcat(states_old[j, :], new_row)
+    path = joinpath(outdir, "States_" * fname)
+    offsets = Int[]
+    open(path) do io
+        while !eof(io)
+            pos = position(io)
+            isempty(strip(readline(io))) || push!(offsets, pos)
+        end
     end
-    return time_out, states_out, spin_out, mass_out
+    old_row = Dict(_mode_key(modes_old[j, :]) => j for j in 1:size(modes_old, 1))
+    tmp = path * ".tmp"
+    open(path) do src
+        open(tmp, "w") do dst
+            for (j, md) in enumerate(modes_out)
+                key = (Int(md[1]), Int(md[2]), Int(md[3]))
+                if haskey(old_row, key)
+                    seek(src, offsets[old_row[key]])
+                    write(dst, rstrip(readline(src)))
+                else
+                    for k in 1:n_old
+                        k > 1 && write(dst, '\t')
+                        print(dst, e_floor)
+                    end
+                end
+                for x in @view StatesOut[j][start:end]
+                    write(dst, '\t')
+                    print(dst, x)
+                end
+                write(dst, '\n')
+            end
+        end
+    end
+    mv(tmp, path; force=true)
+    writedlm(joinpath(outdir, "Modes_" * fname), modes_out)
 end
 
 parsed  = parse_commandline()
@@ -231,6 +296,23 @@ rate_input = isempty(parsed["rate_input"]) ? nothing : parsed["rate_input"]
 solver  = Symbol(parsed["solver"])
 solver in (:trbdf2, :radau) || error("--solver must be trbdf2 or radau")
 
+# --keep_levels "lm[,n-l-m,...]": l == m levels plus the listed extras
+keep_spec = parsed["keep_levels"]
+keep_levels = if isempty(keep_spec)
+    nothing
+else
+    toks = strip.(split(keep_spec, ","))
+    keep_lm = "lm" in toks
+    # "basisK": every level of the Nmax = K basis (truncation modes included)
+    base = Set{NTuple{3,Int}}()
+    for t in filter(t -> startswith(t, "basis"), toks)
+        _, _, _, mK = setup_quantum_levels_standard(parse(Int, t[6:end]), f_a, M_pl, alpha, SpinBH)
+        union!(base, Set((Int(md[1]), Int(md[2]), Int(md[3])) for md in mK))
+    end
+    extras = Set(Tuple(parse.(Int, split(t, "-"))) for t in toks if t != "lm" && !startswith(t, "basis"))
+    (n, l, m) -> (keep_lm && l == m) || (n, l, m) in base || (n, l, m) in extras
+end
+
 # Derive axion mass from alpha = GNew * MassBH * m_a
 m_a = alpha / (GNew * MassBH)
 
@@ -246,6 +328,9 @@ println("  tau_max = ", tau_max)
 println("  outdir  = ", outdir)
 println("  lm_only = ", lm_only)
 println("  resume  = ", do_resume)
+isempty(keep_spec) || println("  keep_levels = ", keep_spec)
+isempty(parsed["gw_table_nmax"]) || println("  gw_table_nmax = ", parsed["gw_table_nmax"])
+println("  regime_split = ", parsed["regime_split"])
 println("  self_grav = ", self_grav, self_grav ? "  (si_sign = $(si_sign))" : "")
 println("  rate_input = ", rate_input === nothing ? "default (load_rate_input_Nmax_$(Nmax).txt)" : rate_input)
 println("  solver  = ", solver, parsed["analytic_jac"] ? " (analytic Jacobian)" : "",
@@ -289,20 +374,24 @@ e_floor = 1.0 / (GNew * MassBH^2 * M_to_eV)
 
 u0_override = nothing
 t_start = 0.0
-time_old = nothing
-states_old = nothing
+t_last = 0.0
 modes_old = nothing
-spin_old = nothing
-mass_old = nothing
+n_old = 0
 
 if do_resume
-    time_old, states_old, modes_old, spin_old, mass_old, t_last, u0_override, n_modes =
+    t_last, u0_override, n_modes, modes_full, modes_old, n_old, spin_last, mass_last =
         load_resume_state(outdir, fname, e_floor, Nmax, f_a, alpha, SpinBH)
     t_start = t_last
+    if keep_levels !== nothing
+        # Truncated basis: the kept levels (basis order, as solve_system does).
+        kidx = findall(md -> keep_levels(Int(md[1]), Int(md[2]), Int(md[3])), modes_full)
+        u0_override = [u0_override[kidx]; u0_override[end-1:end]]
+        n_modes = length(kidx)
+    end
     println("Resume from t=", t_last, "  (tau_max=", tau_max, ")")
-    println("  n_modes=", n_modes, "  n_times_old=", length(time_old))
-    println("  u0_len=", length(u0_override), "  spin_last=", spin_old[end],
-            "  mass_last=", mass_old[end])
+    println("  n_modes=", n_modes, "  n_times_old=", n_old)
+    println("  u0_len=", length(u0_override), "  spin_last=", spin_last,
+            "  mass_last=", mass_last)
     if t_last >= tau_max
         println("Already at/past tau_max; nothing to do.")
         exit(0)
@@ -339,31 +428,40 @@ timeT, StatesOut, modes_out, spin, massB = @time solve_system(
     track_alpha_refresh = parsed["track_alpha_refresh"],
     solver          = solver,
     analytic_jac    = parsed["analytic_jac"],
+    keep_levels     = keep_levels,
+    maxiters        = parsed["maxiters"],
+    timescale_saves = parsed["timescale_saves"],
+    gw_table_nmax   = isempty(parsed["gw_table_nmax"]) ? nothing : parsed["gw_table_nmax"],
+    regime_split    = parsed["regime_split"],
     radau_kappa     = parsed["radau_kappa"] > 0 ? parsed["radau_kappa"] : nothing,
 )
-
-if do_resume
-    # StatesOut is Vector-of-Vectors (one per mode); convert concat to Matrix for writedlm
-    timeT, states_mat, spin, massB = concat_trajectories(
-        time_old, states_old, spin_old, mass_old,
-        timeT, StatesOut, spin, massB,
-    )
-    # writedlm Matrix writes rows; match cold-start Vector-of-Vectors layout
-    StatesOut = [states_mat[j, :] for j in 1:size(states_mat, 1)]
-end
-# Always write the full spectrum Modes_ from the solver (not a pruned subset).
-modes_write = modes_out
 
 println("StatesOut size: ", size(StatesOut))
 println("Modes:  ", modes_out)
 println("Final:  t=", timeT[end], "  spin=", spin[end], "  massB=", massB[end])
 
-writedlm(joinpath(outdir, "Time_"   * fname), timeT)
-writedlm(joinpath(outdir, "States_" * fname), StatesOut)
-writedlm(joinpath(outdir, "Modes_"  * fname), modes_write)
-writedlm(joinpath(outdir, "Spin_"   * fname), spin)
-writedlm(joinpath(outdir, "MassBH_" * fname), massB)
+# Always write the full spectrum Modes_ from the solver (not a pruned subset).
+if do_resume
+    append_resumed_segment(outdir, fname, modes_old, n_old, e_floor, t_last,
+                           timeT, StatesOut, modes_out, spin, massB)
+else
+    writedlm(joinpath(outdir, "Time_"   * fname), timeT)
+    writedlm(joinpath(outdir, "States_" * fname), StatesOut)
+    writedlm(joinpath(outdir, "Modes_"  * fname), modes_out)
+    writedlm(joinpath(outdir, "Spin_"   * fname), spin)
+    writedlm(joinpath(outdir, "MassBH_" * fname), massB)
+end
 
 println("Saved output to: ", outdir)
 println("  ", fname)
+
+# Stopped early (wall-clock limit): mark the run incomplete so finish_nmax_output.sh
+# leaves the loose .dat files for --resume instead of pruning/archiving them.
+incomplete_marker = joinpath(outdir, "NL_incomplete_Nmax_$(Nmax)")
+if timeT[end] < tau_max * (1 - 1e-12)
+    write(incomplete_marker, "stopped at t=$(timeT[end]) of tau_max=$(tau_max); continue with --resume\n")
+    println("INCOMPLETE: stopped at t=", timeT[end], " of ", tau_max, "; rerun with --resume to continue")
+else
+    rm(incomplete_marker; force=true)
+end
 println("Finished: ", Dates.now())

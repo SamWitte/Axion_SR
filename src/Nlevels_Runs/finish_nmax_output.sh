@@ -17,6 +17,19 @@ if [[ ! -d "$OUTDIR" ]]; then
   echo "ERROR: outdir missing: $OUTDIR" >&2
   exit 1
 fi
+# run_Nlevels.jl writes this when the run stopped before tau_max (wall-clock limit):
+# keep the loose .dat files so the run can be continued with --resume.
+# Fallback for runs started before the marker existed: the job's own log.
+if [[ -n "${SLURM_JOB_ID:-}" ]]; then
+  JOBLOG="$(scontrol show job "$SLURM_JOB_ID" 2>/dev/null | sed -n 's/^ *StdOut=//p')"
+  if [[ -n "$JOBLOG" && -f "$JOBLOG" ]] && grep -q "Terminating integration due to wall-clock limit" "$JOBLOG"; then
+    echo "stopped at the wall-clock limit (see $JOBLOG); continue with --resume" > "${OUTDIR}/NL_incomplete_Nmax_${NMAX}"
+  fi
+fi
+if [[ -f "${OUTDIR}/NL_incomplete_Nmax_${NMAX}" ]]; then
+  echo "[finish] Nmax=$NMAX incomplete ($(cat "${OUTDIR}/NL_incomplete_Nmax_${NMAX}")); not pruning/archiving" >&2
+  exit 3
+fi
 if [[ ! -f "${NL}/prune_states.py" ]]; then
   echo "ERROR: prune_states.py not found in $NL" >&2
   exit 1
