@@ -13,6 +13,29 @@ if !@isdefined(SG_MISSING_WARNED)
     const SG_MISSING_WARNED = Ref(false)
 end
 
+# rate_sve/regime_split.txt (written by rate_sve/split_regime.py): "S1 S2 S3 alpha_c [LOW]". The
+# fourth quantum of S1 S2 -> S3 + X is LOW (BH = bound, Inf = escaping; default BH) below alpha_c
+# and the other one above; the two halves of the channel are in S1_S2_S3_BH / _Inf files.
+if !@isdefined(REGIME_SPLIT_CACHE)
+    const REGIME_SPLIT_CACHE = Dict{String, Dict{String, Tuple{Float64, String}}}()
+end
+function regime_split_table(dirN)
+    get!(REGIME_SPLIT_CACHE, dirN) do
+        tab = Dict{String, Tuple{Float64, String}}()
+        split_file = joinpath(dirN, "regime_split.txt")
+        if isfile(split_file)
+            for ln in eachline(split_file)
+                p = split(ln)
+                if length(p) in (4, 5) && !startswith(p[1], "#")
+                    tab[p[1] * "_" * p[2] * "_" * p[3]] =
+                        (parse(Float64, p[4]), length(p) == 5 ? String(p[5]) : "BH")
+                end
+            end
+        end
+        tab
+    end
+end
+
 # Scattering (BH / Inf) rate coefficients. GW annihilations and transitions are
 # not in this dictionary: they come from Numerics/gw_rates.jl (gw_build_cache /
 # gw_rhs!) inside solve_system.
@@ -27,7 +50,13 @@ end
 # rate_input: custom channel list (file name in rate_sve/ or absolute path, same format as
 # load_rate_input_Nmax_X.txt, e.g. written by rate_sve/gen_custom_input.py) used instead of the default
 # list for this Nmax. Every state in it must be one of the Nmax modes (standard or truncation).
-function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=false, self_grav=false, si_sign=1.0, rate_input=nothing)
+#
+# regime_split = true: channels in rate_sve/regime_split.txt get both their BH and Inf rows (the list
+# needs only one of them), and each half is used only on its side of alpha_c (extrapolated up to
+# alpha_c within its own points). regime_mask = false skips that last cut, giving each half's rate
+# at every alpha (solve_system applies the cut itself when tracking alpha).
+function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=false, self_grav=false, si_sign=1.0, rate_input=nothing,
+                          regime_split=true, regime_mask=true)
     alph = mu * GNew * M
     rP = 1 + sqrt.(1 - a^2)
     faFac = (M_pl ./ f_a)^4
@@ -188,17 +217,34 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
         dirN = joinpath(@__DIR__, "rate_sve/")
         ftag = "_LvrHc_"
         
-        for i in 1:length(rate_list[:,1])
-            nm_tag = string(rate_list[i, 1]) * "_" * string(rate_list[i, 2]) * "^" * string(rate_list[i, 3]) * "^" * string(rate_list[i, 4])
-            fileT = dirN * string(rate_list[i, 1]) * "_" * string(rate_list[i, 2]) * "_" * string(rate_list[i, 3]) * "_" * string(rate_list[i, 4]) * ftag * ".dat"
+        rows = [Tuple(string.(rate_list[i, 1:4])) for i in 1:size(rate_list, 1)]
+        split_tab = regime_split ? regime_split_table(dirN) : Dict{String, Tuple{Float64, String}}()
+        if !isempty(split_tab)
+            have = Set(rows)
+            for (s1, s2, s3, s4) in copy(rows)
+                other = (s1, s2, s3, s4 == "BH" ? "Inf" : "BH")
+                if s4 in ("BH", "Inf") && haskey(split_tab, s1 * "_" * s2 * "_" * s3) && !(other in have)
+                    push!(rows, other)
+                    push!(have, other)
+                end
+            end
+        end
+
+        for (s1, s2, s3, s4) in rows
+            nm_tag = s1 * "_" * s2 * "^" * s3 * "^" * s4
+            fileT = dirN * s1 * "_" * s2 * "_" * s3 * "_" * s4 * ftag * ".dat"
+            # without the split, a split channel's unsplit original (kept by split_regime.py)
+            orig = dirN * "regime_split_orig/" * basename(fileT)
+            !regime_split && isfile(orig) && (fileT = orig)
             data = get!(LVR_FILE_CACHE, fileT) do
                 isfile(fileT) || return nothing
                 d = open(readdlm, fileT)
                 d[d[:, 2] .!= 0.0, :]
             end
+            split_ch = get(split_tab, s1 * "_" * s2 * "_" * s3, nothing)
             sg = nothing
             if self_grav
-                fileSG = dirN * string(rate_list[i, 1]) * "_" * string(rate_list[i, 2]) * "_" * string(rate_list[i, 3]) * "_" * string(rate_list[i, 4]) * ftag * "SG.dat"
+                fileSG = dirN * s1 * "_" * s2 * "_" * s3 * "_" * s4 * ftag * "SG.dat"
                 sg = get!(LVR_FILE_CACHE, fileSG) do
                     isfile(fileSG) || return nothing
                     d = open(readdlm, fileSG)        # alpha, Gamma_SI, Gamma_SG, Gamma_x, kappa
@@ -210,7 +256,20 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
 
                 rate_out = 0.0
                 g_si = 0.0
-                if data !== nothing && alph .<= maximum(data[:,1])
+                if data !== nothing && split_ch !== nothing
+                    # LOW half: alpha < alpha_c. Other half: alpha_c <= alpha <= top of its grid.
+                    a_c, low = split_ch
+                    in_regime = (s4 == low) ? (alph < a_c) : (alph >= a_c)
+                    if (in_regime || !regime_mask) && (s4 == low || alph <= maximum(data[:, 1]))
+                        if size(data, 1) == 1
+                            g_si = data[1, 2]
+                        else
+                            itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
+                            g_si = 10 .^itp(log10.(alph))
+                        end
+                        rate_out = g_si .* faFac
+                    end
+                elseif data !== nothing && alph .<= maximum(data[:,1])
                     itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
                     g_si = 10 .^itp(log10.(alph))
                     rate_out = g_si .* faFac
@@ -221,7 +280,7 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
                     g_sg = 10 .^itp_sg(log10.(alph))
                     rate_out += si_sign * 2 * itp_ka(log10.(alph)) * sqrt(g_si * g_sg) * sqrt(faFac) + g_sg
                 end
-                if string(rate_list[i, 4]) == "BH"
+                if s4 == "BH"
                     rate_out *= rP_ratio
                 end
                 Drate[nm_tag] = rate_out

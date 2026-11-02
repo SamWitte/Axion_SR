@@ -141,9 +141,14 @@ end
     rate_input_path(Nmax; lm_only=false, rate_input=nothing) -> String
 
 Scattering channel list read by load_rate_coeffs: rate_sve/load_rate_input_Nmax_<Nmax>[_lm].txt,
-or `rate_input` (a file name in rate_sve/ or an absolute path).
+or `rate_input` (a file name in rate_sve/ or an absolute path). The environment variable
+NL_DEFAULT_RATE_INPUT replaces the default list without changing the output file names, so a
+run can be resumed on a frozen copy of its list after load_rate_input_Nmax_<Nmax>.txt has grown.
 """
 function rate_input_path(Nmax; lm_only=false, rate_input=nothing)
+    if rate_input === nothing && !isempty(get(ENV, "NL_DEFAULT_RATE_INPUT", ""))
+        rate_input = ENV["NL_DEFAULT_RATE_INPUT"]
+    end
     rate_input === nothing && return joinpath(@__DIR__, "rate_sve", "load_rate_input_Nmax_$(Nmax)$(lm_only ? "_lm" : "").txt")
     return isabspath(rate_input) ? rate_input : joinpath(@__DIR__, "rate_sve", rate_input)
 end
