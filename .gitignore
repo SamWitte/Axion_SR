@@ -1,5 +1,41 @@
 *~
 *_LvrHc_.dat
+*_LvrHc_SG.dat
 !*LvrHc*.zip
 src/rate_sve/Imag*.npz
 src/rate_sve/Imag_*.dat
+
+# large GW rate tables: rebuild with `julia src/scripts/build_gw_tables.jl 15 18`
+src/rate_sve/gw_nr_rates_Nmax_15.txt
+src/rate_sve/gw_nr_rates_Nmax_18.txt
+
+# LaTeX build files
+GW_note/*.aux
+GW_note/*.log
+GW_note/*.fls
+GW_note/*.fdb_latexmk
+GW_note/*.out
+
+# GW forward-model run outputs (regenerate with the scripts in src/GW_forward)
+src/GW_forward/test_plots/*.dat
+src/GW_forward/test_plots/*.log
+src/GW_forward/test_plots/realizations_zoom.png
+src/GW_forward/cygx1/*.dat
+src/GW_forward/cygx1/*.log
+src/GW_forward/cygx1/*.png
+
+# AGN resonance pipeline outputs (regenerate with src/GW_forward/analysis/agn_julia_pipeline.py)
+src/GW_forward/analysis/test_run*/
+src/GW_forward/analysis/runs/
+src/GW_forward/analysis/*.png
+src/GW_forward/analysis/crossings.csv
+
+# Nlevels_Runs outputs and generated job scripts/logs (created on the cluster)
+src/Nlevels_Runs/output*/
+src/Nlevels_Runs/scripts/
+src/Nlevels_Runs/scripts_bh10/
+src/Nlevels_Runs/logs/
+
+# OS / Python clutter (5 .DS_Store files are already tracked; this only stops new ones)
+.DS_Store
+__pycache__/

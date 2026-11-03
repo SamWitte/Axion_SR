@@ -96,7 +96,6 @@ using Printf
 include("Core/constants.jl")
 include("Core/evolution_helpers.jl")
 include("Core/rate_coefficients.jl")
-include("Core/load_rates_structured.jl")
 
 # Numerics modules
 include("Numerics/rate_computation.jl")

@@ -19,10 +19,10 @@ using LinearAlgebra
 Structured representation of a single rate coefficient.
 
 Fields:
-- key::String: Identifier for the rate (e.g., "211_322^GW")
+- key::String: Identifier for the rate (e.g., "211_211^322^BH")
 - level1::String: First quantum level (e.g., "211")
 - level2::String: Second quantum level (e.g., "322")
-- channel::String: Interaction channel ("BH", "Inf", "GW")
+- channel::String: Interaction channel ("BH", "Inf"); GW emission lives in Numerics/gw_rates.jl
 - coefficient::Float64: Amplitude coefficient
 - power_index::Int: Power of alpha in rate expression
 - requires_rp::Bool: Whether rate depends on pericenter radius
@@ -30,7 +30,7 @@ Fields:
 
 Typical usage:
 ```julia
-rate = RateCoefficient("211_322^GW", "211", "322", "GW", 1.0e-2, 14, false, false)
+rate = RateCoefficient("211_211^322^BH", "211", "211", "BH", 4.2e-7, 11, true, true)
 ```
 """
 struct RateCoefficient
@@ -114,7 +114,7 @@ List all available rate coefficients, optionally filtered by channel.
 
 Arguments:
 - db: RateDatabase
-- channel: Optional filter ("BH", "Inf", "GW", or nothing for all)
+- channel: Optional filter ("BH", "Inf", or nothing for all)
 
 Returns:
 - Vector of RateCoefficient keys
@@ -160,11 +160,8 @@ function build_default_rates(Nmax::Int; non_relativistic::Bool=true)
 
     if non_relativistic
         # Nmax >= 3 rates
-        add_rate!(db, RateCoefficient("211_322^GW", "211", "322", "GW", 0.0, 16, false, false))
         add_rate!(db, RateCoefficient("211_211^322^BH", "211", "211", "BH", 4.2e-7, 11, true, true))
         add_rate!(db, RateCoefficient("322_322^211^Inf", "322", "322", "Inf", 1.1e-8, 8, false, true))
-        add_rate!(db, RateCoefficient("211_211^GW", "211", "211", "GW", 1.0e-2, 14, false, false))
-        add_rate!(db, RateCoefficient("322_211^GW", "322", "211", "GW", 5.0e-6, 10, false, false))
         add_rate!(db, RateCoefficient("211_211_211^Inf", "211", "211", "Inf", 1.5e-8, 21, false, true))
 
         add_rate!(db, RateCoefficient("211_311^322^BH", "211", "311", "BH", 3.1e-10, 7, true, true))
@@ -172,7 +169,6 @@ function build_default_rates(Nmax::Int; non_relativistic::Bool=true)
         add_rate!(db, RateCoefficient("311_322^211^Inf", "311", "322", "Inf", 1.2e-8, 8, false, true))
         add_rate!(db, RateCoefficient("311_311^322^BH", "311", "311", "BH", 1.62e-10, 7, true, true))
 
-        add_rate!(db, RateCoefficient("322_322^GW", "322", "322", "GW", 3.0e-8, 18, false, false))
 
         if Nmax >= 4
             # Nmax >= 4 rates

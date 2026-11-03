@@ -164,7 +164,7 @@ function freq_shifts(mu, M, a, n1, l1, m1, n2, l2, m2;  rpts=500, rmaxT=100, Nan
     rl, r1, erg_1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true)
     itp = LinearInterpolation(log10.(rl), log10.(r1), extrapolation_bc=Line())
     rf_1 = 10 .^itp(log10.(rlist))
-    Z1 = spheroidals(l1, m1, a, erg_1 ./ (GNew .* M))
+    Z1 = spheroidals(l1, m1, a, erg_1, alph)
     
     # rf_1 = radial_bound_NR(n1, l1, m1, mu, M, rlist)
 
@@ -178,7 +178,7 @@ function freq_shifts(mu, M, a, n1, l1, m1, n2, l2, m2;  rpts=500, rmaxT=100, Nan
         rl, r2, erg_2 = solve_radial(mu, M, a, n2, l2, m2; rpts=Npts_Bnd, rmaxT=rmaxT, return_erg=true)
         itp = LinearInterpolation(log10.(rl), log10.(r2), extrapolation_bc=Line())
         rf_2 = 10 .^itp(log10.(rlist))
-        Z2 = spheroidals(l2, m2, a, erg_2 ./ (GNew .* M))
+        Z2 = spheroidals(l2, m2, a, erg_2, alph)
         mult_fac = 1.0
     end
     
@@ -270,9 +270,9 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=10, rpts=
     k_ind_2 = mu.^2 .- (erg_ind ./ (GNew .* M)).^2
     
 
-    Z1 = spheroidals(l1, m1, a, erg_1 ./ (GNew .* M))
-    Z2 = spheroidals(l2, m2, a, erg_2 ./ (GNew .* M))
-    Z3 = spheroidals(l3, m3, a, erg_3 ./ (GNew .* M))
+    Z1 = spheroidals(l1, m1, a, erg_1, alph)
+    Z2 = spheroidals(l2, m2, a, erg_2, alph)
+    Z3 = spheroidals(l3, m3, a, erg_3, alph)
     
     
         
@@ -323,7 +323,7 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=10, rpts=
         end
         
         
-        Z4 = spheroidals(0, 0, a, erg_4 ./ (GNew .* M))
+        Z4 = spheroidals(0, 0, a, erg_4, alph)
         
         thetaV = acos.(1.0 .- 2.0 .* rand(Nang))
         phiV = rand(Nang) .* 2*pi
@@ -381,7 +381,7 @@ function s_rate_bnd(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; kpts=10, rpts=
         for i in 1:kpts
             k = kk_list[i] ./ (GNew .* M) # physical units
             erg_New = sqrt.(k.^2 .+ mu.^2)
-            Z4 = spheroidals(0, 0, a, erg_New)
+            Z4 = spheroidals(0, 0, a, erg_New .* GNew .* M, alph)
         
             thetaV = acos.(1.0 .- 2.0 .* rand(Nang))
             phiV = rand(Nang) .* 2*pi
@@ -480,10 +480,10 @@ function s_rate_inf(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3, lF_min; rpts=4
     # print("New erg \t", erg_New .* GNew .* M, "\n")
 
 
-    Z1 = spheroidals(l1, m1, a, erg_1)
-    Z2 = spheroidals(l2, m2, a, erg_2)
-    Z3 = spheroidals(l3, m3, a, erg_3)
-    Z4 = spheroidals(lF, mF, a, erg_New)
+    Z1 = spheroidals(l1, m1, a, erg_1 .* GNew .* M, alph)
+    Z2 = spheroidals(l2, m2, a, erg_2 .* GNew .* M, alph)
+    Z3 = spheroidals(l3, m3, a, erg_3 .* GNew .* M, alph)
+    Z4 = spheroidals(lF, mF, a, erg_New .* GNew .* M, alph)
    
     thetaV = acos.(1.0 .- 2.0 .* rand(Nang))
     phiV = rand(Nang) .* 2*pi
@@ -1072,8 +1072,16 @@ function radial_inf(erg, mu, M, a, l, m; rpts=1000, rmax_val=1e4, debug=false, i
     end
 end
 
-function spheroidals(l, m, a, erg)
-    # pass erg in normalized units
+"""
+    spheroidals(l, m, a, erg, alph)
+
+Spin-0 spheroidal harmonic S_lm for a *massive* scalar on Kerr. `erg` = omega*G*M and
+`alph` = mu*G*M (both dimensionless). The angular equation of a massive field has
+spheroidicity c^2 = a^2 (omega^2 - mu^2), i.e. c = a*sqrt(erg^2 - alph^2): imaginary for
+bound states, real for unbound ones. (SpinWeightedSpheroidalHarmonics uses c = a*omega,
+the massless convention, so c must be built here rather than passing a*erg.)
+"""
+function spheroidals(l, m, a, erg, alph)
     if abs.(m) > l
         return 0.0
     end
@@ -1085,7 +1093,8 @@ function spheroidals(l, m, a, erg)
         return (theta, phi) -> sphericalY(l, m, theta, phi)
     end
 
-    Zlm = spin_weighted_spheroidal_harmonic(0, l, m, a .* erg)
+    c = Float64(a) * sqrt(complex(Float64(real(erg))^2 - Float64(alph)^2))
+    Zlm = spin_weighted_spheroidal_harmonic(0, l, m, c)
     return Zlm
 end
 
@@ -1547,39 +1556,86 @@ function test_projection_scatter(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; r
 
 
         return erg_diff_pxy, out
-
+        
     end
 end
 
 
-# Gauss-Legendre angular overlaps for gf_radial(...; ang_method=:gl) (ported from Axion_SR_gw_v2): the
-# integrand is prod_k f_k(theta) e^{i m_k phi}, so the phi integral is 2 pi delta(sum m_k) and the theta
-# integral is a GL sum in cos(theta). Exact and deterministic, unlike the Monte Carlo estimator.
-import LinearAlgebra
-function ang_gauss_legendre(n)
+
+# =====================================================================================
+# Self-gravity (Newtonian h_00 exchange) contribution to the 2 -> 2 scattering rates.
+# Integrating out the Newtonian potential gives the quartic interaction
+#     H = 1/2 ∫∫ |psi(x)|^2 K(x - y) |psi(y)|^2,   K_SG = -G mu^2 / |x - y|,
+# i.e. the same structure as the axion self-interaction, K_SI = -(lambda / 8 mu^2) delta^3(x - y).
+# For a long-range kernel the two orderings of the incoming states differ, so the source for
+# mode 4 is (1/2)[psi1 Phi_23 + psi2 Phi_13] with Phi_b3(x) = ∫ conj(psi3) psi_b (y) / |x - y|
+# (reduces to psi1 psi2 conj(psi3) for a unit contact kernel). Used by gf_radial(...; self_grav=true).
+# =====================================================================================
+function sg_gauss_legendre(n)
     beta = [k / sqrt(4k^2 - 1) for k in 1:n-1]
-    E = LinearAlgebra.eigen(LinearAlgebra.SymTridiagonal(zeros(n), beta))
+    E = eigen(SymTridiagonal(zeros(n), beta))
     return E.values, 2 .* E.vectors[1, :] .^ 2
 end
-const ANG_GL_N = 64
-const ANG_GLx, ANG_GLw = ang_gauss_legendre(ANG_GL_N)
+const SG_GL_N = 64
+const SG_GLx, SG_GLw = sg_gauss_legendre(SG_GL_N)
 
-# theta-profile (at phi = 0) on the GL nodes; spheroidals() returns 0.0 for |m| > l
-ang_theta_profile(Z) = Z isa Number ? fill(ComplexF64(Z), ANG_GL_N) : ComplexF64[Z(acos(x), 0.0) for x in ANG_GLx]
+# theta-profile (at phi = 0) of an angular function on the Gauss-Legendre nodes in cos(theta)
+sg_theta_profile(Z) = ComplexF64[Z(acos(x), 0.0) for x in SG_GLx]
+sg_Y_profile(L, M) = ComplexF64[sphericalY(L, M, acos(x), 0.0) for x in SG_GLx]
 
-# real part of ∫ dOmega prod_k profiles_k e^{i ms_k phi} [x cos^2(theta)], as in the Monte Carlo estimator
-function ang_gl(profiles, ms; cos2=false)
+# ∫ dOmega  prod_k f_k(theta) e^{i m_k phi}  [x cos^2(theta)]   (profiles already conjugated where needed)
+function sg_ang(profiles, ms; cos2=false)
     sum(ms) == 0 || return 0.0
-    v = ones(ComplexF64, ANG_GL_N)
+    v = ones(ComplexF64, SG_GL_N)
     for p in profiles
         v .*= p
     end
-    cos2 && (v .*= ANG_GLx .^ 2)
-    return 2pi * real(sum(ANG_GLw .* v))
+    cos2 && (v .*= SG_GLx .^ 2)
+    return 2pi * real(sum(SG_GLw .* v))
 end
 
+# multipole L of the Coulomb potential of a radial profile f on the (log) grid r:
+#   Q_L(r) = r^{-L-1} ∫_{r0}^r r'^{L+2} f + r^L ∫_r^∞ r'^{1-L} f
+function sg_coulomb_radial(f, r, L)
+    n = length(r)
+    ci = zeros(ComplexF64, n); co = zeros(ComplexF64, n)
+    g_in = f .* r .^ (L + 2); g_out = f .* r .^ (1 - L)
+    for i in 2:n
+        ci[i] = ci[i-1] + 0.5 * (g_in[i] + g_in[i-1]) * (r[i] - r[i-1])
+    end
+    for i in n-1:-1:1
+        co[i] = co[i+1] + 0.5 * (g_out[i] + g_out[i+1]) * (r[i+1] - r[i])
+    end
+    return r .^ (-(L + 1)) .* ci .+ r .^ L .* co
+end
 
-function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, debug=false, Ntot_safe=10000,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=500000, eps_fac=1e-10, NON_REL=false, h_mve=1, to_inf=false, rmaxT=100, prec=200, cvg_acc=1e-4, NptsCh=60, iterC=40, Lcheb=4, run_leaver=false, der_acc=1e-20, use_heunc=false, pre_erg1=nothing, pre_erg2=nothing, pre_erg3=nothing, BHlmax=0, ang_method=:mc)
+# potential of the transition density conj(psi3) psi_b, multipole by multipole:
+#   Phi_b3(r, theta) e^{i M phi} = sum_L cL[L] * QL[L](r) * Y_{L M}(theta),   M = m_b - m3
+# contact = true returns the density itself in the same form (unit contact kernel; for tests)
+function sg_transition(rf_b, rf_3, Zb_prof, Z3_prof, mb, m3, lb, l3, r; contact=false)
+    M_ = mb - m3
+    Ls = [L for L in abs(M_):(lb + l3 + 4) if iseven(lb + l3 + L)]
+    rho = rf_b .* conj.(rf_3)
+    cL = Dict(L => sg_ang([Zb_prof, conj.(Z3_prof), conj.(sg_Y_profile(L, M_))], [mb, -m3, -M_]) for L in Ls)
+    QL = Dict(L => (contact ? rho : (4pi / (2L + 1)) .* sg_coulomb_radial(rho, r, L)) for L in Ls)
+    return (; M_, Ls, cL, QL)
+end
+
+# radial source for mode 4 (projected on conj(Z4) with the Kerr Sigma weight r^2 + a^2 cos^2):
+#   T(r) = R_a(r) * ∫ dOmega Z_a Phi_b3 conj(Z4) (r^2 + a^2 cos^2 theta)
+function sg_radial_source(tr, Za_prof, ma, rf_a, Z4_prof, m4, r, a)
+    T = zeros(ComplexF64, length(r))
+    for L in tr.Ls
+        YL = sg_Y_profile(L, tr.M_)
+        AL = sg_ang([Za_prof, YL, conj.(Z4_prof)], [ma, tr.M_, -m4])
+        BL = sg_ang([Za_prof, YL, conj.(Z4_prof)], [ma, tr.M_, -m4]; cos2=true)
+        (AL == 0.0 && BL == 0.0) && continue
+        T .+= tr.cL[L] .* tr.QL[L] .* (AL .* r .^ 2 .+ BL * a^2)
+    end
+    return rf_a .* T
+end
+
+function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, debug=false, Ntot_safe=10000,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=500000, eps_fac=1e-10, NON_REL=false, h_mve=1, to_inf=false, rmaxT=100, prec=200, cvg_acc=1e-4, NptsCh=60, iterC=40, Lcheb=4, run_leaver=false, der_acc=1e-20, use_heunc=false, pre_erg1=nothing, pre_erg2=nothing, pre_erg3=nothing, BHlmax=0, self_grav=false, sg_test_contact=false, ang_method=:mc)
 
     
     rp = BigFloat(1.0 .+ sqrt.(1.0 .- a.^2))
@@ -1650,7 +1706,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                 if tcnt > 10
                     iszero = false
                     println("Angular funciton zero....")
-                    return 0.0
+                    return self_grav ? (si=0.0, sg=0.0, cross=0.0) : 0.0
                 end
             end
         end
@@ -1824,12 +1880,9 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         println("BH multipoles summed: l = ", l_list, "   (BHlmax = ", BHlmax, ", m = ", m, ")")
     end
 
-    Z1 = spheroidals(l1, m1, a, erg_1)
-    Z2 = spheroidals(l2, m2, a, erg_2)
-    Z3 = spheroidals(l3, m3, a, erg_3)
-    if ang_method == :gl
-        Z1p = ang_theta_profile(Z1); Z2p = ang_theta_profile(Z2); Z3p = ang_theta_profile(Z3)
-    end
+    Z1 = spheroidals(l1, m1, a, erg_1, alph)
+    Z2 = spheroidals(l2, m2, a, erg_2, alph)
+    Z3 = spheroidals(l3, m3, a, erg_3, alph)
 
     lam_eff = 1.0e0
     if (n1==n2)&&(l1==l2)&&(m1==m2)
@@ -1842,6 +1895,26 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         
     itpG = LinearInterpolation(log10.(rlist), Float64.(real.(gammaT)), extrapolation_bc=Line())
     itpGI = LinearInterpolation(log10.(rlist), Float64.(imag.(gammaT)), extrapolation_bc=Line())
+
+    # ---- self-gravity (Newtonian h_00 exchange), see sg_transition / sg_radial_source above.
+    # The SG source is multiplied by 8 alpha^2: pushed through the SI rate formula below (lambda = mu^2/M_pl^2,
+    # i.e. f_a = M_pl) this gives Gamma_SG directly, independent of f_a, since
+    #     A_SG / A_SI = 8 (f_a/M_pl)^2 alpha^2 J_SG / J_SI   (lengths in GM; K_SG = -G mu^2/r vs K_SI = -delta/(8 f_a^2)).
+    # Both kernels are attractive for the axion, so the amplitudes add coherently and
+    #     Gamma(f_a) = Gamma_SI (M_pl/f_a)^4 + Gamma_x (M_pl/f_a)^2 + Gamma_SG      (flip Gamma_x for lambda < 0).
+    # sg_test_contact = true swaps the Coulomb kernel for a unit contact kernel (and drops 8 alpha^2), which must
+    # reproduce the SI rate: a check of the construction, including distinct incoming states.
+    if self_grav || ang_method == :gl
+        Z1p = sg_theta_profile(Z1); Z2p = sg_theta_profile(Z2); Z3p = sg_theta_profile(Z3)
+    end
+    if self_grav
+        identical_in = (n1==n2)&&(l1==l2)&&(m1==m2)
+        rlistF = Float64.(rlist)
+        rf1F = ComplexF64.(rf_1); rf2F = ComplexF64.(rf_2); rf3F = ComplexF64.(rf_3)
+        sg_tr_23 = sg_transition(rf2F, rf3F, Z2p, Z3p, m2, m3, l2, l3, rlistF; contact=sg_test_contact)  # 2 -> 3, acts on 1
+        sg_tr_13 = identical_in ? sg_tr_23 : sg_transition(rf1F, rf3F, Z1p, Z3p, m1, m3, l1, l3, rlistF; contact=sg_test_contact)
+        sg_pref = Float64(preFac .* unitMatch) * 0.5 * (sg_test_contact ? 1.0 : 8.0 * Float64(alph)^2)
+    end
     
     gam = im * a * sqrt.(erg.^2 .- alph.^2)
 
@@ -1856,7 +1929,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
 
     function mode_amplitude(l)
 
-        Z4 = spheroidals(l, m, a, erg)
+        Z4 = spheroidals(l, m, a, erg, alph)
 
         function compute_angular_integral_adaptive(Z1, Z2, Z3, Z4, use_spherical_fallback=false, timeout_seconds=180.0, nang_max=Nang)
             """
@@ -2003,9 +2076,11 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             println("Energies: erg_1=$erg_1, erg_2=$erg_2, erg_3=$erg_3, erg=$erg")
         end
         if ang_method == :gl
-            Z4p = ang_theta_profile(Z4)
-            CG = ang_gl([Z1p, Z2p, conj.(Z3p), conj.(Z4p)], [m1, m2, -m3, -m])
-            CG_2 = ang_gl([Z1p, Z2p, conj.(Z3p), conj.(Z4p)], [m1, m2, -m3, -m]; cos2=true)
+            # exact Gauss-Legendre quadrature in cos(theta) (the phi integral is analytic); the Monte Carlo
+            # estimator below scatters by ~1% in amplitude from seed to seed
+            Z4p_ang = sg_theta_profile(Z4)
+            CG = sg_ang([Z1p, Z2p, conj.(Z3p), conj.(Z4p_ang)], [m1, m2, -m3, -m])
+            CG_2 = sg_ang([Z1p, Z2p, conj.(Z3p), conj.(Z4p_ang)], [m1, m2, -m3, -m]; cos2=true)
             used_fallback = false
         else
             CG, CG_2, used_fallback = compute_angular_integral_adaptive(Z1, Z2, Z3, Z4, false, 30.0)
@@ -2145,7 +2220,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             midP = Int(round(length(rvals) - 3))
         else
             println("WF not enough points.... return zero....")
-            return 0.0 + 0.0im, 0.0
+            return 0.0 + 0.0im, 0.0, 0.0 + 0.0im
         end
 
         # if debug && !to_inf
@@ -2197,12 +2272,32 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             amp = trapz(outWF[idx_hold] .* Tmm[idx_hold], itp_rrstar.(rvals[idx_hold])) .* outWF_fw[idx_hold][1] ./ wronk
         end
 
-        return amp, rvals[end]
+        #### self-gravity amplitude: same homogeneous solutions and Wronskian, SG source
+        amp_sg = 0.0 + 0.0im
+        if self_grav
+            Z4p = sg_theta_profile(Z4)
+            Tsg = sg_pref .* (sg_radial_source(sg_tr_23, Z1p, m1, rf1F, Z4p, m, rlistF, Float64(a)) .+
+                              sg_radial_source(sg_tr_13, Z2p, m2, rf2F, Z4p, m, rlistF, Float64(a)))
+            iSR = LinearInterpolation(log10.(rlistF), real.(Tsg), extrapolation_bc=Line())
+            iSI = LinearInterpolation(log10.(rlistF), imag.(Tsg), extrapolation_bc=Line())
+            lrv = log10.(Float64.(itp_rrstar.(rvals)))
+            TmmS = iSR.(lrv) .+ im .* iSI.(lrv)
+            if to_inf
+                amp_sg = outWF[end] .* trapz(outWF_fw .* TmmS, itp_rrstar.(rvals)) ./ wronk
+            else
+                idx_hold = itp_rrstar.(rvals) .> 1.01 .* rp
+                amp_sg = trapz(outWF[idx_hold] .* TmmS[idx_hold], itp_rrstar.(rvals[idx_hold])) .* outWF_fw[idx_hold][1] ./ wronk
+            end
+        end
+
+        return amp, rvals[end], amp_sg
     end
 
 
     #### sum |R_l|^2 over the multipoles
     maxV = 0.0
+    maxV_sg = 0.0       # sum_l |A_SG,l|^2
+    maxV_x = 0.0        # sum_l 2 Re(A_SI,l conj(A_SG,l))
     rvals_end = 0.0
     for lmode in l_list
         if !to_inf && lmode != first(l_list)
@@ -2219,7 +2314,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             end
         end
 
-        amp, rv_end = mode_amplitude(lmode)
+        amp, rv_end, amp_sg = mode_amplitude(lmode)
         rvals_end = rv_end
 
         contrib = real(amp .* conj.(amp))
@@ -2228,6 +2323,10 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             continue
         end
         maxV += contrib
+        if self_grav
+            maxV_sg += real(amp_sg .* conj.(amp_sg))
+            maxV_x += 2 * real(amp .* conj.(amp_sg))
+        end
 
         if debug
             println("  l = ", lmode, ": |R_l|^2 = ", contrib, "   running total = ", maxV)
@@ -2239,8 +2338,8 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         lam = (mu ./ (M_pl .* 1e9))^2
         kk = real(sqrt.(erg.^2 .- alph.^2))
         # println("1/kk \t", 1 ./ kk)
-        rate_out = 2 .* alph .* kk .* (maxV .* itp_rrstar.(itp_rrstar.(rvals_end)).^2) .* lam^2
-        out_gamma = rate_out ./ mu^2 .* (GNew * M^2 * M_to_eV)^2
+        rate_of = mv -> (2 .* alph .* kk .* (mv .* itp_rrstar.(rvals_end).^2) .* lam^2) ./ mu^2 .* (GNew * M^2 * M_to_eV)^2
+        out_gamma = rate_of(maxV)
     else
         lam = (mu ./ (M_pl .* 1e9))^2
 
@@ -2253,15 +2352,23 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             # negative/strongly spin-dependent rates here. Drop kH from the
             # tabulated rate in that case and let it be reapplied downstream using
             # the BH's evolving spin (see the kH term in solve_system_unified.jl).
-            rate_out = 4 .* alph .* (1 .+ sqrt.(1 - a.^2)) .* Float64(maxV) .* lam^2
+            rate_of = mv -> (4 .* alph .* (1 .+ sqrt.(1 - a.^2)) .* Float64(mv) .* lam^2) ./ mu^2 .* (GNew * M^2 * M_to_eV)^2
         else
-            rate_out = 4 .* alph.*kH.* (1 .+ sqrt.(1 - a.^2)) .* Float64(maxV) .* lam^2
+            rate_of = mv -> (4 .* alph.*kH.* (1 .+ sqrt.(1 - a.^2)) .* Float64(mv) .* lam^2) ./ mu^2 .* (GNew * M^2 * M_to_eV)^2
         end
-        out_gamma = rate_out ./ mu^2 .* (GNew * M^2 * M_to_eV)^2
+        out_gamma = rate_of(maxV)
     end
 
     if debug
         print("Rate \t", out_gamma, "\n")
+    end
+    if self_grav
+        # Gamma(f_a) = si * (M_pl/f_a)^4 + cross * (M_pl/f_a)^2 + sg   (all in the same units as out_gamma)
+        g_sg = Float64(rate_of(maxV_sg)); g_x = Float64(rate_of(maxV_x))
+        if debug
+            println("Rate SG \t", g_sg, "\t cross \t", g_x)
+        end
+        return (si=Float64(out_gamma), sg=g_sg, cross=g_x)
     end
     return out_gamma # unitless [gamma / mu]
 end

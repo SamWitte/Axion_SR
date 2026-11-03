@@ -1,33 +1,84 @@
 using Glob
 include("state_utils.jl")
+include(joinpath(@__DIR__, "Numerics", "gw_rates.jl"))
 
-function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=false)
+# Leaver rate files (rate_sve/*_LvrHc_.dat), read once per session: solve_system
+# with track_alpha evaluates the scattering rates on a grid of BH masses.
+if !@isdefined(LVR_FILE_CACHE)
+    const LVR_FILE_CACHE = Dict{String, Any}()
+end
+
+# Channels requested with self_grav=true but lacking an SG table (warned about once per session).
+if !@isdefined(SG_MISSING_WARNED)
+    const SG_MISSING_WARNED = Ref(false)
+end
+
+# rate_sve/regime_split.txt (written by rate_sve/split_regime.py): "S1 S2 S3 alpha_c [LOW]". The
+# fourth quantum of S1 S2 -> S3 + X is LOW (BH = bound, Inf = escaping; default BH) below alpha_c
+# and the other one above; the two halves of the channel are in S1_S2_S3_BH / _Inf files.
+if !@isdefined(REGIME_SPLIT_CACHE)
+    const REGIME_SPLIT_CACHE = Dict{String, Dict{String, Tuple{Float64, String}}}()
+end
+function regime_split_table(dirN)
+    get!(REGIME_SPLIT_CACHE, dirN) do
+        tab = Dict{String, Tuple{Float64, String}}()
+        split_file = joinpath(dirN, "regime_split.txt")
+        if isfile(split_file)
+            for ln in eachline(split_file)
+                p = split(ln)
+                if length(p) in (4, 5) && !startswith(p[1], "#")
+                    tab[p[1] * "_" * p[2] * "_" * p[3]] =
+                        (parse(Float64, p[4]), length(p) == 5 ? String(p[5]) : "BH")
+                end
+            end
+        end
+        tab
+    end
+end
+
+# Scattering (BH / Inf) rate coefficients. GW annihilations and transitions are
+# not in this dictionary: they come from Numerics/gw_rates.jl (gw_build_cache /
+# gw_rhs!) inside solve_system.
+#
+# self_grav = true adds the Newtonian self-gravity contribution to every channel with an SG table
+# (rate_sve/<...>_LvrHc_SG.dat, written by Compute_all_rates.jl --self_grav true). The SI and SG
+# amplitudes interfere, so
+#     Gamma(f_a) = Gamma_SI (M_pl/f_a)^4 + si_sign * 2 kappa sqrt(Gamma_SI Gamma_SG) (M_pl/f_a)^2 + Gamma_SG,
+# with kappa = cos(relative phase) = +-1 tabulated per channel and si_sign = +1 for an attractive
+# quartic (axion cosine potential), -1 for a repulsive one. Only available with non_rel = false.
+#
+# rate_input: custom channel list (file name in rate_sve/ or absolute path, same format as
+# load_rate_input_Nmax_X.txt, e.g. written by rate_sve/gen_custom_input.py) used instead of the default
+# list for this Nmax. Every state in it must be one of the Nmax modes (standard or truncation).
+#
+# regime_split = true: channels in rate_sve/regime_split.txt get both their BH and Inf rows (the list
+# needs only one of them), and each half is used only on its side of alpha_c (extrapolated up to
+# alpha_c within its own points). regime_mask = false skips that last cut, giving each half's rate
+# at every alpha (solve_system applies the cut itself when tracking alpha).
+function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=false, self_grav=false, si_sign=1.0, rate_input=nothing,
+                          regime_split=true, regime_mask=true)
     alph = mu * GNew * M
     rP = 1 + sqrt.(1 - a^2)
     faFac = (M_pl ./ f_a)^4
 
-    input_suffix = lm_only ? "_lm" : ""
-    rate_list = readdlm(joinpath(@__DIR__, "rate_sve/load_rate_input_Nmax_$(Nmax)$(input_suffix).txt"))
-    cnt = 1
-    
-    kill_lvls = []
-    for nn in 1:Nmax, l in 1:(nn - 1),  m in 1:l
-        if SR_rates[cnt] <= 0
-            push!(kill_lvls, [nn, l, m])
+    rate_file = rate_input_path(Nmax; lm_only=lm_only, rate_input=rate_input)
+    rate_list = readdlm(rate_file)
+    if rate_input !== nothing
+        for st in unique(string.(vec(rate_list[:, 1:3])))
+            get_state_idx(st, Nmax) == -1 && error("rate_input $(rate_input): state $(st) is not among the Nmax = $(Nmax) modes; increase Nmax")
         end
     end
-    keep_idx = []
-    for i in 1:length(rate_list[:,1])
-        if !((rate_list[i, 1] in kill_lvls)||(rate_list[i, 2] in kill_lvls)||(rate_list[i, 3] in kill_lvls))
-            push!(keep_idx, i)
-        end
-    end
-    rate_list = rate_list[keep_idx, :]
-    
+    # (SR_rates is no longer used: the former pruning of channels involving non-superradiant levels never
+    #  removed anything, and a static t = 0 pruning would drop physical channels once spin/alpha evolve.
+    #  The argument is kept so existing callers do not change.)
+
     Drate = Dict()
     
-    Drate["211_322^GW"] = 0.0
-    
+    if non_rel && self_grav && !SG_MISSING_WARNED[]
+        println("load_rate_coeffs: self-gravity rates are only tabulated for non_rel=false (Leaver tables); ignoring self_grav.")
+        SG_MISSING_WARNED[] = true
+    end
+
     if non_rel
         include_m1 = true
         include_m2 = true
@@ -35,8 +86,6 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
         if include_m1
             Drate["211_211^322^BH"] = 4.2e-7 .* alph^11 .* faFac * rP
             Drate["322_322^211^Inf"] = 1.1e-8 * alph^8 .* faFac
-            Drate["211_211^GW"] = 1.0e-2 * alph^14
-            Drate["322_211^GW"] = 5.0e-6 * alph^10
             Drate["211_211_211^Inf"] = 1.5e-8 * alph^21 .* faFac
             
             Drate["211_311^322^BH"] = 3.1e-10 .* alph^7 .* faFac * rP
@@ -45,8 +94,6 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
             Drate["311_311^322^BH"] = 1.62e-10 .* alph^7 .* faFac * rP
             
         end
-        Drate["322_322^GW"] = 3.0e-8 * alph^18
-            
         # n = 4
         if Nmax >= 4
             if include_m1
@@ -159,11 +206,9 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
         end
             
     elseif !non_rel
+        n_sg_missing = 0
         
-        Drate["211_211^GW"] = 1.0e-2 * alph^14
-        Drate["322_211^GW"] = 5.0e-6 * alph^10
         # Drate["211_211_211^Inf"] = 1.5e-8 * alph^21 .* faFac
-        Drate["322_322^GW"] = 3.0e-8 * alph^18
         
         
         # rates computed for fixed rP(a=0.9)
@@ -172,28 +217,87 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
         dirN = joinpath(@__DIR__, "rate_sve/")
         ftag = "_LvrHc_"
         
-        for i in 1:length(rate_list[:,1])
-            nm_tag = string(rate_list[i, 1]) * "_" * string(rate_list[i, 2]) * "^" * string(rate_list[i, 3]) * "^" * string(rate_list[i, 4])
-            fileT = dirN * string(rate_list[i, 1]) * "_" * string(rate_list[i, 2]) * "_" * string(rate_list[i, 3]) * "_" * string(rate_list[i, 4]) * ftag * ".dat"
-            if isfile(fileT)
-                data = open(readdlm, fileT)
-                data = data[data[:,2] .!= 0.0, :]
-                
+        rows = [Tuple(string.(rate_list[i, 1:4])) for i in 1:size(rate_list, 1)]
+        split_tab = regime_split ? regime_split_table(dirN) : Dict{String, Tuple{Float64, String}}()
+        if !isempty(split_tab)
+            have = Set(rows)
+            for (s1, s2, s3, s4) in copy(rows)
+                other = (s1, s2, s3, s4 == "BH" ? "Inf" : "BH")
+                if s4 in ("BH", "Inf") && haskey(split_tab, s1 * "_" * s2 * "_" * s3) && !(other in have)
+                    push!(rows, other)
+                    push!(have, other)
+                end
+            end
+        end
+
+        for (s1, s2, s3, s4) in rows
+            nm_tag = s1 * "_" * s2 * "^" * s3 * "^" * s4
+            fileT = dirN * s1 * "_" * s2 * "_" * s3 * "_" * s4 * ftag * ".dat"
+            # without the split, a split channel's unsplit original (kept by split_regime.py)
+            orig = dirN * "regime_split_orig/" * basename(fileT)
+            !regime_split && isfile(orig) && (fileT = orig)
+            data = get!(LVR_FILE_CACHE, fileT) do
+                isfile(fileT) || return nothing
+                d = open(readdlm, fileT)
+                d[d[:, 2] .!= 0.0, :]
+            end
+            split_ch = get(split_tab, s1 * "_" * s2 * "_" * s3, nothing)
+            sg = nothing
+            if self_grav
+                fileSG = dirN * s1 * "_" * s2 * "_" * s3 * "_" * s4 * ftag * "SG.dat"
+                sg = get!(LVR_FILE_CACHE, fileSG) do
+                    isfile(fileSG) || return nothing
+                    d = open(readdlm, fileSG)        # alpha, Gamma_SI, Gamma_SG, Gamma_x, kappa
+                    d[d[:, 3] .> 0.0, :]
+                end
+                sg === nothing && (n_sg_missing += 1)
+            end
+            if data !== nothing || sg !== nothing
+
                 rate_out = 0.0
-                if alph .<= maximum(data[:,1])
-                    itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
-                    rate_out = 10 .^itp(log10.(alph)) .* faFac
-                    if string(rate_list[i, 4]) == "BH"
-                        rate_out *= rP_ratio
+                g_si = 0.0
+                if data !== nothing && split_ch !== nothing
+                    # LOW half: alpha < alpha_c. Other half: alpha_c <= alpha <= top of its grid.
+                    a_c, low = split_ch
+                    in_regime = (s4 == low) ? (alph < a_c) : (alph >= a_c)
+                    if (in_regime || !regime_mask) && (s4 == low || alph <= maximum(data[:, 1]))
+                        if size(data, 1) == 1
+                            g_si = data[1, 2]
+                        else
+                            itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
+                            g_si = 10 .^itp(log10.(alph))
+                        end
+                        rate_out = g_si .* faFac
                     end
+                elseif data !== nothing && alph .<= maximum(data[:,1])
+                    itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
+                    g_si = 10 .^itp(log10.(alph))
+                    rate_out = g_si .* faFac
+                end
+                if sg !== nothing && size(sg, 1) >= 2 && alph .<= maximum(sg[:, 1])
+                    itp_sg = LinearInterpolation(log10.(sg[:, 1]), log10.(sg[:, 3]), extrapolation_bc=Line())
+                    itp_ka = LinearInterpolation(log10.(sg[:, 1]), sg[:, 5], extrapolation_bc=Flat())
+                    g_sg = 10 .^itp_sg(log10.(alph))
+                    rate_out += si_sign * 2 * itp_ka(log10.(alph)) * sqrt(g_si * g_sg) * sqrt(faFac) + g_sg
+                end
+                if s4 == "BH"
+                    rate_out *= rP_ratio
                 end
                 Drate[nm_tag] = rate_out
             end
+        end
+        if self_grav && n_sg_missing > 0 && !SG_MISSING_WARNED[]
+            println("load_rate_coeffs: self_grav=true but $(n_sg_missing) channel(s) have no *_LvrHc_SG.dat table; ",
+                    "those use the self-interaction rate only (warned once per session).")
+            SG_MISSING_WARNED[] = true
         end
     end
 
     return Drate
 end
+
+# (n, l, m) of every bound state named in a rate key ("a_b^c^BH", "a_b^c^Inf", "a_b_c^Inf", ...).
+rate_key_levels(k) = [parse_state_string(String(s)) for s in split(k, ['_', '^']) if !(s in ("BH", "Inf", "GW"))]
 
 function key_to_indx(keyN, Nmax)
     # Parse rate dictionary keys like "211_322^GW" or "211_211^322^BH"
