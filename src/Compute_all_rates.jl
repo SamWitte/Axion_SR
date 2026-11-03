@@ -153,7 +153,7 @@ function main(;kpts=14, rpts=1500, rmaxT=100, Nang=5000000, Npts_Bnd=2000)
 
            
             h_mve = (0.2) ./ rmax_ratio
-	    h_mve *= 10.0
+#	    h_mve *= 10.0   # off: every existing rate file was computed without the x10 (Compute_rate_points.jl matches)
 	    println("h_mve \t", h_mve)           
             res = gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, Npts_Bnd=Npts_Bnd, eps_fac=1e-3, Ntot_safe=Ntot_safe, Nang=Nang, NON_REL=NON_REL, h_mve=h_mve, to_inf=to_inf, rmaxT=rmaxT, run_leaver=run_leaver, NptsCh=NptsCh_list[i], cvg_acc=cvg_acc, prec=prec, iterC=iterC, debug=debug, der_acc=der_acc, Lcheb=Lcheb, use_heunc=use_heunc, BHlmax=BHlmax, self_grav=need_sg, ang_method=ang_method)
             if need_sg
