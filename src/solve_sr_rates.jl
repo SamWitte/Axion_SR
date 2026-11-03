@@ -1547,13 +1547,39 @@ function test_projection_scatter(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; r
 
 
         return erg_diff_pxy, out
-        
+
     end
 end
 
 
+# Gauss-Legendre angular overlaps for gf_radial(...; ang_method=:gl) (ported from Axion_SR_gw_v2): the
+# integrand is prod_k f_k(theta) e^{i m_k phi}, so the phi integral is 2 pi delta(sum m_k) and the theta
+# integral is a GL sum in cos(theta). Exact and deterministic, unlike the Monte Carlo estimator.
+import LinearAlgebra
+function ang_gauss_legendre(n)
+    beta = [k / sqrt(4k^2 - 1) for k in 1:n-1]
+    E = LinearAlgebra.eigen(LinearAlgebra.SymTridiagonal(zeros(n), beta))
+    return E.values, 2 .* E.vectors[1, :] .^ 2
+end
+const ANG_GL_N = 64
+const ANG_GLx, ANG_GLw = ang_gauss_legendre(ANG_GL_N)
 
-function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, debug=false, Ntot_safe=10000,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=500000, eps_fac=1e-10, NON_REL=false, h_mve=1, to_inf=false, rmaxT=100, prec=200, cvg_acc=1e-4, NptsCh=60, iterC=40, Lcheb=4, run_leaver=false, der_acc=1e-20, use_heunc=false, pre_erg1=nothing, pre_erg2=nothing, pre_erg3=nothing, BHlmax=0)
+# theta-profile (at phi = 0) on the GL nodes; spheroidals() returns 0.0 for |m| > l
+ang_theta_profile(Z) = Z isa Number ? fill(ComplexF64(Z), ANG_GL_N) : ComplexF64[Z(acos(x), 0.0) for x in ANG_GLx]
+
+# real part of ∫ dOmega prod_k profiles_k e^{i ms_k phi} [x cos^2(theta)], as in the Monte Carlo estimator
+function ang_gl(profiles, ms; cos2=false)
+    sum(ms) == 0 || return 0.0
+    v = ones(ComplexF64, ANG_GL_N)
+    for p in profiles
+        v .*= p
+    end
+    cos2 && (v .*= ANG_GLx .^ 2)
+    return 2pi * real(sum(ANG_GLw .* v))
+end
+
+
+function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, debug=false, Ntot_safe=10000,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=500000, eps_fac=1e-10, NON_REL=false, h_mve=1, to_inf=false, rmaxT=100, prec=200, cvg_acc=1e-4, NptsCh=60, iterC=40, Lcheb=4, run_leaver=false, der_acc=1e-20, use_heunc=false, pre_erg1=nothing, pre_erg2=nothing, pre_erg3=nothing, BHlmax=0, ang_method=:mc)
 
     
     rp = BigFloat(1.0 .+ sqrt.(1.0 .- a.^2))
@@ -1801,6 +1827,9 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     Z1 = spheroidals(l1, m1, a, erg_1)
     Z2 = spheroidals(l2, m2, a, erg_2)
     Z3 = spheroidals(l3, m3, a, erg_3)
+    if ang_method == :gl
+        Z1p = ang_theta_profile(Z1); Z2p = ang_theta_profile(Z2); Z3p = ang_theta_profile(Z3)
+    end
 
     lam_eff = 1.0e0
     if (n1==n2)&&(l1==l2)&&(m1==m2)
@@ -1973,7 +2002,14 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             println("to_inf = $to_inf")
             println("Energies: erg_1=$erg_1, erg_2=$erg_2, erg_3=$erg_3, erg=$erg")
         end
-        CG, CG_2, used_fallback = compute_angular_integral_adaptive(Z1, Z2, Z3, Z4, false, 30.0)
+        if ang_method == :gl
+            Z4p = ang_theta_profile(Z4)
+            CG = ang_gl([Z1p, Z2p, conj.(Z3p), conj.(Z4p)], [m1, m2, -m3, -m])
+            CG_2 = ang_gl([Z1p, Z2p, conj.(Z3p), conj.(Z4p)], [m1, m2, -m3, -m]; cos2=true)
+            used_fallback = false
+        else
+            CG, CG_2, used_fallback = compute_angular_integral_adaptive(Z1, Z2, Z3, Z4, false, 30.0)
+        end
 
         if used_fallback && debug
             println("Warning: Angular integration used spherical harmonic fallback")
