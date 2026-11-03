@@ -29,7 +29,7 @@ N_pts_interpL=100
 
 
 Nmax = 3
-cheby=false
+cheby=true
 
 non_rel = false
 high_p = true

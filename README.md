@@ -132,6 +132,37 @@ unzip -o Rates.zip
 
 Runtime reads the **loose** unpacked files (never the `.zip` directly). Destinations in LvrHc names: `BH` (horizon) or `Inf` (infinity).
 
+#### Self-gravity contribution (`*_LvrHc_SG.dat`)
+
+The cloud's Newtonian self-gravity mediates the same 2→2 transitions as the quartic self-interaction (kernel −Gμ²/|x−y| instead of a contact term). `gf_radial(...; self_grav=true)` computes it from the same eigenfunctions and Green's function and returns `(si, sg, cross)`. The two amplitudes interfere, so
+
+Γ(f_a) = Γ_SI (M_pl/f_a)^4 + Γ_× (M_pl/f_a)^2 + Γ_SG   (Γ_SI, Γ_SG, Γ_× tabulated at f_a = M_pl)
+
+```bash
+cd src
+julia Compute_all_rates.jl --S1 211 --S2 211 --S3 322 --S4 BH --ftag _LvrHc_ --self_grav true --ang_method gl
+```
+
+writes `rate_sve/211_211_322_BH_LvrHc_SG.dat` (columns α, Γ_SI, Γ_SG, Γ_×, κ = Γ_×/2√(Γ_SI Γ_SG)) next to the SI table; an existing SI table is not overwritten. Evolve with `solve_system(...; non_rel=false, self_grav=true)` (`si_sign=-1` for a repulsive quartic); channels without an SG table fall back to SI only (one warning per session). `--ang_method gl` replaces the Monte Carlo angular overlaps (±1% seed scatter in amplitude) by exact Gauss–Legendre quadrature. Background and validation: `src/ongoing_tests/sg_vs_si/`.
+
+**Switching it on in an evolution.** SI-only remains the default. With self-gravity:
+
+```bash
+cd src/Nlevels_Runs
+julia run_Nlevels.jl --MassBH 10 --f_a 1e17 --alpha 0.1 --Nmax 4 --tau_max 1e8 --outdir out --self_grav true
+```
+
+(or `solve_system(...; non_rel=false, self_grav=true, si_sign=1.0)` directly). Output files get an `_SG` tag, so SI-only and SG runs of the same point do not overwrite each other. Use `src/scripts/Compute_Rates.py --self-grav --ang-method gl` to produce the SG tables for a whole channel list on the cluster.
+
+**Minimal channel lists.** `src/rate_sve/gen_custom_input.py` writes a channel list for any set of states with the selection rules of `Print_all_levels.py`, e.g.
+
+```bash
+cd src/rate_sve && python3 gen_custom_input.py 211 322 433 544 766     # -> load_rate_input_min_211_322_433_544_766.txt (23 channels)
+cd ../Nlevels_Runs && julia run_Nlevels.jl ... --Nmax 4 --rate_input load_rate_input_min_211_322_433_544_766.txt [--self_grav true]
+```
+
+`--rate_input` (`solve_system(...; rate_input=...)`) replaces the default `load_rate_input_Nmax_X.txt`; the evolved modes are still those of `Nmax` (all five states above are `Nmax = 4` modes, 544 and 766 as truncation modes), so the other modes only see superradiance and GW emission. Output files get an `_rin_<list>` tag.
+
 ### 6. **Astrophysical Data** (`BH_data/`)
 
 Real black hole observations:

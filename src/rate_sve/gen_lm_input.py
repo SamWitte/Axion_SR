@@ -7,6 +7,8 @@ where every state has l == m, with the exception that "765" is always kept
 Usage:
   python gen_lm_input.py                          # default: Nmax_15
   python gen_lm_input.py load_rate_input_Nmax_8.txt
+  python gen_lm_input.py load_rate_input_Nmax_18.txt --keep 876,875,765 --suffix _lm_876_875_765
+      (--keep replaces the default exception list; --suffix defaults to _lm)
 """
 
 import os
@@ -14,6 +16,7 @@ import sys
 
 HERE      = os.path.dirname(os.path.abspath(__file__))
 EXCEPTION = {"765"}   # kept even though l != m
+SUFFIX    = "_lm"
 
 
 def parse_lm(token):
@@ -38,7 +41,7 @@ def keep_line(s1, s2, s3):
 
 def filter_file(src):
     base, ext = os.path.splitext(src)
-    dst = base + "_lm" + ext
+    dst = base + SUFFIX + ext
 
     with open(src) as fh:
         lines = [l for l in fh if l.strip()]
@@ -60,8 +63,17 @@ def filter_file(src):
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        src = sys.argv[1]
+    args = sys.argv[1:]
+    if "--keep" in args:
+        i = args.index("--keep")
+        EXCEPTION = set(args[i + 1].split(","))
+        del args[i:i + 2]
+    if "--suffix" in args:
+        i = args.index("--suffix")
+        SUFFIX = args[i + 1]
+        del args[i:i + 2]
+    if args:
+        src = args[0]
         if not os.path.isabs(src):
             src = os.path.join(HERE, src)
     else:

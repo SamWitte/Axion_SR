@@ -1,0 +1,126 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=2.3cm]{geometry}
+\usepackage{amsmath,amssymb,booktabs,hyperref}
+\usepackage{url}
+\newcommand{\dd}{\mathrm{d}}
+\newcommand{\code}[1]{\path{#1}}
+\sloppy
+\title{Gravitational-wave emission from multi-level scalar clouds:\\ non-relativistic rates and line observables}
+\author{Implementation note for \code{src/Numerics/gw_rates.jl} and \code{cloud_shifts.jl}}
+\date{}
+\begin{document}
+\maketitle
+
+\section{Setup and conventions}
+The cloud around a BH of mass $M$ and spin $a$ is a superposition of hydrogenic levels $j=(n,l,m)$,
+\begin{equation}
+\phi = \sum_j \sqrt{\frac{N_j}{2\mu}}\left(\psi_j e^{-i\omega_j t} + \mathrm{c.c.}\right),\qquad \int|\psi_j|^2\dd^3x=1,
+\end{equation}
+with $\alpha = GM\mu$ and lengths in Bohr units $a_0=1/(\mu\alpha)$. The level set is $1\le m\le l<n\le N_{\max}$ plus the truncation modes $(2l+1,2l,2m)$ with $2l+1>N_{\max}$. Occupations are $u_j=N_j/(GM^2)$ and time is $\tau=\mu t$. The spectrum is
+\begin{equation}
+\frac{\omega_{nlm}}{\mu} = 1-\frac{\alpha^2}{2n^2}-\frac{\alpha^4}{8n^4}+\frac{\alpha^4}{n^4}\frac{2l-3n+1}{l+1/2}+\frac{2am\alpha^5}{n^3\,l(l+1/2)(l+1)} .
+\label{eq:spectrum}
+\end{equation}
+GW emission enters the evolution equations as
+\begin{align}
+\frac{\dd u_a}{\dd\tau}\supset &-\sum_b (1+\delta_{ab})\,\Gamma^{\rm ann}_{ab}\,u_a u_b
+-\sum_{b:\,\omega_b<\omega_a}\Gamma^{\rm tr}_{a\to b}\,u_a u_b+\sum_{b:\,\omega_b>\omega_a}\Gamma^{\rm tr}_{b\to a}\,u_a u_b ,
+\end{align}
+with dimensionless rates $\Gamma$. Annihilations $a+b\to g$ remove one quantum of each level (two for $a=b$). Transitions $a\to b+g$ are stimulated ($\propto u_a u_b$) and conserve the number of quanta. Gravitons leave the system, so the BH mass and spin are unaffected. Every rate is computed for every pair of levels.
+
+\section{Annihilations}
+The graviton wavelength ($|\mathbf k|=\omega_a+\omega_b\simeq 2\mu$) is short compared with the cloud ($k a_0 = 2/\alpha$), so no multipole expansion applies. We use the flat-space power for a harmonic source $T_{ij}(\mathbf x)e^{-i\omega t}+\mathrm{c.c.}$,
+\begin{equation}
+\frac{\dd P}{\dd\Omega}=\frac{G\omega^2}{\pi}\Lambda_{ij,kl}(\hat{\mathbf k})\,\tilde T^*_{ij}(\mathbf k)\tilde T_{kl}(\mathbf k),\qquad
+\tilde T_{ij}(\mathbf k)=\int\dd^3x\,T_{ij}(\mathbf x)e^{-i\mathbf k\cdot\mathbf x},
+\end{equation}
+with the transverse-traceless projector $\Lambda$. Only $\partial_i\phi\partial_j\phi$ survives the projection, since the remaining terms of $T_{ij}$ are $\propto\delta_{ij}$. The source at frequency $\omega_a+\omega_b$ is
+\begin{equation}
+T_{ij}=\frac{\sqrt{N_aN_b}}{2\mu}\left(\partial_i\psi_a\partial_j\psi_b+\partial_j\psi_a\partial_i\psi_b\right)\ (a\neq b),\qquad
+T_{ij}=\frac{N_a}{2\mu}\partial_i\psi_a\partial_j\psi_a\ (a=b).
+\end{equation}
+The Fourier transform is evaluated exactly in four steps:
+\begin{enumerate}
+\item the gradient formula expresses $\nabla(R_{nl}Y_{lm})$ in terms of $g_{l\pm1}(r)Y_{l\pm1,m-q}$ along the spherical basis vectors;
+\item products of two gradients reduce to Gaunt coefficients;
+\item the plane-wave expansion of $e^{-i\mathbf k\cdot\mathbf x}$ is applied;
+\item the radial integrals $\int_0^\infty r^p e^{-\beta r}j_J(kr)\dd r$ are evaluated in closed form. The single log-divergent term of the Hankel-function expansion contributes $\frac{(2J)!}{J!2^J}\arctan(k/\beta)$.
+\end{enumerate}
+The remaining angular integral over $\hat{\mathbf k}$ has a polynomial integrand in $\cos\theta_k$ and is done by Gauss--Legendre quadrature, which is exact. The result is
+\begin{equation}
+\Gamma^{\rm ann}_{ab}(\alpha)=\frac{\alpha^6}{2\pi}F_{ab}(2/\alpha),\qquad F_{ab}=\int\dd\Omega\,\Lambda_{ij,kl}\tilde S^*_{ij}\tilde S_{kl},
+\end{equation}
+where $\tilde S$ is the source in Bohr units. We store the leading non-relativistic term $\Gamma^{\rm ann}_{ab}=C_{ab}\alpha^{p_{ab}}$. It is extracted from $F$ at $\alpha=10^{-3}$ and $2\times10^{-3}$ with a Richardson correction for the $O(\alpha)$ term; the result is stable to $10^{-5}$ for $l\le 34$.
+
+Generically $p_{ab}=2(l_a+l_b)+10$. For every pair with $l_a=l_b=1$ the flat-space $O(\alpha^{14})$ term cancels and $p=16$. With the BH potential included, the known result for $2p\times2p$ is $\dd E/\dd t=\frac{484+9\pi^2}{23040}(M_c/M)^2\alpha^{14}$, i.e.\ $C=(484+9\pi^2)/46080$. The large-$k$ tail is set by the wavefunctions at the origin. The flat-space coefficients obey $C_{ab}=(1+3[a\neq b])\,w_{n_a}w_{n_b}\,C_{211,211}$ with $w_n=|R_{n1}/r|^2_{r\to0}/|R_{21}/r|^2_{r\to0}=\frac{32}{3}\frac{n^2-1}{n^5}$; we verified this relation numerically. We therefore apply the same scaling to the $\alpha^{14}$ result for all $n\,p\times n'p$ pairs; this override can be switched off.
+
+\section{Transitions}
+For $a\to b$ the graviton wavelength is long ($\Delta\omega\, a_0\sim\alpha$), so the leading multipoles are exact at leading order. The cross density and momentum density at $\Delta\omega=\omega_a-\omega_b$ are
+\begin{equation}
+\rho=\mu\sqrt{N_aN_b}\,\psi_a\psi_b^*,\qquad \mathbf p=\tfrac{i}{2}\sqrt{N_aN_b}\left(\psi_a\nabla\psi_b^*-\psi_b^*\nabla\psi_a\right),
+\end{equation}
+with mass moments $q_{Lm}=\int\rho\, r^LY^*_{Lm}$ and current moments $J_{Lm}=L^{-1}\int(\mathbf x\times\mathbf p)\cdot\nabla(r^LY^*_{Lm})$. The flux (Thorne 1980; Blanchet), written in spherical moments, is
+\begin{gather}
+P=2G\sum_{L\ge2}\Delta\omega^{2L+2}\left[c_L\sum_m|q_{Lm}|^2+s_L\sum_m|J_{Lm}|^2\right],\\
+c_L=\frac{4\pi(L+1)(L+2)}{(L-1)L[(2L+1)!!]^2},\qquad s_L=\frac{16\pi L(L+2)}{(L-1)(L+1)[(2L+1)!!]^2},
+\end{gather}
+where the factor 2 counts both $e^{\mp i\Delta\omega t}$ components. Parity allows mass moments for $(-1)^{l_a+l_b+L}=+1$ and current moments for $-1$, with $\max(2,|m_a-m_b|,|l_a-l_b|)\le L\le l_a+l_b$. All allowed $L$ are summed. Dividing by $\Delta\omega$ per transition gives
+\begin{equation}
+\Gamma^{\rm tr}_{a\to b}=\sum_{L\,\rm mass}K_L\,\alpha^{2-2L}\delta^{2L+1}+\sum_{L\,\rm current}K_L\,\alpha^{4-2L}\delta^{2L+1},\qquad \delta=\Delta\omega/\mu .
+\end{equation}
+The coefficients $K_L$ are $\alpha$-independent: radial moments (evaluated exactly in BigFloat) times angular integrals. $\delta$ is taken from Eq.~\eqref{eq:spectrum}, so both the rate and the emission direction follow $\alpha(t)$ and $a(t)$. The leading channel scales as $\alpha^{2L+4}$ (mass) or $\alpha^{2L+6}$ (current).
+
+The flat-space kinetic-stress prescription (Arvanitaki \& Dubovsky 2011 eq.~38; Arvanitaki et al.\ 2015 App.~A) omits the Newtonian stress. It deviates from the quadrupole formula by a pair-dependent factor: 4 for all $\Delta l=0$ transitions tested, and $1/121$ for $433\to311$. The multipole formula follows from conservation of the total (matter plus Newtonian) stress-energy, and we use it.
+
+\section{Evolution}
+Tables of $(C,p)$ and $(K_L,L,\text{type})$ are built per $N_{\max}$ by \code{src/scripts/build_gw_tables.jl}. Entries negligible at every $\alpha\le1$ are pruned ($C<10^{-60}$; channels below $10^{-8}$ of the dominant one). At the start of a run, channels with $\Gamma\,\mu/\hbar<10^{-10}\,{\rm yr}^{-1}$ at the initial $(\alpha,a)$ are dropped. This cut remains conservative because $\alpha$ only decreases as the BH loses mass. \code{solve_system} evaluates all remaining rates in every right-hand-side call at $\alpha(t)=GM(t)\mu$ and $a(t)$. The option \code{gw_model} selects \code{:nonrel} (this note), \code{:off}, or \code{:rel} (placeholder for relativistic rates).
+
+\section{Line observables}
+Each annihilation and transition channel is a line. From the evolved $u_j(t)$, $M(t)$ and $a(t)$:
+\begin{align}
+f&=\frac{\mu\,\omega_{\rm GW}}{2\pi\hbar},\quad \omega_{\rm GW}=\omega_a+\omega_b\ \text{or}\ \omega_a-\omega_b,\\
+P&=\Gamma\,u_au_b\,GM_0^2\,\frac{\mu}{\hbar}\times\hbar\omega_{\rm GW},\\
+h_0&=\frac{\sqrt{8GP}}{c^{3/2}\,2\pi f\,d},
+\end{align}
+where $M_0$ is the initial BH mass (it fixes the normalisation of $u$). $h_0=(A_+^2+A_\times^2)^{1/2}$ is the orientation-averaged amplitude at distance $d$, obtained from $P/(4\pi d^2)=\frac{c^3}{32\pi G}(2\pi f)^2h_0^2$. \code{src/Nlevels_Runs/gw_lines_from_run.jl} writes $f(t)$, $P(t)$ and $h_0(t)$ for all lines above a relative peak-power floor.
+
+\section{Cloud-induced frequency shifts}
+The cloud's gravity and the quartic self-interaction $V\supset-\mu^2\phi^4/(24f_a^2)$ shift the levels. At first order in the Schrödinger--Poisson / Gross--Pitaevskii system, keeping all terms resonant with level $i$,
+\begin{align}
+\frac{\delta\omega_i}{\mu}&=-\alpha^3\sum_j u_j\left[D_{ij}+(1-\delta_{ij})E_{ij}\right]-\frac{\alpha^5}{8}\left(\frac{M_{\rm pl}}{f_a}\right)^2\sum_j u_j(2-\delta_{ij})\chi_{ij},\\
+D_{ij}&=\!\int\!\!\int\!\frac{|\psi_i(\mathbf x)|^2|\psi_j(\mathbf x')|^2}{|\mathbf x-\mathbf x'|},\quad
+E_{ij}=\!\int\!\!\int\!\frac{\psi_i^*\psi_j(\mathbf x)\,\psi_j^*\psi_i(\mathbf x')}{|\mathbf x-\mathbf x'|},\quad
+\chi_{ij}=\!\int|\psi_i|^2|\psi_j|^2 .
+\end{align}
+$E_{ij}$ is the exchange term. It arises because $\Phi[\psi_i\psi_j^*]\psi_j$ oscillates at $\omega_i$. The integrals are evaluated exactly by multipole expansion, with the radial double integrals in closed form via incomplete gamma functions. The shifts are applied to $f(t)$ in post-processing, using every level occupied above $10^{-8}$ of the peak occupation.
+
+\section{Validation}
+\begin{center}
+\small
+\begin{tabular}{@{}p{0.32\textwidth}p{0.29\textwidth}p{0.33\textwidth}@{}}
+\toprule
+quantity & this work & reference\\
+\midrule
+$2p\times2p$ flat space, all $\alpha$ & agrees to $10^{-12}$ & ABH15 Tab.~VI (closed form)\\
+$2p\times2p$ flat, leading & $6.777\times10^{-5}\alpha^{16}$ & AD11 eq.~44 ($9\pi/2^{26}$ form)\\
+$3d\times3d$ & $2.360\times10^{-8}\alpha^{18}$ & ABH15 Tab.~VI (to $10^{-5}$)\\
+$4f\times4f$ & $1.447\times10^{-11}\alpha^{22}$ & ABH15 Tab.~VI (to $10^{-5}$)\\
+$3d\to2p$ & $5.24\times10^{-6}\alpha^{10}$ & $5\times10^{-6}\alpha^{10}$ (BGLS21 Tab.~IV)\\
+transitions vs.\ quadrupole formula & agree to $10^{-13}$ & AD11 eq.~39, $Q_{ij}$ by 3D quadrature\\
+current moment & agrees to $10^{-15}$ & 3D quadrature\\
+$D_{1s,1s}$ & $5/8$ & hydrogen\\
+$D$: $211$--$211$, $211$--$322$, $322$--$322$ & $0.185,\ 0.109,\ 0.090$ & $0.19,\ 0.11,\ 0.09$ (BGLS21 G11--12)\\
+$E_{211,322}$ & $0.015$ & omitted in BGLS21\\
+quartic coefficients & $1.17,\ 0.352,\ 0.144\ (\times10^{-4})$ & $1.2,\ 0.35,\ 0.14$ (BGLS21 B15--16)\\
+\bottomrule
+\end{tabular}
+\end{center}
+ABH15: Arvanitaki, Baryakhtar, Huang, arXiv:1411.2263. AD11: Arvanitaki, Dubovsky, arXiv:1004.3558. BGLS21: Baryakhtar, Galanis, Lasenby, Simon, arXiv:2011.11646. The tests are in \code{test/test_gw_rates.jl}.
+
+\section{Limitations}
+\begin{itemize}
+\item All rates are leading order in $\alpha$ and use hydrogenic wavefunctions. The flat-space annihilation coefficients receive $O(1)$ corrections from the BH potential; these are included only for $l=1$ pairs, via the scaling above. Relativistic (Teukolsky) rates are not implemented.
+\item The cloud shifts are not fed back into the evolution. Since $\Gamma^{\rm tr}\propto\delta^{2L+1}$, the transition rates carry a relative error of order $(2L+1)\,\delta\omega/\Delta\omega$. For $544\to322$ in a run with $u_{211}\approx0.4$, $\delta\omega/\Delta\omega\approx0.12$. For near-degenerate levels the shifts can reverse the emission direction.
+\item The strain is orientation-averaged; the angular patterns $\dd P/\dd\Omega$ are computed internally but not output.
+\end{itemize}
+\end{document}
