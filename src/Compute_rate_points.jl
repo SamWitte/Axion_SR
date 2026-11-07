@@ -53,6 +53,15 @@ function parse_commandline()
         "--out"
             arg_type = String
             default = ""
+        "--rpts" # radial grid points of the bound-state product (Compute_all_rates.jl: 1500)
+            arg_type = Int
+            default = 1500
+        "--Npts_Bnd" # radial points of the relativistic bound-state solver (Compute_all_rates.jl: 2000)
+            arg_type = Int
+            default = 2000
+        "--h_mve_fac" # multiplies h_mve, i.e. divides the Numerov step of the 4th quantum (1 = production files)
+            arg_type = Float64
+            default = 1.0
         "--tasks" # file with lines "S1 S2 S3 S4 i1,i2,..." computed in one process; each channel is written to
                   # <out_dir>/<S1>_<S2>_<S3>_<S4>_NRGL.dat (--out then names the directory)
             arg_type = String
@@ -63,7 +72,7 @@ end
 
 parsed_args = parse_commandline()
 
-function main(S1, S2, S3, S4, idx_str, fOUT; kpts=14, rpts=1500, rmaxT=100, Nang=5000000, Npts_Bnd=2000)
+function main(S1, S2, S3, S4, idx_str, fOUT; kpts=14, rpts=parsed_args["rpts"], rmaxT=100, Nang=5000000, Npts_Bnd=parsed_args["Npts_Bnd"])
     # settings of Compute_all_rates.jl
     a = 0.95
     M = 1.0
@@ -103,7 +112,7 @@ function main(S1, S2, S3, S4, idx_str, fOUT; kpts=14, rpts=1500, rmaxT=100, Nang
         maxN = maximum([n1 n2 n3])
         rmax_1 = (2.0 .^(2.0 .* 3 .- 2 .* (1 .+ 3)) .* gamma(2 .+ 2 .* 3) ./ (0.03 .^2) ./ factorial(2 .* 3 - 1) .* 7.0)
         rmax_ratio = (2.0 .^(2.0 .* maxN .- 2 .* (1 .+ maxN)) .* gamma(2 .+ 2 .* maxN) ./ alpp.^2 ./ factorial(big(2 .* maxN - 1)) .* 7.0) ./ rmax_1
-        h_mve = (0.2) ./ rmax_ratio
+        h_mve = (0.2) ./ rmax_ratio .* parsed_args["h_mve_fac"]
         t0 = time()
         rate = gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, Npts_Bnd=Npts_Bnd, eps_fac=1e-3, Ntot_safe=Ntot_safe, Nang=Nang, NON_REL=NON_REL, h_mve=h_mve, to_inf=to_inf, rmaxT=rmaxT, run_leaver=run_leaver, NptsCh=NptsCh_list[i], cvg_acc=cvg_acc, prec=prec, iterC=iterC, debug=debug, der_acc=der_acc, Lcheb=Lcheb, use_heunc=use_heunc, BHlmax=BHlmax, ang_method=ang_method)
         dt = time() - t0
