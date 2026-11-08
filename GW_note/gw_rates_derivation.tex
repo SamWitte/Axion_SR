@@ -1,0 +1,646 @@
+\documentclass[11pt]{article}
+\usepackage[a4paper,margin=2.3cm]{geometry}
+\usepackage{amsmath,amssymb,booktabs,hyperref}
+\usepackage{url,array}
+\newcommand{\dd}{\mathrm{d}}
+\newcommand{\code}[1]{\path{#1}}
+\newcommand{\bx}{\mathbf x}
+\newcommand{\bk}{\mathbf k}
+\newcommand{\bp}{\mathbf p}
+\newcommand{\nhat}{\hat{\mathbf n}}
+\newcommand{\STF}{^{\rm STF}}
+\sloppy
+\title{Gravitational radiation from multi-level scalar clouds:\\ derivation of the annihilation and transition rates}
+\author{Derivation note for \code{src/Numerics/gw_rates.jl}}
+\date{}
+\begin{document}
+\maketitle
+
+\begin{abstract}
+A scalar cloud that occupies several quasi-bound levels of a black hole (BH) emits gravitational waves through two classes of processes: annihilation of two quanta into one graviton, $a\times b\to g$, at $\omega\simeq2\mu$, and transitions between levels, $a\to b+g$, at $\omega=\omega_a-\omega_b\sim\mu\alpha^2$. Starting from the Klein--Gordon equation and the scalar stress--energy tensor, we derive both rates in the non-relativistic limit, in the form used by the evolution code. For transitions the graviton wavelength is much longer than the cloud, and the rate follows from the mass and current multipole moments of the cloud's energy and momentum densities. The source must be the conserved stress--energy of the whole system: the scalar's own stress omits the Newtonian interaction stress with the BH and gets the rate wrong by an $O(1)$, pair-dependent factor. When parity forbids the mass quadrupole, the mass octupole and the current quadrupole enter at the same order, $\alpha^{10}$, and both must be kept. For $4f\to3d$ ($|433\rangle\to|322\rangle$) the current quadrupole exceeds the octupole by a factor of exactly $2744/25$. For annihilations the graviton wavelength is much shorter than the cloud. The rate follows from the Fourier transform of the scalar's kinetic stress, which we evaluate in closed form. For annihilations the flat-space coefficient is gauge dependent for $l\neq3$. We set out the calculation on the Kerr background, which removes this ambiguity and gives the rates at all $\alpha$.
+\end{abstract}
+
+\section{Field equation and the non-relativistic cloud}
+\label{sec:field}
+
+We use $\hbar=c=1$ and signature $(-,+,+,+)$. A real scalar of mass $\mu$ on the BH background $g_{\mu\nu}$ has action and equation of motion
+\begin{equation}
+S=\int\dd^4x\sqrt{-g}\left[-\tfrac12 g^{\mu\nu}\partial_\mu\phi\,\partial_\nu\phi-\tfrac12\mu^2\phi^2\right],\qquad
+\left(\Box_g-\mu^2\right)\phi=0 .
+\label{eq:kg}
+\end{equation}
+Self-interactions are omitted; they add only $-g_{\mu\nu}V(\phi)$ to $T_{\mu\nu}$, which is pure trace in the spatial components, and shift the spectrum. The cloud lives at $r\sim n^2a_0$, with Bohr radius $a_0=1/(\mu\alpha)$ and $\alpha=GM\mu$. This is far from the horizon for $\alpha\ll1$, where the metric is weak:
+\begin{equation}
+\dd s^2\simeq-(1+2\Phi)\,\dd t^2+(1-2\Phi)\,\dd\bx^2,\qquad \Phi=-\frac{GM}{r}.
+\end{equation}
+Write
+\begin{equation}
+\phi=\frac{1}{\sqrt{2\mu}}\left(\Psi\,e^{-i\mu t}+\Psi^*e^{i\mu t}\right),\qquad |\partial_t\Psi|\ll\mu|\Psi| .
+\label{eq:nr_ansatz}
+\end{equation}
+With $g^{tt}\simeq-(1-2\Phi)$ and $\partial_t^2(\Psi e^{-i\mu t})\simeq(-\mu^2\Psi-2i\mu\partial_t\Psi)e^{-i\mu t}$, Eq.~\eqref{eq:kg} reduces at leading order to the Schr\"odinger equation
+\begin{equation}
+i\partial_t\Psi=-\frac{\nabla^2}{2\mu}\Psi+\mu\Phi\,\Psi=-\frac{\nabla^2}{2\mu}\Psi-\frac{\alpha}{r}\Psi .
+\label{eq:schr}
+\end{equation}
+Its bound states are hydrogenic. The cloud is a superposition of levels $j=(n,l,m)$,
+\begin{equation}
+\phi=\sum_j\sqrt{\frac{N_j}{2\mu}}\left(\psi_j(\bx)\,e^{-i\omega_jt}+\mathrm{c.c.}\right),\qquad
+\psi_j=R_{nl}(r)\,Y_{lm}(\theta,\varphi),\qquad \int|\psi_j|^2\dd^3x=1 .
+\label{eq:modes}
+\end{equation}
+Section~\ref{sec:T} shows that $N_j$ is the number of quanta in level $j$. The spectrum including relativistic corrections from the Kerr metric is~\cite{BCP19}
+\begin{equation}
+\frac{\omega_{nlm}}{\mu}=1-\frac{\alpha^2}{2n^2}-\frac{\alpha^4}{8n^4}+\frac{\alpha^4}{n^4}\frac{2l-3n+1}{l+1/2}+\frac{2a\,m\,\alpha^5}{n^3\,l(l+1/2)(l+1)}
+\label{eq:spectrum}
+\end{equation}
+(\code{gw_omega}; the last term is absent for $l=0$). The superradiant growth and decay rates are negligible on the time scale of one GW period and are dropped. Relativistic corrections to the wavefunctions are of higher order in $\alpha$ and are also dropped.
+
+\paragraph{Bohr units.} We write $\bx=a_0\bar\bx$ and $\psi=a_0^{-3/2}\bar\psi$, so that $\bar\psi_j=\bar R_{nl}(\bar r)Y_{lm}$ with
+\begin{equation}
+\bar R_{nl}(\bar r)=\sqrt{\left(\frac2n\right)^3\frac{(n-l-1)!}{2n\,(n+l)!}}\;e^{-\bar r/n}\left(\frac{2\bar r}{n}\right)^lL^{(2l+1)}_{n-l-1}\!\left(\frac{2\bar r}{n}\right).
+\end{equation}
+Each $\bar R_{nl}$ is a finite sum $\sum_kc_k\bar r^{k}e^{-\bar r/n}$ (\code{gw_hydrogen_radial}). All radial integrals below are therefore sums of $\int_0^\infty\bar r^pe^{-\beta\bar r}\dd\bar r=p!/\beta^{p+1}$, which we evaluate exactly in arbitrary precision (\code{gw_radial_moment}). From here on the bars are dropped inside integrals over Bohr-unit wavefunctions when no confusion arises.
+
+\paragraph{Evolution variables.} The solver evolves $u_j=N_j/(GM^2)$ in the time $\tau=\mu t$. GW emission enters as
+\begin{equation}
+\frac{\dd u_a}{\dd\tau}\supset-\sum_b(1+\delta_{ab})\,\Gamma^{\rm ann}_{ab}\,u_au_b-\sum_{b:\,\omega_b<\omega_a}\Gamma^{\rm tr}_{a\to b}\,u_au_b+\sum_{b:\,\omega_b>\omega_a}\Gamma^{\rm tr}_{b\to a}\,u_au_b .
+\label{eq:evol}
+\end{equation}
+The task is to compute the dimensionless rates $\Gamma^{\rm ann}$ and $\Gamma^{\rm tr}$.
+
+\section{Stress--energy tensor of the cloud}
+\label{sec:T}
+
+For Eq.~\eqref{eq:kg},
+\begin{equation}
+T_{\mu\nu}=\partial_\mu\phi\,\partial_\nu\phi-g_{\mu\nu}\left[\tfrac12g^{\alpha\beta}\partial_\alpha\phi\,\partial_\beta\phi+\tfrac12\mu^2\phi^2\right].
+\end{equation}
+At leading order its components are
+\begin{equation}
+T^{00}=\tfrac12\dot\phi^2+\tfrac12(\nabla\phi)^2+\tfrac12\mu^2\phi^2,\qquad
+T^{0i}=-\dot\phi\,\partial_i\phi,\qquad
+T^{ij}=\partial_i\phi\,\partial_j\phi+\delta_{ij}\left[\tfrac12\dot\phi^2-\tfrac12(\nabla\phi)^2-\tfrac12\mu^2\phi^2\right].
+\label{eq:Tcomp}
+\end{equation}
+Inserting Eq.~\eqref{eq:modes}, every bilinear contains products of two modes $a,b$, which oscillate either at the difference frequency $\Delta\omega_{ab}=\omega_a-\omega_b$ or at the sum frequency $\omega_a+\omega_b\simeq2\mu$. We use $\omega_j=\mu[1+O(\alpha^2)]$ throughout.
+
+\paragraph{Difference frequency (transitions).} In $T^{00}$ both $\tfrac12\dot\phi^2$ and $\tfrac12\mu^2\phi^2$ contribute $\tfrac12\mu\sqrt{N_aN_b}\,\psi_a\psi_b^*$, while $(\nabla\phi)^2$ is suppressed by $\alpha^2$. For an unordered pair $a\neq b$ the energy and momentum densities are
+\begin{align}
+\rho_{ab}(t,\bx)&=\hat\rho\,e^{-i\Delta\omega_{ab}t}+\mathrm{c.c.},&\hat\rho&=\mu\sqrt{N_aN_b}\;\psi_a\psi_b^*,
+\label{eq:rho}\\
+\bp_{ab}(t,\bx)&=\hat\bp\,e^{-i\Delta\omega_{ab}t}+\mathrm{c.c.},&\hat\bp&=\tfrac{i}{2}\sqrt{N_aN_b}\left(\psi_a\nabla\psi_b^*-\psi_b^*\nabla\psi_a\right).
+\label{eq:p}
+\end{align}
+For $a=b$ these reduce to $\rho=\mu N_a|\psi_a|^2$ and $\bp=N_a\,\mathrm{Im}(\psi_a^*\nabla\psi_a)$. So $\mu N_a$ is the mass in level $a$, which justifies the normalisation in Eq.~\eqref{eq:modes}. In terms of $\Psi$, $\rho=\mu|\Psi|^2$ and $\bp=\mathrm{Im}(\Psi^*\nabla\Psi)$. Apart from terms $\propto\delta_{ij}$, the spatial stress at the difference frequency is the kinetic stress $\frac1{2\mu}(\partial_i\Psi\,\partial_j\Psi^*+\mathrm{c.c.})$.
+
+\paragraph{Sum frequency (annihilations).} At $e^{-i(\omega_a+\omega_b)t}$,
+\begin{equation}
+T^{ij}=\hat T_{ij}\,e^{-i(\omega_a+\omega_b)t}+\mathrm{c.c.}+(\propto\delta_{ij}),\qquad
+\hat T_{ij}=\begin{cases}\dfrac{\sqrt{N_aN_b}}{2\mu}\left(\partial_i\psi_a\partial_j\psi_b+\partial_j\psi_a\partial_i\psi_b\right),& a\neq b,\\[2ex]
+\dfrac{N_a}{2\mu}\,\partial_i\psi_a\partial_j\psi_a,& a=b.\end{cases}
+\label{eq:That}
+\end{equation}
+The energy density at this frequency cancels at leading order: $\tfrac12\dot\phi^2+\tfrac12\mu^2\phi^2\propto(\mu^2-\omega_a\omega_b)\psi_a\psi_b=O(\alpha^2)$.
+
+\paragraph{Conservation.} Equation~\eqref{eq:schr} implies, exactly,
+\begin{equation}
+\partial_t\rho+\nabla\cdot\bp=0,\qquad
+\partial_tp_i+\partial_k\sigma_{ik}=-\rho\,\partial_i\Phi,\qquad
+\sigma_{ik}=\frac1{2\mu}\left(\partial_i\Psi^*\partial_k\Psi+\partial_k\Psi^*\partial_i\Psi\right)-\frac1{4\mu}\partial_i\partial_k|\Psi|^2 .
+\label{eq:cons}
+\end{equation}
+This is the Newtonian limit of $\nabla_\mu T^{\mu\nu}=0$ on the BH background. The cloud's momentum is not conserved, because the BH pulls on it. Multiplying the second equation by $x_j$ and integrating gives the virial identity
+\begin{equation}
+\int\sigma_{ij}\,\dd^3x=\frac12\frac{\dd^2}{\dd t^2}\int\rho\,x_ix_j\,\dd^3x+\frac12\int\rho\left(x_i\partial_j\Phi+x_j\partial_i\Phi\right)\dd^3x .
+\label{eq:virial}
+\end{equation}
+The last term of $\sigma_{ik}$ in Eq.~\eqref{eq:cons} integrates to zero, so the trace-free part of $\int\sigma_{ij}$ is the integrated kinetic stress. Equation~\eqref{eq:virial} is central to Sec.~\ref{sec:source}.
+
+\section{Radiation from a periodic source}
+\label{sec:rad}
+
+Let $\tau^{\mu\nu}$ be the total stress--energy of the system (cloud, BH and gravitational field, e.g.\ in Landau--Lifshitz form). It obeys $\partial_\mu\tau^{\mu\nu}=0$ and sources the trace-reversed metric perturbation, $\Box\bar h_{\mu\nu}=-16\pi G\tau_{\mu\nu}$. In the wave zone
+\begin{equation}
+h^{\rm TT}_{ij}(t,r\nhat)=\frac{4G}{r}\Lambda_{ij,kl}(\nhat)\int\dd^3x'\,\tau_{kl}(t-r+\nhat\cdot\bx',\bx'),\qquad
+\frac{\dd P}{\dd\Omega}=\frac{r^2}{32\pi G}\left\langle\dot h^{\rm TT}_{ij}\dot h^{\rm TT}_{ij}\right\rangle ,
+\end{equation}
+where $\Lambda_{ij,kl}=P_{ik}P_{jl}-\tfrac12P_{ij}P_{kl}$ with $P_{ij}=\delta_{ij}-n_in_j$. For a harmonic source $\tau_{kl}=\hat\tau_{kl}(\bx)e^{-i\omega t}+\mathrm{c.c.}$, the projector property $\Lambda\Lambda=\Lambda$ gives Weinberg's formula~\cite{Weinberg}
+\begin{equation}
+\frac{\dd P}{\dd\Omega}=\frac{G\omega^2}{\pi}\,\Lambda_{ij,kl}(\nhat)\,\tilde\tau^*_{ij}(\bk)\,\tilde\tau_{kl}(\bk),\qquad
+\tilde\tau_{ij}(\bk)=\int\dd^3x\,\hat\tau_{ij}(\bx)\,e^{-i\bk\cdot\bx},\quad\bk=\omega\nhat .
+\label{eq:weinberg}
+\end{equation}
+The two processes sit in opposite limits of $kR$, where $R\sim n^2a_0$ is the size of the cloud:
+\begin{center}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+process & $\omega$ & $k a_0$ & $kR$ & treatment\\
+\midrule
+transition $a\to b$ & $\Delta\omega_{ab}=\delta\,\mu$, $\delta=O(\alpha^2)$ & $\delta/\alpha=O(\alpha)$ & $\ll1$ & multipole expansion (Sec.~\ref{sec:tr})\\
+annihilation $a\times b$ & $\omega_a+\omega_b\simeq2\mu$ & $2/\alpha$ & $\gg1$ & full Fourier transform (Sec.~\ref{sec:ann})\\
+\bottomrule
+\end{tabular}
+\end{center}
+In both cases one graviton of energy $\omega$ is emitted per elementary process. The rate of processes is therefore $P/\omega$. Since $P\propto N_aN_b$, the transitions are stimulated: the classical result reproduces the quantum rate $\propto N_a(N_b+1)$ for $N_b\gg1$.
+
+\section{Transitions}
+\label{sec:tr}
+
+\subsection{The source: matter stress versus total stress}
+\label{sec:source}
+
+In the long-wavelength limit the leading term of Eq.~\eqref{eq:weinberg} involves $\int\tau_{ij}\,\dd^3x$, and conservation of $\tau^{\mu\nu}$ turns this into the quadrupole formula, $\int\tau_{ij}=\tfrac12\ddot I_{ij}$. It is tempting to use the scalar's own stress $\sigma_{ij}$ for $\tau_{ij}$, as in the flat-space treatment of Ref.~\cite{AD11}. Equation~\eqref{eq:virial} shows that this is incorrect. $\sigma_{ij}$ differs from $\tfrac12\ddot I_{ij}$ by the interaction stress $\tfrac12\int\rho\,x_{(i}\partial_{j)}\Phi$, which by the virial theorem is of the same order.
+
+The total stress resolves this. For the cloud bound to a BH of mass $M$ at the origin, the Newtonian part of $\tau_{ij}$ is the cloud's stress, the BH's kinetic stress and the gravitational stress $\frac1{4\pi G}(\partial_iU\partial_jU-\tfrac12\delta_{ij}|\nabla U|^2)$ of the total potential $U$. The cross term between the BH and cloud potentials integrates to $-\int\rho\,GM\,x_ix_j/r^3=-\tfrac12\int\rho\,(x_i\partial_j\Phi+x_j\partial_i\Phi)$. This is the familiar $-Gm_1m_2\,r^ir^j/r^3$ of the two-body problem. Adding it to Eq.~\eqref{eq:virial} gives
+\begin{equation}
+\int\tau_{ij}\,\dd^3x=\frac12\frac{\dd^2}{\dd t^2}\int\rho\,x_ix_j\,\dd^3x ,
+\end{equation}
+with $\rho$ the cloud's mass density. The BH's own contributions are suppressed. Momentum conservation makes the BH recoil against the cloud's oscillating mass dipole, $M\bx_{\rm BH}=-\int\rho\,\bx$. This removes any dipole radiation, but adds to the $L\ge2$ moments only at relative order $M_c/M$, where $M_c$ is the cloud mass. The cloud's self-gravity enters at the same relative order. Both are neglected.
+
+The error made by using $\sigma_{ij}$ alone is not small. We computed the quadrupole power both ways by direct 3D quadrature of Eqs.~\eqref{eq:rho}--\eqref{eq:p}:
+\begin{itemize}
+\item for $\Delta l=0$ transitions ($311\to211$, $422\to322$, $533\to433$ and $644\to544$), the kinetic stress overestimates the power by a factor of exactly 4;
+\item for $433\to311$ it gives $1/121$ of the correct value.
+\end{itemize}
+We therefore express the transition flux entirely through the moments of $\rho$ and $\bp$, which are unambiguous.
+
+\subsection{Multipole expansion of the flux}
+
+For a slow-motion source the flux is~\cite{Thorne80}
+\begin{equation}
+P=G\sum_{L\ge2}\left[\frac{(L+1)(L+2)}{(L-1)L\,L!\,(2L+1)!!}\left\langle I^{(L+1)}_{A_L}I^{(L+1)}_{A_L}\right\rangle
++\frac{4L(L+2)}{(L-1)(L+1)!\,(2L+1)!!}\left\langle S^{(L+1)}_{A_L}S^{(L+1)}_{A_L}\right\rangle\right],
+\label{eq:thorne}
+\end{equation}
+with the symmetric trace-free (STF) mass and current moments
+\begin{equation}
+I_{A_L}=\left[\int\rho\,x_{A_L}\,\dd^3x\right]\STF,\qquad
+S_{A_L}=\left[\int x_{A_{L-1}}\,\epsilon_{a_Lpq}\,x_p\,p_q\,\dd^3x\right]\STF .
+\end{equation}
+Here $A_L=a_1\cdots a_L$, $x_{A_L}=x_{a_1}\cdots x_{a_L}$ and superscripts denote time derivatives. For $L=2,3$ the coefficients are the familiar $G/5$ (mass quadrupole), $G/189$ (mass octupole) and $16G/45$ (current quadrupole). At fixed $L$ a current moment carries one more power of velocity than a mass moment, so $I_{A_{L+1}}$ and $S_{A_L}$ enter at the same post-Newtonian order.
+
+\subsection{Spherical moments}
+
+It is convenient to work with spherical moments,
+\begin{equation}
+q_{Lm}=\int\rho\,r^LY^*_{Lm}\,\dd^3x,\qquad
+J_{Lm}=\frac1L\int(\bx\times\bp)\cdot\nabla\!\left(r^LY^*_{Lm}\right)\dd^3x .
+\label{eq:qJ}
+\end{equation}
+Using the STF identities of Appendix~\ref{app:stf}, $\sum_{A_L}|I_{A_L}|^2=\frac{4\pi L!}{(2L+1)!!}\sum_m|q_{Lm}|^2$, and the same relation holds between $S_{A_L}$ and $J_{Lm}$. Equation~\eqref{eq:thorne} becomes
+\begin{gather}
+P=G\sum_{L\ge2}\left[c_L\sum_m\left\langle|q^{(L+1)}_{Lm}|^2\right\rangle+s_L\sum_m\left\langle|J^{(L+1)}_{Lm}|^2\right\rangle\right],\nonumber\\
+c_L=\frac{4\pi(L+1)(L+2)}{(L-1)L\,[(2L+1)!!]^2},\qquad
+s_L=\frac{16\pi L(L+2)}{(L-1)(L+1)\,[(2L+1)!!]^2}
+\label{eq:cs}
+\end{gather}
+(\code{gw_cmass}, \code{gw_ccurr}).
+
+\paragraph{Harmonic time dependence.} For one pair, $\rho$ and $\bp$ oscillate as in Eqs.~\eqref{eq:rho}--\eqref{eq:p}, so $q_{Lm}(t)=\hat q_{Lm}e^{-i\Delta\omega t}+\hat q'_{Lm}e^{i\Delta\omega t}$. The second coefficient is $\hat q'_{Lm}=\int\hat\rho^*r^LY^*_{Lm}=(-1)^m\hat q^*_{L,-m}$. Averaging over time, $\sum_m\langle|q^{(L+1)}_{Lm}|^2\rangle=2\Delta\omega^{2L+2}\sum_m|\hat q_{Lm}|^2$, and likewise for $J$:
+\begin{equation}
+P_{a\to b}=2G\sum_{L\ge2}\Delta\omega^{2L+2}\left[c_L\sum_m|\hat q_{Lm}|^2+s_L\sum_m|\hat J_{Lm}|^2\right].
+\label{eq:Ptr}
+\end{equation}
+
+\subsection{Moments of a pair of hydrogenic levels}
+
+\paragraph{Mass moments.} The $\varphi$ integral of $e^{i(m_a-m_b-m)\varphi}$ selects $m=m_a-m_b$. In Bohr units,
+\begin{gather}
+\hat q_{Lm}=\mu\sqrt{N_aN_b}\;a_0^L\;\bar Q_L,\qquad
+\bar Q_L=\mathcal I^{(L+2)}_{ab}\;\mathcal A^{\rm mass}_L,\nonumber\\
+\mathcal I^{(p)}_{ab}=\int_0^\infty\bar R_a\bar R_b\,\bar r^p\,\dd\bar r,\qquad
+\mathcal A^{\rm mass}_L=\int Y_{l_am_a}Y^*_{l_bm_b}Y^*_{Lm}\,\dd\Omega .
+\label{eq:Qbar}
+\end{gather}
+Writing $Y_{lm}=\Theta_{lm}(\theta)e^{im\varphi}$, the angular factor is $\mathcal A^{\rm mass}_L=2\pi\int_0^\pi\Theta_a\Theta_b\Theta_L\sin\theta\,\dd\theta$, a Gaunt coefficient. The code evaluates it by Gauss--Legendre quadrature in $\cos\theta$, which is exact (\code{gw_transition_angular}).
+
+\paragraph{Current moments.} Let $f=r^LY^*_{Lm}$. Using $(\bx\times\bp)\cdot\nabla f=-\bp\cdot(\bx\times\nabla f)$ and
+\begin{equation}
+\bx\times\nabla f=\hat{\boldsymbol\varphi}\,\partial_\theta f-\frac{\hat{\boldsymbol\theta}}{\sin\theta}\,\partial_\varphi f ,
+\end{equation}
+only the angular components of $\hat\bp$ enter. With $\psi_a=R_a\Theta_ae^{im_a\varphi}$ and $\psi_b^*=R_b\Theta_be^{-im_b\varphi}$, Eq.~\eqref{eq:p} gives
+\begin{equation}
+\hat p_\theta=\frac{i}{2r}\sqrt{N_aN_b}\,R_aR_b\,e^{im\varphi}\left(\Theta_a\Theta_b'-\Theta_b\Theta_a'\right),\qquad
+\hat p_\varphi=\frac{m_a+m_b}{2r\sin\theta}\sqrt{N_aN_b}\,R_aR_b\,\Theta_a\Theta_b\,e^{im\varphi},
+\end{equation}
+with $\partial_\theta f=r^L\Theta_L'e^{-im\varphi}$ and $\partial_\varphi f=-im\,r^L\Theta_Le^{-im\varphi}$. Hence
+\begin{equation}
+(\bx\times\hat\bp)\cdot\nabla f=\frac{r^{L-1}R_aR_b}{2\sin\theta}\sqrt{N_aN_b}\left[m\left(\Theta_a\Theta_b'-\Theta_b\Theta_a'\right)\Theta_L-(m_a+m_b)\,\Theta_a\Theta_b\Theta_L'\right].
+\end{equation}
+The measure $r^2\sin\theta\,\dd r\,\dd\theta\,\dd\varphi$ cancels the $\sin\theta$, and the $\varphi$ integral gives $2\pi$. In Bohr units ($\bp\propto a_0^{-4}$),
+\begin{gather}
+\hat J_{Lm}=\sqrt{N_aN_b}\;a_0^{L-1}\;\bar J_L,\qquad
+\bar J_L=\frac{\pi}{L}\,\mathcal I^{(L+1)}_{ab}\,\mathcal A^{\rm curr}_L,\nonumber\\
+\mathcal A^{\rm curr}_L=\int_0^\pi\left[m\left(\Theta_a\Theta_b'-\Theta_b\Theta_a'\right)\Theta_L-(m_a+m_b)\Theta_a\Theta_b\Theta_L'\right]\dd\theta .
+\label{eq:Jbar}
+\end{gather}
+Compared with $\hat q_{Lm}$, the current moment is smaller by $1/(\mu a_0)=\alpha$, the typical velocity in the cloud.
+
+\paragraph{Selection rules.} Under parity the mass integrand transforms as $(-1)^{l_a+l_b+L}$. In the current integrand $\bp$ carries an extra gradient, so it transforms as $(-1)^{l_a+l_b+L+1}$. The angular integrals also require $|l_a-l_b|\le L\le l_a+l_b$ and $|m_a-m_b|\le L$. Each allowed $L\ge2$ therefore contributes either a mass moment (if $l_a+l_b+L$ is even) or a current moment (if it is odd), never both (\code{gw_transition_channels}).
+
+\subsection{Rate in solver units}
+
+Each transition emits one graviton of energy $\Delta\omega$, so $\dd N_a/\dd t=-\dd N_b/\dd t=-P_{a\to b}/\Delta\omega$. With $u=N/(GM^2)$, $\tau=\mu t$, $G\cdot GM^2=\alpha^2/\mu^2$, $a_0=1/(\mu\alpha)$ and $\Delta\omega=\delta\mu$, Eqs.~\eqref{eq:Ptr}--\eqref{eq:Jbar} give
+\begin{equation}
+\boxed{\begin{aligned}
+\Gamma^{\rm tr}_{a\to b}&=\sum_{L\ \rm mass}K^{\rm mass}_L\,\alpha^{2-2L}\,\delta^{2L+1}+\sum_{L\ \rm current}K^{\rm curr}_L\,\alpha^{4-2L}\,\delta^{2L+1},\\
+K^{\rm mass}_L&=2c_L\bar Q_L^2,\qquad K^{\rm curr}_L=2s_L\bar J_L^2
+\end{aligned}}
+\label{eq:Gtr}
+\end{equation}
+All powers of $\mu$ cancel. The coefficients $K_L$ depend only on the pair of levels. They are tabulated once (\code{gw_build_nr_table}). $\delta$ is recomputed from Eq.~\eqref{eq:spectrum} at every step of the evolution, with the current $\alpha(t)$ and spin $a(t)$ (\code{gw_rhs!}). The emission runs from the higher to the lower level, so the direction can flip if two levels cross.
+
+\paragraph{Power counting.} For $n_a\neq n_b$, $\delta=\tfrac{\alpha^2}2(n_b^{-2}-n_a^{-2})+O(\alpha^4)$. A mass $2^L$-pole then scales as $\alpha^{2L+4}$ and a current $2^L$-pole as $\alpha^{2L+6}$. If $l_a+l_b$ is even, the mass quadrupole is allowed and the rate starts at $\alpha^8$. If $l_a+l_b$ is odd, parity forbids the mass quadrupole. The leading terms are then the mass octupole and the current quadrupole, which both scale as $\alpha^{10}$ and must be kept together. Pairs within the same $n$ have $\delta=O(\alpha^4)$ or $O(\alpha^5)$, and their rates are suppressed by $(\delta/\alpha^2)^{2L+1}$.
+
+\subsection{Worked example: \texorpdfstring{$4f\to3d$ and $3d\to2p$}{4f to 3d and 3d to 2p}}
+
+For $|433\rangle\to|322\rangle$ we have $m=1$ and $\delta=7\alpha^2/288+O(\alpha^4)$. The allowed multipoles are $L=2,\dots,5$: current moments at $L=2,4$ and mass moments at $L=3,5$. The leading pair is the current quadrupole and the mass octupole. The radial integrals are rational multiples of $\sqrt{42}$:
+\begin{equation}
+\mathcal I^{(5)}=\frac{825564856320\sqrt{42}}{7^{11}}=2705.811,\qquad
+\mathcal I^{(3)}=\frac{63700992\sqrt{42}}{7^{9}}=10.23030 .
+\end{equation}
+The angular factors are
+\begin{equation}
+\mathcal A^{\rm mass}_3=-\frac{\sqrt2}{6\sqrt\pi}=-0.1329808,\qquad
+\mathcal A^{\rm curr}_2=\frac{3\sqrt{35}}{7\pi^{3/2}}=0.4553365 .
+\end{equation}
+Hence $\bar Q_3=-359.8208$ and $\bar J_2=7.317130$. Equation~\eqref{eq:Gtr} gives
+\begin{equation}
+K^{\rm mass}_3=983.81272,\qquad K^{\rm curr}_2=63.792208,
+\end{equation}
+which are rational numbers. The transition rate is
+\begin{equation}
+\Gamma^{\rm tr}_{433\to322}=\alpha^{10}\left[5.4112\times10^{-7}\,(J_2)+4.9300\times10^{-9}\,(I_3)\right]=5.4605\times10^{-7}\,\alpha^{10}.
+\end{equation}
+The ratio of the two terms is exactly $2744/25=109.76$. Parametrically the two terms are of the same order. Numerically, in the Cartesian form of Eq.~\eqref{eq:thorne}, the flux coefficients alone favour the current quadrupole by $(16/45)/(1/189)=336/5=67.2$, and the moments supply the remaining factor $|\bar S_{ij}|^2/[(\delta/\alpha^2)^2|\bar I_{ijk}|^2]=49/30$, where $\bar S_{ij}$ and $\bar I_{ijk}$ are the Cartesian moments of $\hat\bp$ and $\hat\rho$ in Bohr units, per $\sqrt{N_aN_b}$ (and per $\mu$ for $\bar I$). The $L=4$ current and $L=5$ mass terms add $8.3\times10^{-14}\alpha^{14}$ and $5.4\times10^{-16}\alpha^{14}$.
+
+For $|322\rangle\to|211\rangle$ ($\delta=5\alpha^2/72$) the same steps give $K^{\rm curr}_2=3.2061759$ and $K^{\rm mass}_3=7.5980873$, so
+\begin{equation}
+\Gamma^{\rm tr}_{322\to211}=\alpha^{10}\left[5.178\times10^{-6}\,(J_2)+5.918\times10^{-8}\,(I_3)\right]=5.237\times10^{-6}\,\alpha^{10}.
+\end{equation}
+The ratio of the two terms is exactly $175/2$. This total agrees with the $5\times10^{-6}\alpha^{10}$ quoted in Ref.~\cite{BGLS21}. The mass octupole alone would be two orders of magnitude too small.
+
+\subsection{Accuracy and omitted effects}
+\begin{itemize}
+\item For pairs with an allowed mass quadrupole, the $L\ge3$ mass terms and the $L\ge2$ current terms are $O(\alpha^2)$ corrections. So are the first post-Newtonian corrections to $I_{ij}$ and the $O(\alpha^2)$ corrections to the wavefunctions and to $\rho$, which we do not include. For these pairs only the leading $\alpha^8$ term is complete; the higher multipoles are kept but do not form a consistent next-to-leading-order result. For pairs without a mass quadrupole, the $\alpha^{10}$ result above is the complete leading order.
+\item The rate depends on $\delta^{2L+1}$, so a relative error $\epsilon$ in the level splitting becomes a relative error of about $(2L+1)\epsilon$ in the rate. This matters for nearly degenerate pairs, and when the cloud's self-gravity shifts the levels; those shifts are not fed back into the evolution.
+\item Absorption of the outgoing waves by the BH (Sec.~\ref{sec:kerr-flux}), and the BH recoil and cloud self-gravity of Sec.~\ref{sec:source}, are neglected.
+\end{itemize}
+
+\section{Annihilations}
+\label{sec:ann}
+
+\subsection{Source and power}
+
+The graviton has $|\bk|=\omega_a+\omega_b\simeq2\mu$, and $ka_0=2/\alpha\gg1$, so the full Fourier transform in Eq.~\eqref{eq:weinberg} is needed. The source is the sum-frequency stress of Eq.~\eqref{eq:That}. Its $\delta_{ij}$ part is removed by $\Lambda$, and $T^{00}$ at this frequency vanishes at leading order (Sec.~\ref{sec:T}). Define the Bohr-unit source
+\begin{equation}
+\bar S_{ij}=\partial_i\bar\psi_a\,\partial_j\bar\psi_b+(i\leftrightarrow j)\ \ (a\neq b),\qquad \bar S_{ij}=\partial_i\bar\psi_a\,\partial_j\bar\psi_a\ \ (a=b),
+\end{equation}
+and its angle-integrated TT power,
+\begin{equation}
+F_{ab}(\kappa)=\int\dd\Omega_{\hat\bk}\;\Lambda_{ij,kl}\,\tilde{\bar S}^*_{ij}\,\tilde{\bar S}_{kl},\qquad
+\tilde{\bar S}_{ij}(\bar\bk)=\int\dd^3\bar x\,\bar S_{ij}\,e^{-i\bar\bk\cdot\bar\bx},\quad|\bar\bk|=\kappa=ka_0=2/\alpha .
+\end{equation}
+Then $\tilde T_{ij}=\frac{\sqrt{N_aN_b}}{2\mu}a_0^{-2}\tilde{\bar S}_{ij}$, and Eq.~\eqref{eq:weinberg} with $\omega=2\mu$ gives $P=(G/\pi)N_aN_b\,\mu^4\alpha^4F_{ab}$ (with $N_a^2$ for $a=b$). Each graviton removes one quantum of $a$ and one of $b$ (two of $a$ if $a=b$), so $\dd N_a/\dd t=-(1+\delta_{ab})P/(2\mu)$. In the convention of Eq.~\eqref{eq:evol},
+\begin{equation}
+\boxed{\;\Gamma^{\rm ann}_{ab}(\alpha)=\frac{\alpha^6}{2\pi}\,F_{ab}(2/\alpha)\;}
+\label{eq:Gann}
+\end{equation}
+(\code{gw_annihilation_rate_flat}).
+
+\subsection{Fourier transform of the source}
+
+$F_{ab}$ is evaluated in closed form up to one final quadrature (\code{gw_annihilation_F}).
+\begin{enumerate}
+\item \emph{Gradient formula.} In the spherical basis $\mathbf e_{\pm1}=\mp(\hat{\mathbf x}\pm i\hat{\mathbf y})/\sqrt2$, $\mathbf e_0=\hat{\mathbf z}$,
+\begin{equation}
+\nabla\left(R_{nl}Y_{lm}\right)=\sum_{q=-1}^1\mathbf e_q\sum_{L=l\pm1}A_{L,q}\,g_L(r)\,Y_{L,m-q},
+\end{equation}
+with $g_{l+1}=R'-lR/r$, $g_{l-1}=R'+(l+1)R/r$, $A_{l+1,q}=-\sqrt{\tfrac{l+1}{2l+1}}\langle l+1,m-q;1,q|l,m\rangle$ and $A_{l-1,q}=\sqrt{\tfrac{l}{2l+1}}\langle l-1,m-q;1,q|l,m\rangle$~\cite{Varshalovich} (\code{gw_grad_terms}, \code{gw_grad_radial}). Each $g_L$ is again a sum $\sum c_kr^ke^{-r/n}$.
+\item \emph{Products and plane waves.} A product of two gradient terms contains
+\begin{gather}
+Y_{L_a\mu_a}Y_{L_b\mu_b}=\sum_JG^{JM}_{L_a\mu_aL_b\mu_b}Y_{JM},\nonumber\\
+G^{JM}_{L_a\mu_aL_b\mu_b}=\sqrt{\frac{(2L_a+1)(2L_b+1)}{4\pi(2J+1)}}\,\langle L_a0L_b0|J0\rangle\langle L_a\mu_aL_b\mu_b|JM\rangle,
+\end{gather}
+with $M=\mu_a+\mu_b$ (\code{gw_gaunt}). With the plane-wave expansion
+\begin{equation}
+e^{-i\bk\cdot\bx}=4\pi\sum_J(-i)^Jj_J(kr)\sum_MY_{JM}(\hat\bk)Y^*_{JM}(\hat\bx),
+\end{equation}
+this gives
+\begin{equation}
+\tilde{\bar S}_{ij}(\bar\bk)=\sum A_{L_a,q_a}A_{L_b,q_b}\,(\mathbf e_{q_a})_i(\mathbf e_{q_b})_j\;G^{JM}_{L_a\mu_aL_b\mu_b}\;4\pi(-i)^J\,Y_{JM}(\hat\bk)\int_0^\infty r^2g_{L_a}g_{L_b}\,j_J(\kappa r)\,\dd r
+\end{equation}
+($+\,i\leftrightarrow j$ for $a\neq b$).
+\item \emph{Radial integrals.} On the real axis $j_J=\mathrm{Re}\,h^{(1)}_J$, with
+\begin{equation}
+h^{(1)}_J(z)=(-i)^{J+1}\frac{e^{iz}}{z}\sum_{s=0}^J\frac{i^s(J+s)!}{s!(J-s)!\,(2z)^s}.
+\end{equation}
+Integrating term by term,
+\begin{equation}
+\kappa^{p+1}\!\int_0^\infty r^pe^{-\beta r}j_J(\kappa r)\,\dd r=\mathrm{Re}\!\left[(-i)^{J+1}\!\!\sum_{s=0,\,s\neq p}^{J}\!\frac{i^s(J+s)!}{s!(J-s)!\,2^s}\,\frac{\Gamma(p-s)}{(b-i)^{p-s}}\right]+\delta_{pJ}\frac{(2J)!}{J!\,2^J}\arctan\frac1b,
+\end{equation}
+with $b=\beta/\kappa$ and $p\ge J$ (\code{gw_Itilde}). The single term $s=p=J$ diverges logarithmically, but its divergent part is imaginary; its finite real part is the arctangent.
+\item \emph{Graviton directions.} $\tilde{\bar S}$ depends on the azimuth of $\hat\bk$ only through the overall phase $e^{iM\varphi_k}$ and a rotation, so the integrand of $F_{ab}$ is independent of $\varphi_k$. The remaining $\theta_k$ integral has a polynomial integrand in $\cos\theta_k$ and is done exactly by Gauss--Legendre quadrature.
+\end{enumerate}
+
+\subsection{Leading term in \texorpdfstring{$\alpha$}{alpha}}
+
+Equation~\eqref{eq:Gann} is exact within the flat-space, non-relativistic source. We store its leading small-$\alpha$ term, $\Gamma^{\rm ann}_{ab}=C_{ab}\alpha^{p_{ab}}$. It is extracted from $F$ at $\alpha=10^{-3}$ and $2\times10^{-3}$, with a Richardson correction for the $O(\alpha)$ term (\code{gw_annihilation_leading}). Generically $p_{ab}=2(l_a+l_b)+10$; for example $3d\times3d$ gives $2.360\times10^{-8}\alpha^{18}$.
+
+Since $\kappa=2/\alpha\to\infty$, the leading term is set by the large-$k$ tail of $\tilde S$. That tail comes from the non-analytic behaviour of the wavefunctions at $r\to0$, i.e.\ from $r\lesssim1/k\simeq GM/(2\alpha)$. This is the region where the BH potential and relativistic corrections are largest. The flat-space source is the leading order only when its leading term does not cancel.
+
+\subsection{\texorpdfstring{$l=1$}{l=1} pairs and the black-hole potential}
+
+For every pair of $l=1$ levels the flat-space $O(\alpha^{14})$ term cancels and the flat-space result starts at $\alpha^{16}$. Including the BH potential restores $\alpha^{14}$. For $2p\times2p$ we use $\dd E/\dd t=\frac{484+9\pi^2}{23040}(M_c/M)^2\alpha^{14}$ from Ref.~\cite{Brito17}. The flat approximation of Ref.~\cite{YK14} gives $\frac1{640}$ in place of $\frac{484+9\pi^2}{23040}$ (Sec.~\ref{sec:gauge}). Converting with $M_c=\mu N_{211}$ and $\dd N/\dd t=-2P/(2\mu)$, this is $C_{211,211}=(484+9\pi^2)/46080$ (\code{gw_literature_annihilation}).
+
+The flat-space coefficients of other $np\times n'p$ pairs obey exactly $C_{ab}=(1+3[a\neq b])\,w_{n_a}w_{n_b}\,C_{211,211}$, with $w_n=|R_{n1}/r|^2_{r\to0}/|R_{21}/r|^2_{r\to0}=\frac{32}{3}\frac{n^2-1}{n^5}$. We assume this scaling also holds for the $\alpha^{14}$ term and apply it to all $np\times n'p$ pairs. This is an assumption, and the override can be switched off. The Kerr calculation of Sec.~\ref{sec:kerr} would replace both the flat-space rates and this override (\code{gw_rates_relativistic}, not implemented).
+
+\subsection{Gauge dependence of the flat-space coefficients}
+\label{sec:gauge}
+
+Yoshino and Kodama~\cite{YK14} computed the annihilation of $l=m$ levels in a flat-space approximation, solving the Teukolsky equation on flat spacetime with the hydrogenic source. Their closed form (their Eq.~(58)) is
+\begin{equation}
+\frac{\dd E}{\dd t}=C^{\rm YK}_{nl}\left(\frac{M_c}{M}\right)^2\alpha^{4l+10},\qquad
+C^{\rm YK}_{nl}=\frac{16^{l+1}\,l\,(2l-1)\,\Gamma(2l-1)^2\,\Gamma(n+l+1)^2}{n^{4l+8}\,(l+1)\,\Gamma(l+1)^4\,\Gamma(4l+3)\,\Gamma(n-l)^2}.
+\label{eq:CYK}
+\end{equation}
+In the convention of Eq.~\eqref{eq:evol}, $P=2\Gamma^{\rm ann}_{aa}(M_c/M)^2$, so Eq.~\eqref{eq:CYK} corresponds to $C_{aa}=C^{\rm YK}_{nl}/2$. The powers of $\alpha$ agree with ours. For the eleven levels with $2\le l=m\le5$ and $n\le l+3$ that we compared, the coefficients differ by
+\begin{equation}
+\frac{C^{\rm YK}_{nl}}{2\,C_{aa}}=\frac{4}{(l-1)^2}
+\end{equation}
+to better than $10^{-4}$, independent of $n$. This is a factor of 4 for $3d$, 1 for $4f$, $4/9$ for $5g$ and $1/4$ for $6h$. For $l=1$ the ratio diverges, which corresponds to the cancellation of our $\alpha^{14}$ term. Eq.~\eqref{eq:CYK} gives $C^{\rm YK}_{21}=1/640$ there.
+
+The origin of the factor is explained in Sec.~3.4 of Ref.~\cite{YK14}. Without the BH's gravity the scalar's $T_{\mu\nu}$ is not conserved, so the flux depends on the gauge of the homogeneous graviton solution that $T_{\mu\nu}$ is projected on. Normally this gauge dependence would be a small correction. Here the leading terms in $\alpha$ cancel, so it is of the same order as the result. Repeating their calculation in the radiation gauge, Ref.~\cite{YK14} finds Eq.~\eqref{eq:CYK} multiplied by $(l-1)^2/4$. That is exactly our result. Weinberg's formula with the TT part of the scalar's $T_{ij}$, used here and in Refs.~\cite{AD11,ABH15,BGLS21}, therefore coincides with one particular gauge. Within the flat approximation neither choice is preferred. This is the annihilation analogue of the matter-versus-total-stress problem of Sec.~\ref{sec:source}. The difference is that for annihilations the Newtonian interaction stress cannot simply be added, because $kR\gg1$.
+
+The Kerr numerics of Ref.~\cite{YK14} (their Figs.~5, 7 and 9, $a=0$) indicate the size of the effect. At the smallest $\alpha$ shown:
+\begin{itemize}
+\item for $2p$ ($\alpha=0.1$), the full rate is about $6$ times $C^{\rm YK}_{21}$, below the $\alpha^{14}$ coefficient of Ref.~\cite{Brito17};
+\item for $3d$ ($\alpha=0.3$), it is about $3$ times Eq.~\eqref{eq:CYK}, i.e.\ about $10$ times our value;
+\item for $4f$, it approaches the flat-space value.
+\end{itemize}
+These factors are read off the figures and include relativistic corrections at those $\alpha$, so they constrain the leading coefficients only loosely. For $l\ge2$, except $l=3$, the stored $C_{ab}$ are uncertain by factors of a few to about 10. Only a calculation that keeps the BH's gravity consistently fixes them (Sec.~\ref{sec:kerr}).
+
+\section{Generalization to the Kerr background}
+\label{sec:kerr}
+
+The calculation above is non-relativistic and sees the BH only through its Newtonian potential. This is adequate for transitions at small $\alpha$. It leaves the annihilation coefficients ambiguous (Sec.~\ref{sec:gauge}), and it misses $O(1)$ corrections at $\alpha\gtrsim0.2$, where most of the superradiant evolution takes place.
+
+The complete calculation at leading order in $M_c/M$ treats the cloud as a test field on the Kerr background. The GWs are then linear perturbations of Kerr sourced by the cloud's $T_{\mu\nu}$. When $\phi$ obeys Eq.~\eqref{eq:kg} on Kerr, $\nabla_\mu T^{\mu\nu}=0$ holds exactly and the flux is gauge invariant. Both the total-stress issue of Sec.~\ref{sec:source} and the ambiguity of Sec.~\ref{sec:gauge} then disappear. The same formalism covers transitions and annihilations; the two differ only in the frequency and azimuthal number of the source.
+
+This section sets out the calculation in the form we intend to implement behind \code{gw_rates_relativistic}. It follows the standard Teukolsky treatment of sources on Kerr~\cite{Teukolsky73,TP74,Hughes00,ST03}. Ref.~\cite{YK14} carried out the annihilation case for $l=m\le3$ by a closely related method. We keep three assumptions:
+\begin{enumerate}
+\item $M_c\ll M$, so the cloud's self-gravity, the response of the background and the GW back-reaction are dropped at $O(M_c/M)$;
+\item each level is quasi-stationary, $|{\rm Im}\,\omega_j|\ll{\rm Re}\,\omega_j$, so the source is evaluated with ${\rm Re}\,\omega_j$;
+\item the levels superpose linearly.
+\end{enumerate}
+In this section $G=c=\hbar=1$, $a$ is the BH spin parameter $J/M$, and level labels appear only as subscripts.
+
+\subsection{Scalar modes on Kerr}
+
+In Boyer--Lindquist coordinates $(t,r,\theta,\varphi)$ let
+\begin{gather}
+\Delta=r^2-2Mr+a^2,\qquad\Sigma=r^2+a^2\cos^2\theta,\nonumber\\
+r_\pm=M\pm\sqrt{M^2-a^2},\qquad\Omega_H=\frac{a}{2Mr_+},\qquad\frac{\dd r_*}{\dd r}=\frac{r^2+a^2}{\Delta}.
+\end{gather}
+Equation~\eqref{eq:kg} separates as $\psi_j=R_j(r)S_j(\theta)e^{im_j\varphi-i\omega_jt}$, with
+\begin{gather}
+\frac{1}{\sin\theta}\left(\sin\theta\,S_j'\right)'+\left[c_j^2\cos^2\theta-\frac{m_j^2}{\sin^2\theta}+\Lambda_j\right]S_j=0,\qquad c_j^2=a^2(\omega_j^2-\mu^2),\nonumber\\
+\left(\Delta R_j'\right)'+\left[\frac{K_j^2}{\Delta}-\mu^2r^2-a^2\omega_j^2+2am_j\omega_j-\Lambda_j\right]R_j=0,\qquad K_j=(r^2+a^2)\omega_j-am_j .
+\label{eq:kerr_scalar}
+\end{gather}
+$S_j$ is a spheroidal harmonic, and $\Lambda_j\to l(l+1)$ as $c_j\to0$. The quasi-bound states are ingoing at the horizon, $R_j\propto e^{-ik_jr_*}$ with $k_j=\omega_j-m_j\Omega_H$, and decay as $e^{-q_jr}$ with $q_j=\sqrt{\mu^2-\omega_j^2}$ at infinity. The complex eigenfrequencies follow from Leaver's continued fraction~\cite{Leaver85,Dolan07}, which is the solver already used for the superradiance rates. In the limit $\alpha\to0$, $R_j\to R_{nl}$ and ${\rm Re}\,\omega_j$ reduces to Eq.~\eqref{eq:spectrum}.
+
+\paragraph{Normalization.} Write $\phi=\sum_j\sqrt{N_j/(2\omega_j)}\,(\psi_j+\psi_j^*)$, with $\psi_j$ now including $e^{-i\omega_jt}$. For $N_j$ to be the number of quanta, $\psi_j/\sqrt{2\omega_j}$ must have unit Klein--Gordon norm:
+\begin{gather}
+\int\dd^3x\sqrt{-g}\left[-g^{tt}+\frac{m_j}{\omega_j}g^{t\varphi}\right]|\psi_j|^2=1,\label{eq:kgnorm}\\
+\sqrt{-g}=\Sigma\sin\theta,\qquad -g^{tt}=\frac{(r^2+a^2)^2-\Delta a^2\sin^2\theta}{\Sigma\Delta},\qquad g^{t\varphi}=-\frac{2Mar}{\Sigma\Delta},\nonumber
+\end{gather}
+with the integral over a constant-time slice. In the non-relativistic limit this reduces to $\int|\psi_j|^2\dd^3x=1$, Eq.~\eqref{eq:modes}. The cloud mass is the Killing energy $M_c=\sum_j\omega_jN_j$.
+
+On a Boyer--Lindquist slice the integrand of Eq.~\eqref{eq:kgnorm} behaves near the horizon as $(r_+^2+a^2)^2(1-m_j\Omega_H/\omega_j)|\psi_j|^2\sin\theta/\Delta$. For real $\omega_j$ this diverges logarithmically. The norm should therefore be evaluated on a horizon-penetrating slice, for instance in ingoing Kerr coordinates, where $\psi_j$ is regular. In practice the near-horizon region contributes at a high power of $\alpha$.
+
+\subsection{Gravitational perturbations: the Teukolsky equation}
+
+We use the Kinnersley tetrad~\cite{Kinnersley69},
+\begin{equation}
+l^\mu=\left(\frac{r^2+a^2}{\Delta},1,0,\frac a\Delta\right),\quad
+n^\mu=\frac{(r^2+a^2,-\Delta,0,a)}{2\Sigma},\quad
+m^\mu=\frac{(ia\sin\theta,0,1,i/\sin\theta)}{\sqrt2\,(r+ia\cos\theta)},
+\end{equation}
+and the Weyl scalar $\psi_4=-C_{\alpha\beta\gamma\delta}n^\alpha\bar m^\beta n^\gamma\bar m^\delta$. For outgoing waves at large $r$, $\psi_4\to\frac12(\ddot h_+-i\ddot h_\times)$. The field $\Psi=(r-ia\cos\theta)^4\psi_4$ obeys the spin-weight $s=-2$ Teukolsky equation. Its source is built from the tetrad components $T_{nn}$, $T_{n\bar m}$ and $T_{\bar m\bar m}$ of the matter stress--energy~\cite{Teukolsky73}.
+
+For a source $\propto e^{-i\omega t+i\tilde m\varphi}$,
+\begin{equation}
+\Psi=\sum_{\tilde\ell}R_{\tilde\ell}(r)\,{}_{-2}S_{\tilde\ell\tilde m}^{a\omega}(\theta)\,e^{i\tilde m\varphi-i\omega t},
+\end{equation}
+where ${}_{-2}S^{a\omega}_{\tilde\ell\tilde m}$ is the spin-weighted spheroidal harmonic, normalized so that $\int|{}_{-2}S\,e^{i\tilde m\varphi}|^2\dd\Omega=1$. In the conventions of Ref.~\cite{Hughes00} the radial function obeys
+\begin{gather}
+\Delta^2\frac{\dd}{\dd r}\left(\frac1\Delta\frac{\dd R_{\tilde\ell}}{\dd r}\right)-V(r)R_{\tilde\ell}=\mathcal T_{\tilde\ell}(r),\label{eq:teuk}\\
+V=-\frac{K^2+4i(r-M)K}{\Delta}+8i\omega r+\lambda_{\tilde\ell},\qquad K=(r^2+a^2)\omega-a\tilde m .\nonumber
+\end{gather}
+Here $\lambda_{\tilde\ell}=A_{\tilde\ell}+a^2\omega^2-2a\tilde m\omega$, and the angular eigenvalue $A_{\tilde\ell}\to(\tilde\ell-1)(\tilde\ell+2)$ as $a\omega\to0$.
+
+Let $R^H$ be the homogeneous solution that is purely ingoing at the horizon and $R^\infty$ the one that is purely outgoing at infinity:
+\begin{gather}
+R^H\to B^{\rm trans}\Delta^2e^{-ikr_*}\ (r\to r_+),\qquad R^H\to B^{\rm ref}r^3e^{i\omega r_*}+B^{\rm inc}r^{-1}e^{-i\omega r_*}\ (r\to\infty),\nonumber\\
+R^\infty\to C^{\rm trans}r^3e^{i\omega r_*}\ (r\to\infty),\qquad R^\infty\to C^{\rm up}e^{ikr_*}+C^{\rm ref}\Delta^2e^{-ikr_*}\ (r\to r_+),
+\end{gather}
+with $k=\omega-\tilde m\Omega_H$. Their Wronskian $\Delta^{-1}(R^HR^{\infty\prime}-R^\infty R^{H\prime})=2i\omega C^{\rm trans}B^{\rm inc}$ is constant. The solution of Eq.~\eqref{eq:teuk} with these boundary conditions is
+\begin{equation}
+R_{\tilde\ell}\to Z^H_{\tilde\ell}\,r^3e^{i\omega r_*}\ (r\to\infty),\qquad
+R_{\tilde\ell}\to Z^\infty_{\tilde\ell}\,\Delta^2e^{-ikr_*}\ (r\to r_+),
+\end{equation}
+\begin{equation}
+Z^H_{\tilde\ell}=\frac{1}{2i\omega B^{\rm inc}}\int_{r_+}^\infty\frac{R^H\,\mathcal T_{\tilde\ell}}{\Delta^2}\,\dd r,\qquad
+Z^\infty_{\tilde\ell}=\frac{B^{\rm trans}}{2i\omega C^{\rm trans}B^{\rm inc}}\int_{r_+}^\infty\frac{R^\infty\,\mathcal T_{\tilde\ell}}{\Delta^2}\,\dd r .
+\label{eq:Zamps}
+\end{equation}
+
+\subsection{Energy fluxes}
+\label{sec:kerr-flux}
+
+The real source is $\hat T_{\mu\nu}e^{-i\omega t}+\hat T^*_{\mu\nu}e^{i\omega t}$. The $e^{+i\omega t}$ part produces the $(-\tilde m,-\omega)$ modes of $\psi_4$, which carry the opposite helicity of the same wave. With $\dd P/\dd\Omega=\frac{r^2}{16\pi}\langle\dot h_+^2+\dot h_\times^2\rangle$, the flux to infinity and the flux into the horizon are
+\begin{equation}
+P_\infty=\sum_{\tilde\ell}\frac{|Z^H_{\tilde\ell\tilde m\omega}|^2+|Z^H_{\tilde\ell,-\tilde m,-\omega}|^2}{4\pi\omega^2},\qquad
+P_H=\sum_{\tilde\ell}\alpha_{\tilde\ell\tilde m\omega}\frac{|Z^\infty_{\tilde\ell\tilde m\omega}|^2+|Z^\infty_{\tilde\ell,-\tilde m,-\omega}|^2}{4\pi\omega^2}.
+\label{eq:kerrflux}
+\end{equation}
+Each level has definite parity under $\theta\to\pi-\theta$, as does the Kerr background, so the two terms are equal and $P_\infty=\sum_{\tilde\ell}|Z^H_{\tilde\ell}|^2/(2\pi\omega^2)$. The horizon factor $\alpha_{\tilde\ell\tilde m\omega}$ is given in closed form in Refs.~\cite{TP74,Hughes00}. It is proportional to $k(k^2+4\epsilon^2)(k^2+16\epsilon^2)$ with $\epsilon=\sqrt{M^2-a^2}/(4Mr_+)$, so it changes sign at $k=0$.
+
+\paragraph{Sign of the horizon flux.} For superradiant gravitons, $k<0$, $P_H$ is negative: the BH loses energy to the radiation. For annihilations $\omega=\omega_a+\omega_b$ and $\tilde m=m_a+m_b$, so $k=k_a+k_b$. Whenever both levels are superradiant, $P_H<0$ and $P_\infty$ is an upper bound on the cloud's energy loss, as noted in Ref.~\cite{YK14}, which computed $P_\infty$ only. For transitions $k=k_a-k_b$, which can have either sign. We expect $|P_H|/P_\infty$ to be suppressed by powers of $\alpha$. It is negligible for transitions, where $M\omega\lesssim\alpha^3$, but should be computed for annihilations at $\alpha\sim0.5$.
+
+\paragraph{Energy and angular-momentum budget.} Each elementary process removes energy $\omega$ from the cloud. Processes therefore occur at the rate $(P_\infty+P_H)/\omega$, the BH mass changes by $\dd M/\dd t\supset P_H$, and its angular momentum changes by $\dd J/\dd t\supset(\tilde m/\omega)P_H$. Only $P_\infty$ reaches the detector and enters the line observables of Sec.~\ref{sec:obs}.
+
+\subsection{The source}
+
+Because $n$ and $\bar m$ are null and $n\cdot\bar m=0$, the metric drops out of the projections:
+\begin{equation}
+T_{nn}=(n^\mu\partial_\mu\phi)^2,\qquad T_{n\bar m}=(n^\mu\partial_\mu\phi)(\bar m^\mu\partial_\mu\phi),\qquad T_{\bar m\bar m}=(\bar m^\mu\partial_\mu\phi)^2 .
+\label{eq:Tproj}
+\end{equation}
+The trace part of $T_{\mu\nu}$, including the mass term and any self-interaction potential $V(\phi)$, does not enter. This is the Kerr counterpart of the statement that only $\partial_i\phi\,\partial_j\phi$ survives the TT projection. Self-interactions affect the GW source only through the mode functions.
+
+Insert $\phi=\sum_j\sqrt{N_j/(2\omega_j)}(\psi_j+\psi_j^*)$ into Eq.~\eqref{eq:Tproj} and keep the bilinears with the time dependence of the process:
+\begin{itemize}
+\item annihilations: $e^{-i(\omega_a+\omega_b)t}$ with $\tilde m=m_a+m_b$, e.g.\ $T_{nn}=c_{ab}\,(n\cdot\partial\psi_a)(n\cdot\partial\psi_b)$, where $c_{ab}=\sqrt{N_aN_b/(\omega_a\omega_b)}$ for $a\neq b$ and $N_a/(2\omega_a)$ for $a=b$;
+\item transitions $a\to b$: $e^{-i(\omega_a-\omega_b)t}$ with $\tilde m=m_a-m_b$, e.g.\ $T_{nn}=\sqrt{N_aN_b/(\omega_a\omega_b)}\,(n\cdot\partial\psi_a)(n\cdot\partial\psi_b)^*$.
+\end{itemize}
+The occupations factor out, so everything is computed with $N_a=N_b=1$. The source term $\mathcal T_{\tilde\ell}$ is formed from these components with Teukolsky's second-order differential operators~\cite{Teukolsky73} (explicit forms in Refs.~\cite{ST03,Hughes00}) and projected onto ${}_{-2}S_{\tilde\ell\tilde m}e^{i\tilde m\varphi}$.
+
+For an extended source it is better to integrate by parts in $r$ and $\theta$, so that the derivatives act on $R^H$ and ${}_{-2}S$ instead of the numerically differentiated source. $Z^H$ then becomes a double integral over $(r,\theta)$ of $T_{nn}$, $T_{n\bar m}$ and $T_{\bar m\bar m}$ against kernels built from $R^H$, ${}_{-2}S$ and their first two derivatives. The boundary terms vanish for the reasons given below.
+
+Ref.~\cite{YK14} uses an equivalent route. It evaluates the amplitude as the inner product $\langle u,T\rangle=\int\hat u^{*\mu\nu}T_{\mu\nu}\sqrt{-g}\,\dd^4x$ of the source with the reconstructed metric $\hat u_{\mu\nu}$ of an outgoing homogeneous solution. $\langle u,T\rangle$ is gauge invariant because $\nabla_\mu T^{\mu\nu}=0$. This avoids the source operators at the cost of metric reconstruction.
+
+\paragraph{Behaviour at the boundaries.} At the horizon, regularity of $\psi_j$ in ingoing coordinates gives
+\begin{equation}
+n^\mu\partial_\mu\psi_j=\frac{i\,m_ja}{2\Sigma}\left[1-\frac{r^2+a^2}{r_+^2+a^2}\right]\psi_j+O(\Delta)=O(\Delta),
+\end{equation}
+so $T_{nn}=O(\Delta^2)$, $T_{n\bar m}=O(\Delta)$ and $T_{\bar m\bar m}=O(1)$ as $r\to r_+$. This is what keeps the radial integrals of Eq.~\eqref{eq:Zamps} finite there. The integrand at $r_+$ should nevertheless be checked explicitly. At large $r$ the source falls as $e^{-(q_a+q_b)r}$, while $R^H$ grows only as $r^3$, so the integrals converge.
+
+\subsection{Rates in solver units}
+
+Let $\hat P=P_\infty+P_H$, evaluated with $N_a=N_b=1$. For annihilations $\dd N_a/\dd t=-(1+\delta_{ab})\,\hat P N_aN_b/\omega$. For transitions $\dd N_a/\dd t=-\dd N_b/\dd t=-\hat PN_aN_b/\omega$. In both cases, in the convention of Eq.~\eqref{eq:evol} and with $G$ restored,
+\begin{equation}
+\boxed{\;\Gamma(\alpha,a)=\frac{GM^2}{\mu\,\omega}\,\hat P\;}
+\label{eq:Gkerr}
+\end{equation}
+This reproduces Eqs.~\eqref{eq:Gtr} and~\eqref{eq:Gann} in the flat, non-relativistic limit. For example, for annihilations $\hat P=(G/\pi)\mu^4\alpha^4F_{ab}$ and $\omega=2\mu$ give $\alpha^6F_{ab}/(2\pi)$.
+
+The rates now depend on $(\alpha,a)$ through the mode functions, the frequencies and the propagation of the graviton. We propose to store the ratio
+\begin{equation}
+\mathcal R_{ab}(\alpha,a)=\Gamma^{\rm Kerr}_{ab}/\Gamma^{\rm NR}_{ab},
+\end{equation}
+where $\Gamma^{\rm NR}$ is Eq.~\eqref{eq:Gtr} or $C_{ab}\alpha^{p_{ab}}$ evaluated with the same $\omega$. The ratio is smooth. It tends to 1 for transitions as $\alpha\to0$, and for annihilations its limit corrects the leading coefficient. It can be tabulated on the $(\alpha,a)$ grid of the superradiance rates and interpolated in \code{gw_rhs!}, as the scattering rates are. $P_H$ also adds the terms above to the BH mass and spin equations.
+
+\subsection{Numerical method and difficulties}
+
+\begin{itemize}
+\item \emph{Teukolsky solutions.} Transitions have $M\omega=\alpha\delta\lesssim\alpha^3$, or $\lesssim\alpha^5$ for pairs with the same $n$. The wave zone $r\gtrsim1/\omega$ then lies far outside the cloud, so direct integration of $R^H$ to infinity is impractical. The Mano--Suzuki--Takasugi series~\cite{MST96} converges fast at low frequency and gives $B^{\rm inc}$, $B^{\rm trans}$ and $C^{\rm trans}$ directly. Annihilations have $M\omega\simeq2\alpha$, where the Sasaki--Nakamura transformation~\cite{SN82} or MST both work. Both methods, and the spin-weighted spheroidal harmonics, are available in the Black Hole Perturbation Toolkit~\cite{BHPT}.
+\item \emph{Angular structure.} The spheroidal harmonics mix $l$. Kerr is reflection symmetric, but with $a\neq0$ each $\tilde\ell$ receives contributions of both parities. The flat-space rule of Sec.~\ref{sec:tr} (a mass or a current moment, never both) therefore holds only at $a=0$ and leading order. Ref.~\cite{YK14} finds, for example, $(\tilde\ell,\tilde m)=(3,2)$ radiation from $2p$ that dominates $(2,2)$ at large $\alpha$ and high spin. Sum over $\tilde\ell\ge\max(2,|\tilde m|)$ until converged.
+\item \emph{Cancellations in annihilations.} For annihilations the integrand oscillates as $e^{i\omega r_*}$ with $\omega\simeq2\mu$ across a cloud of size $n^2M/\alpha^2$, i.e.\ over $\sim n^2/\alpha$ periods. The result, $\propto\alpha^{4l+10}$, emerges from a strong cancellation. Direct quadrature loses accuracy quickly as $\alpha$ decreases and needs high-precision arithmetic. Ref.~\cite{YK14} reaches $\alpha\simeq0.1$ for $2p$ and $\alpha\simeq0.3$--$0.4$ for $3d$ and $4f$. Below that, the rate should be matched to the leading power law, with the coefficient fixed either by the Kerr data or by a small-$\alpha$ expansion that keeps the Newtonian potential in the source region.
+\item \emph{Frequencies.} Build the graviton frequency $\omega$ from ${\rm Re}\,\omega_j$ of the Kerr eigenvalue problem, not from Eq.~\eqref{eq:spectrum}. Transitions scale as $\omega^{2\tilde\ell+1}$, and for pairs with the same $n$ the relativistic corrections to the splitting are $O(1)$ at $\alpha\gtrsim0.3$.
+\item \emph{Normalization.} Use Eq.~\eqref{eq:kgnorm} on a horizon-penetrating slice.
+\end{itemize}
+
+\subsection{Checks}
+
+\begin{enumerate}
+\item \emph{Transitions as $\alpha\to0$.} These must reproduce Eq.~\eqref{eq:Gtr} with both mass and current moments: $5.237\times10^{-6}\alpha^{10}$ for $322\to211$, $5.4605\times10^{-7}\alpha^{10}$ for $433\to322$ and $2.890\times10^{-4}\alpha^8$ for $433\to211$. They must not reproduce the kinetic-stress values of Sec.~\ref{sec:source}, which for $\Delta l=0$ are larger by 4. Because the Kerr source is conserved, this is a sharp test of the implementation.
+\item \emph{Annihilations as $\alpha\to0$.} $2p\times2p$ should approach the $\alpha^{14}$ coefficient of Ref.~\cite{Brito17}, and $4f\times4f$ the flat value. $3d\times3d$ decides between $2.36\times10^{-8}$, $9.44\times10^{-8}$ (Eq.~\eqref{eq:CYK}) or neither.
+\item \emph{Literature at finite $\alpha$.} Compare with the Kerr numerics of Ref.~\cite{YK14} ($l=m\le3$; $a/M=0$, $0.5$, $0.9$, $0.99$), with Ref.~\cite{Brito17}, and with the fits of SuperRad~\cite{SME23} for the levels they cover.
+\item \emph{Internal consistency.} The fluxes from the $s=-2$ and $s=+2$ Teukolsky equations must agree. $P_\infty$ must be stable under the truncation in $\tilde\ell$ and in the spheroidal expansions.
+\end{enumerate}
+
+\subsection{Implementation status and plan (8 November 2026)}
+\label{sec:kerr-status}
+
+The calculation of this section is implemented, in Julia only, in three files:
+\begin{itemize}
+\item \code{Numerics/teukolsky.jl}: the $s=-2$ radial equation in the conventions of Ref.~\cite{ST03} (\code{teuk_radial}: $R^{\rm in}$, $R^{\rm up}$, $W=2i\omega B^{\rm inc}$; both boundary series are generated from the ODE with a truncated Laurent-series algebra; any floating type), the source kernels with all derivatives moved onto $R^{\rm in}$ and $S$ (\code{teuk_source_kernels}, Eqs.~36--44 of Ref.~\cite{ST03}), the quadrature of an extended source (\code{teuk_Z_grid}), and the direct forms of the source (\code{teuk_source_B2}, \code{teuk_source_T4}) used for checks.
+\item \code{Numerics/kerr_modes.jl}: the quasi-bound modes from Leaver's series (\code{kerr_mode}), the spheroidal harmonic with exact $\theta$-derivatives, the Klein--Gordon norm on a $v={\rm const}$ slice, Eq.~\eqref{eq:kgnorm} (\code{kerr_mode_norm}), and the Boyer--Lindquist form of the mode (\code{kerr_radial_BL}).
+\item \code{Numerics/gw_kerr.jl}: the tetrad components $T_{nn}$, $T_{n\bar m}$, $T_{\bar m\bar m}$ of a level pair, Eq.~\eqref{eq:Tproj}, the amplitude at infinity summed over $\tilde\ell$ and the rate $\Gamma(\alpha,a)=P/(\alpha\tilde\omega)$ in solver units, Eq.~\eqref{eq:Gkerr} (\code{gw_kerr_rate}).
+\end{itemize}
+Tests: \code{test/test_teukolsky.jl}, \code{test_teukolsky_source.jl}, \code{test_kerr_modes.jl}, \code{test_gw_kerr.jl} (about four minutes on one core).
+
+\paragraph{Checks passed.}
+\begin{itemize}
+\item The GW flux of a particle on circular equatorial orbits agrees with the post-Newtonian luminosity of Ref.~\cite{ST03} (Eqs.~178 and 181 there) to $4\times10^{-9}$ at $r_0=1000M$ for $a=0$, $0.9$ and $-0.7$ and to $5\times10^{-9}$ at $r_0=100M$ through 5.5PN; the residual scales as $x^{12}$ ($x^9$ for $a\neq0$), the truncation orders of the two series. The operator form of the source equals Teukolsky's $T_4$ built from the Kinnersley spin coefficients to $10^{-16}$, and the kernel form of $Z^\infty$ equals the direct form to $4\times10^{-9}$ for a smooth source off the equator at $a=0.9$. This fixes the $\rho$ versus $\bar\rho$ placements, which the equatorial orbit cannot see.
+\item The eigenfrequencies of \code{kerr_mode} reproduce the superradiance tables of the evolution code (\code{Imag_ergC_*.npz}) to $10^{-6}$; the radial and angular residuals are $\sim10^{-14}$.
+\item Transitions at $a=0$ reach Eq.~\eqref{eq:Gtr}, with both mass and current moments, as $1-c\alpha^2$ with $c$ constant to three digits ($c=3.79$, $6.92$, $4.34$, $1.45$ for $322\to211$, $433\to211$, $311\to211$, $433\to322$). The $\tilde\ell$ structure of $433\to322$ gives current quadrupole over mass octupole $=25/2744$, Sec.~\ref{sec:tr}.
+\item $2p\times2p$ annihilation at $a=0$ follows $\alpha^{14}$ with $0.36$--$0.42$ of the coefficient of Ref.~\cite{Brito17} at $\alpha=0.1$--$0.05$, tending to about $0.44$ as $\alpha\to0$; Ref.~\cite{YK14} (their Fig.~5, $a=0$) shows the same constant offset, about $0.38$. The semi-analytic coefficient therefore overestimates the exact leading-order rate by about $2.3$, and item~2 of Sec.~\ref{sec:kerr}'s checks should read ``$0.43$ times'' rather than ``approach''. The rate is $\sim10^{-9}$ of the bulk partial sums of its integral; it is converged in the panel density, in the outer cutoff ($e^{-45}$ or beyond; $R^{\rm in}\propto r^3$ makes the tail matter) and is identical in Float64 and BigFloat. At $a=0.9$, $\alpha=0.4$ the $(\tilde\ell,\tilde m)=(3,2)$ mode carries $91\%$ of the power, as found in Ref.~\cite{YK14}.
+\end{itemize}
+
+\paragraph{A spin--orbit term absent from the non-relativistic rates.}
+The $|\Delta m|=1$ (current-type) transitions carry a correction linear in the spin,
+\begin{equation}
+\frac{\Gamma^{\rm Kerr}}{\Gamma^{\rm NR}}=1-\frac{3a\alpha}{l_b}-c\alpha^2+\dots,
+\end{equation}
+with $3a\alpha/l_b$ equal to $3.0$, $1.5$, $1.0\,a\alpha$ for $322\to211$, $433\to322$, $544\to433$ to $0.5\%$, odd in $a\,m$ (the retrograde cloud gets $+3a\alpha/l_b$) and exactly the factor $1-3qv$ of the $(2,1)$ post-Newtonian mode for the lowest channel. At $a=0.9$ and $\alpha=0.1$ it is $-27\%$ for $322\to211$. Mass-type channels ($|\Delta m|=0,2$) have no $O(a\alpha)$ term. This is the first effect the tables below will add to the evolution.
+
+\paragraph{Plan.}
+\begin{enumerate}
+\item \emph{Tables.} Tabulate $\mathcal R_{ab}(\alpha,a)=\Gamma^{\rm Kerr}_{ab}/\Gamma^{\rm NR}_{ab}$ on the $(\alpha,a)$ grid of the superradiance tables for the channels that carry the lines (annihilations of the $l=m$ levels, the transitions among them and to their overtones), with $\Gamma^{\rm NR}$ from \code{gw_rates.jl} at the Leaver splitting so that the ratio is smooth. Transitions cost 1--3\,s per point, annihilations 5--15\,s. For $\alpha\gtrsim0.5$ start \code{kerr_mode} from the root at the previous $\alpha$ (continuation) rather than the hydrogenic guess, and stop a channel at its superradiant threshold. Use BigFloat (\code{T=BigFloat}) for annihilations below $\alpha\simeq0.05$, where the cancellation exceeds $10^{10}$.
+\item \emph{Hook.} \code{gw_rates_relativistic} loads the tables; \code{GWCache} gains a 2D interpolant per channel evaluated in \code{gw_rhs!} at the current $(\alpha,a)$, and \code{_gw_jac!} its derivative. Channels without a table keep $\mathcal R=1$. The line post-processing (\code{gw_lines}, \code{forward_model.jl}) must use the same tables, and the stored $|Z_{\tilde\ell}|$ replace the non-relativistic $L$-decomposition of \code{inclination_factor}.
+\item \emph{Horizon flux.} $P_H$ from $Z^H$ (Eq.~\eqref{eq:Zamps}) needs $R^{\rm up}$ over the source, which the inward integration contaminates by $(\omega r_{\rm inf})^4$; use BigFloat there. Then add $P_H$ to $\dd M/\dd t$ and $(\tilde m/\tilde\omega)P_H$ to $\dd J/\dd t$ (Sec.~\ref{sec:kerr-flux}). Expected to matter only for annihilations at $\alpha\gtrsim0.4$.
+\item \emph{Remaining checks.} $3d\times3d$ and $4f\times4f$ annihilations against Eq.~\eqref{eq:CYK} and Ref.~\cite{YK14}; the Kerr amplitudes of Ref.~\cite{YK14} at $a=0.5$, $0.9$, $0.99$; the $433\to211$ and annihilation amplitudes of Omiya et al.\ (their Eqs.~35--36); the $s=+2$ flux. The level shifts of \code{cloud_shifts.jl} are not part of the source and should be checked against the Leaver splittings they correct.
+\item \emph{Frequencies.} Line positions and $\delta$ in the evolution should move from the expansion \code{gw_omega} to the Leaver $\mathrm{Re}\,\omega_j$, which the tables already use; for pairs with the same $n$ the difference is $O(1)$ at $\alpha\gtrsim0.3$.
+\end{enumerate}
+
+\section{From rates to line observables}
+\label{sec:obs}
+
+Every annihilation and transition is one GW line (\code{gw_lines}). At each time the line has
+\begin{equation}
+f=\frac{\omega_{\rm GW}}{2\pi},\qquad
+\omega_{\rm GW}=\begin{cases}\omega_a+\omega_b\\|\omega_a-\omega_b|\end{cases},\qquad
+P=\Gamma\,u_au_b\,(GM_0^2)\,\frac{\mu}{\hbar}\times\hbar\omega_{\rm GW},
+\end{equation}
+where $M_0$ is the mass that normalises $u$. For a monochromatic wave $h_+=A_+\cos\omega t$, $h_\times=A_\times\sin\omega t$ at distance $d$, the flux is $\frac{c^3d^2\omega^2}{32\pi G}(A_+^2+A_\times^2)$ per unit solid angle. Averaging over directions gives the orientation-averaged amplitude
+\begin{equation}
+h_0=\left\langle A_+^2+A_\times^2\right\rangle_\Omega^{1/2}=\sqrt{\frac{8GP}{c^3\omega_{\rm GW}^2d^2}} .
+\end{equation}
+The frequencies may include the cloud's self-gravity and self-interaction shifts (\code{cloud_shifts.jl}). The powers use the unshifted spectrum, as in the evolution.
+
+\section{Checks}
+
+\begin{center}
+\small
+\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.36\textwidth}>{\raggedright\arraybackslash}p{0.27\textwidth}>{\raggedright\arraybackslash}p{0.31\textwidth}@{}}
+\toprule
+quantity & result & reference / method\\
+\midrule
+$433\to322$: $K^{\rm curr}_2$, $K^{\rm mass}_3$ & agree to $6\times10^{-12}$ & Cartesian STF moments by 3D quadrature, Eq.~\eqref{eq:thorne}\\
+$322\to211$: $K^{\rm curr}_2$, $K^{\rm mass}_3$ & agree to $3\times10^{-12}$ & same\\
+$433\to322$, $322\to211$ & exact rationals above & symbolic integration\\
+mass quadrupole of $433\to322$, $322\to211$ & $0$ (to $10^{-29}$) & parity\\
+$3d\to2p$ & $5.24\times10^{-6}\alpha^{10}$ & $5\times10^{-6}\alpha^{10}$~\cite{BGLS21}\\
+kinetic stress vs.\ Eq.~\eqref{eq:thorne}, $\Delta l=0$ & ratio $4$ & 3D quadrature, Sec.~\ref{sec:source}\\
+kinetic stress vs.\ Eq.~\eqref{eq:thorne}, $433\to311$ & ratio $1/121$ & same\\
+conservation laws, Eq.~\eqref{eq:cons} & residual $0$ & symbolic, from Eq.~\eqref{eq:schr}\\
+$2p\times2p$ flat space, all $\alpha$ & agrees to $10^{-12}$ & ABH15 Tab.~VI~\cite{ABH15}\\
+$2p\times2p$ flat, leading & $6.777\times10^{-5}\alpha^{16}$ & AD11 eq.~44~\cite{AD11}\\
+$3d\times3d$, $4f\times4f$ & $2.360\times10^{-8}\alpha^{18}$, $1.447\times10^{-11}\alpha^{22}$ & ABH15 Tab.~VI (to $10^{-5}$)\\
+$l=m$ levels, $2\le l\le5$, vs.\ Eq.~\eqref{eq:CYK} & ratio $4/(l-1)^2$ & YK14 flat approximation~\cite{YK14}, Sec.~\ref{sec:gauge}\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\appendix
+\section{STF tensors and spherical moments}
+\label{app:stf}
+
+Define the STF tensors $\mathcal Y^{Lm}_{A_L}$ by $r^LY_{Lm}(\hat\bx)=\mathcal Y^{Lm}_{A_L}x_{A_L}$~\cite{Thorne80}. For STF tensors $U,V$ of rank $L$, $\int(U_{A_L}n_{A_L})(V_{B_L}n_{B_L})\,\dd\Omega=\frac{4\pi L!}{(2L+1)!!}U_{A_L}V_{A_L}$. Orthonormality of the $Y_{Lm}$ then gives $\mathcal Y^{Lm*}_{A_L}\mathcal Y^{Lm'}_{A_L}=\frac{(2L+1)!!}{4\pi L!}\delta_{mm'}$. The $\mathcal Y^{Lm}$ span the $(2L+1)$-dimensional space of rank-$L$ STF tensors, so
+\begin{equation}
+I_{A_L}=\frac{4\pi L!}{(2L+1)!!}\sum_mq_{Lm}\,\mathcal Y^{Lm}_{A_L},\qquad q_{Lm}=\mathcal Y^{Lm*}_{A_L}I_{A_L}=\int\rho\,r^LY^*_{Lm}\,\dd^3x ,
+\end{equation}
+and $\sum_{A_L}|I_{A_L}|^2=\frac{4\pi L!}{(2L+1)!!}\sum_m|q_{Lm}|^2$. The same holds for $S_{A_L}$ with
+\begin{equation}
+J_{Lm}=\mathcal Y^{Lm*}_{A_L}S_{A_L}=\int(\bx\times\bp)_{a_L}\,x_{A_{L-1}}\mathcal Y^{Lm*}_{A_{L-1}a_L}\,\dd^3x=\frac1L\int(\bx\times\bp)\cdot\nabla\!\left(r^LY^*_{Lm}\right)\dd^3x ,
+\end{equation}
+since $\partial_a(\mathcal Y_{A_L}x_{A_L})=L\,\mathcal Y_{A_{L-1}a}x_{A_{L-1}}$. Multiplying the coefficients of Eq.~\eqref{eq:thorne} by $\frac{4\pi L!}{(2L+1)!!}$ gives $c_L$ and $s_L$ in Eq.~\eqref{eq:cs}.
+
+\begin{thebibliography}{99}
+\bibitem{AD11} A.~Arvanitaki and S.~Dubovsky, \emph{Exploring the string axiverse with precision black hole physics}, Phys.\ Rev.\ D \textbf{83}, 044026 (2011), arXiv:1004.3558.
+\bibitem{ABH15} A.~Arvanitaki, M.~Baryakhtar and X.~Huang, \emph{Discovering the QCD axion with black holes}, Phys.\ Rev.\ D \textbf{91}, 084011 (2015), arXiv:1411.2263.
+\bibitem{BCP19} D.~Baumann, H.~S.~Chia and R.~A.~Porto, \emph{Probing ultralight bosons with binary black holes}, Phys.\ Rev.\ D \textbf{99}, 044001 (2019), arXiv:1804.03208.
+\bibitem{BGLS21} M.~Baryakhtar, M.~Galanis, R.~Lasenby and O.~Simon, \emph{Black hole superradiance of self-interacting scalar fields}, Phys.\ Rev.\ D \textbf{103}, 095019 (2021), arXiv:2011.11646.
+\bibitem{Brito17} R.~Brito \emph{et al.}, \emph{Gravitational wave searches for ultralight bosons with LIGO and LISA}, Phys.\ Rev.\ D \textbf{96}, 064050 (2017), arXiv:1706.06311.
+\bibitem{Thorne80} K.~S.~Thorne, \emph{Multipole expansions of gravitational radiation}, Rev.\ Mod.\ Phys.\ \textbf{52}, 299 (1980).
+\bibitem{Varshalovich} D.~A.~Varshalovich, A.~N.~Moskalev and V.~K.~Khersonskii, \emph{Quantum Theory of Angular Momentum} (World Scientific, 1988).
+\bibitem{Weinberg} S.~Weinberg, \emph{Gravitation and Cosmology} (Wiley, 1972), Sec.~10.4.
+\bibitem{BHPT} Black Hole Perturbation Toolkit, \url{https://bhptoolkit.org}.
+\bibitem{Dolan07} S.~R.~Dolan, \emph{Instability of the massive Klein--Gordon field on the Kerr spacetime}, Phys.\ Rev.\ D \textbf{76}, 084001 (2007), arXiv:0705.2880.
+\bibitem{Hughes00} S.~A.~Hughes, \emph{Evolution of circular, nonequatorial orbits of Kerr black holes due to gravitational-wave emission}, Phys.\ Rev.\ D \textbf{61}, 084004 (2000), arXiv:gr-qc/9910091.
+\bibitem{Kinnersley69} W.~Kinnersley, \emph{Type D vacuum metrics}, J.\ Math.\ Phys.\ \textbf{10}, 1195 (1969).
+\bibitem{Leaver85} E.~W.~Leaver, \emph{An analytic representation for the quasi-normal modes of Kerr black holes}, Proc.\ R.\ Soc.\ Lond.\ A \textbf{402}, 285 (1985).
+\bibitem{MST96} S.~Mano, H.~Suzuki and E.~Takasugi, \emph{Analytic solutions of the Teukolsky equation and their low frequency expansions}, Prog.\ Theor.\ Phys.\ \textbf{95}, 1079 (1996), arXiv:gr-qc/9603020.
+\bibitem{SN82} M.~Sasaki and T.~Nakamura, \emph{Gravitational radiation from a Kerr black hole. I. Formulation and a method for numerical analysis}, Prog.\ Theor.\ Phys.\ \textbf{67}, 1788 (1982).
+\bibitem{ST03} M.~Sasaki and H.~Tagoshi, \emph{Analytic black hole perturbation approach to gravitational radiation}, Living Rev.\ Relativ.\ \textbf{6}, 6 (2003), arXiv:gr-qc/0306120.
+\bibitem{SME23} N.~Siemonsen, T.~May and W.~E.~East, \emph{Modeling the black hole superradiance gravitational waveform}, Phys.\ Rev.\ D \textbf{107}, 104003 (2023), arXiv:2211.03845.
+\bibitem{Teukolsky73} S.~A.~Teukolsky, \emph{Perturbations of a rotating black hole. I. Fundamental equations for gravitational, electromagnetic, and neutrino-field perturbations}, Astrophys.\ J.\ \textbf{185}, 635 (1973).
+\bibitem{TP74} S.~A.~Teukolsky and W.~H.~Press, \emph{Perturbations of a rotating black hole. III. Interaction of the hole with gravitational and electromagnetic radiation}, Astrophys.\ J.\ \textbf{193}, 443 (1974).
+\bibitem{YK14} H.~Yoshino and H.~Kodama, \emph{Gravitational radiation from an axion cloud around a black hole: superradiant phase}, Prog.\ Theor.\ Exp.\ Phys.\ \textbf{2014}, 043E02, arXiv:1312.2326.
+\end{thebibliography}
+
+\end{document}
