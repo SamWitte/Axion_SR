@@ -306,9 +306,10 @@ struct TeukRadial{T, S1, S2}
     s::Int; l::Int; m::Int
     ω::T; a::T; λ::T; k::T
     fh::Vector{Complex{T}}; r_h0::T          # horizon series, used for r <= r_h0
-    finf::Vector{Complex{T}}; r_inf::T       # asymptotic series, used for r >= r_inf
+    finf::Vector{Complex{T}}; r_inf::T       # asymptotic series (R^up), used for r >= r_inf
     r_m::T                                   # R^up is available on [r_m, r_inf]
-    sol_in::S1                               # ODE solution of R^in on [r_h0, r_inf]
+    r_in_end::T                              # R^in is available on [r_h0, r_in_end], r_in_end >= r_inf
+    sol_in::S1                               # ODE solution of R^in on [r_h0, r_in_end]
     sol_up::S2                               # ODE solution of R^up on [r_m, r_inf]
     W::Complex{T}                            # Δ^{s+1}(R^in R^up' - R^up R^in') = 2iω B^inc
     W_spread::T                              # relative variation of W over [r_m, r_inf] (diagnostic)
@@ -323,9 +324,13 @@ Homogeneous solutions R^in (horizon to r_inf) and R^up (r_inf down to
 r_m = min(ωr_m/|ω|, r_inf/10)) for real ω ≠ 0. The horizon series is used out
 to r_+ + hfrac (r_+ - r_-), the asymptotic series from r_inf = max(ωr_inf/|ω|,
 r_inf_min). `λ` overrides the spheroidal eigenvalue (e.g. a BigFloat value).
+`r_in_max` carries R^in outward beyond r_inf (a source may extend further; this
+integration is stable) and `tstops_in` makes the integrator step through given
+radii (e.g. quadrature nodes), so that `teuk_in` there needs no interpolation.
 """
 function teuk_radial(s::Int, l::Int, m::Int, ω, a; T=Float64, N::Int=40, rtol=nothing, atol=nothing,
-                     ωr_inf=25.0, r_inf_min=200.0, hfrac=0.1, ωr_m=0.5, λ=nothing, nW=8)
+                     ωr_inf=25.0, r_inf_min=200.0, hfrac=0.1, ωr_m=0.5, λ=nothing, nW=8,
+                     r_in_max=nothing, tstops_in=nothing)
     ω == 0 && error("teuk_radial: ω = 0 (static) is not handled")
     ωT, aT = T(ω), T(a)
     rp, rm = kerr_rpm(aT)
@@ -343,8 +348,11 @@ function teuk_radial(s::Int, l::Int, m::Int, ω, a; T=Float64, N::Int=40, rtol=n
     r_h0 = rp + T(hfrac) * (rp - rm)
     r_inf = max(T(ωr_inf) / abs(ωT), T(r_inf_min))
     R0, dR0 = teuk_eval_horizon(fh, s, m, ωT, aT, r_h0)
-    prob_in = ODEProblem(teuk_rhs!, C[R0, dR0], (r_h0, r_inf), prm)
-    sol_in = solve(prob_in, Vern9(); reltol=rtol, abstol=atol, maxiters=10^8)
+    # R^in is carried outward as far as a source needs it (stable); r_inf only sets where R^up starts
+    r_in_end = r_in_max === nothing ? r_inf : max(r_inf, T(r_in_max))
+    prob_in = ODEProblem(teuk_rhs!, C[R0, dR0], (r_h0, r_in_end), prm)
+    ts = tstops_in === nothing ? T[] : T[x for x in tstops_in if r_h0 < x < r_in_end]
+    sol_in = solve(prob_in, Vern9(); reltol=rtol, abstol=atol, maxiters=10^8, tstops=ts)
     OrdinaryDiffEq.SciMLBase.successful_retcode(sol_in) || error("teuk_radial: R^in integration failed ($(sol_in.retcode))")
 
     # R^up: asymptotic series at r_inf, then inward to r_m
@@ -366,7 +374,7 @@ function teuk_radial(s::Int, l::Int, m::Int, ω, a; T=Float64, N::Int=40, rtol=n
     end
     W = Ws[1]
     W_spread = maximum(abs.(Ws .- W)) / abs(W)
-    return TeukRadial(s, l, m, ωT, aT, λT, k, fh, r_h0, finf, r_inf, r_m, sol_in, sol_up, W, W_spread, Sfun)
+    return TeukRadial(s, l, m, ωT, aT, λT, k, fh, r_h0, finf, r_inf, r_m, r_in_end, sol_in, sol_up, W, W_spread, Sfun)
 end
 
 """(R^in, R^in', R^in'') at r."""
@@ -374,7 +382,7 @@ function teuk_in(tr::TeukRadial, r)
     if r <= tr.r_h0
         R, dR = teuk_eval_horizon(tr.fh, tr.s, tr.m, tr.ω, tr.a, r)
     else
-        r <= tr.r_inf || error("teuk_in: r = $r beyond r_inf = $(tr.r_inf)")
+        r <= tr.r_in_end || error("teuk_in: r = $r beyond r_in_end = $(tr.r_in_end)")
         u = tr.sol_in(r)
         R, dR = u[1], u[2]
     end
@@ -414,10 +422,15 @@ particle with T_ab = μ C_ab δ(r-r_0)δ(θ-θ_0)δ(φ-φ(t))/sinθ on a circula
 (φ = Ωt, ω = mΩ) this collapses to Z^∞ = 2πμ/W [K_nn C_nn + ...] at (r_0, θ_0).
 """
 function teuk_source_kernels(tr::TeukRadial, r, θ)
-    tr.s == -2 || error("teuk_source_kernels: only s = -2 (ψ_4) sources are implemented")
-    a, ω, m = tr.a, tr.ω, tr.m
     S = tr.Sfun(θ); dS = tr.Sfun(θ; theta_derivative=1); d2S = tr.Sfun(θ; theta_derivative=2)
     Rin, dRin, d2Rin = teuk_in(tr, r)
+    return teuk_kernels_point(tr, r, θ, Rin, dRin, d2Rin, S, dS, d2S)
+end
+
+"""Kernels from precomputed (R^in, R^in', R^in'') at r and (S, S', S'') at θ."""
+function teuk_kernels_point(tr::TeukRadial, r, θ, Rin, dRin, d2Rin, S, dS, d2S)
+    tr.s == -2 || error("teuk_source_kernels: only s = -2 (ψ_4) sources are implemented")
+    a, ω, m = tr.a, tr.ω, tr.m
     sθ, cθ = sin(θ), cos(θ)
     ρ = 1 / (r - im * a * cθ); ρb = 1 / (r + im * a * cθ)
     Δ = kerr_Delta(r, a)
@@ -540,6 +553,27 @@ pn_flux_newtonian(a, r0) = 32 // 5 * (1 / (r0^(3 // 2) + a))^(10 // 3)
 # ----------------------------------------------------------------------------
 # Extended sources: quadrature of the kernels, and direct forms for checks
 # ----------------------------------------------------------------------------
+
+"""
+    teuk_Z_grid(tr, Tnn, Tnm, Tmm, rn, rw, θn, θw) -> Z^∞
+
+As `teuk_Z_extended`, with the tetrad components given as matrices on the
+(rn, θn) grid; R^in and S are evaluated once per node.
+"""
+function teuk_Z_grid(tr::TeukRadial, Tnn::AbstractMatrix, Tnm::AbstractMatrix, Tmm::AbstractMatrix, rn, rw, θn, θw)
+    Sv = [(tr.Sfun(θ), tr.Sfun(θ; theta_derivative=1), tr.Sfun(θ; theta_derivative=2)) for θ in θn]
+    acc = zero(Complex{typeof(tr.ω)})
+    for (i, r) in enumerate(rn)
+        Rin, dRin, d2Rin = teuk_in(tr, r)
+        inner = zero(acc)
+        for (j, θ) in enumerate(θn)
+            Knn, Kmn, Kmm = teuk_kernels_point(tr, r, θ, Rin, dRin, d2Rin, Sv[j]...)
+            inner += θw[j] * sin(θ) * (Knn * Tnn[i, j] + Kmn * Tnm[i, j] + Kmm * Tmm[i, j])
+        end
+        acc += rw[i] * inner
+    end
+    return (2π)^2 * acc / tr.W
+end
 
 """
     teuk_Z_extended(tr, Tnn, Tnm, Tmm, rn, rw, θn, θw) -> Z^∞
