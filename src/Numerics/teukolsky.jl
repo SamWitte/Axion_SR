@@ -536,3 +536,107 @@ function pn_flux_circular(a, r0)
 end
 
 pn_flux_newtonian(a, r0) = 32 // 5 * (1 / (r0^(3 // 2) + a))^(10 // 3)
+
+# ----------------------------------------------------------------------------
+# Extended sources: quadrature of the kernels, and direct forms for checks
+# ----------------------------------------------------------------------------
+
+"""
+    teuk_Z_extended(tr, Tnn, Tnm, Tmm, rn, rw, θn, θw) -> Z^∞
+
+Amplitude at infinity for a monochromatic extended source whose tetrad
+components are T_ab = T̂_ab(r, θ) e^{-iωt+imφ} (Kinnersley tetrad; T̂ as
+functions of (r, θ)), from the kernels of `teuk_source_kernels`:
+
+    Z^∞ = (2π)^2/W ∫dr ∫ sinθ dθ [K_nn T̂_nn + K_nm̄ T̂_nm̄ + K_m̄m̄ T̂_m̄m̄]
+
+with the quadrature nodes/weights (rn, rw) in r and (θn, θw) in θ (the sinθ is
+included here). The source must vanish at the ends of the r range (the
+integrations by parts drop boundary terms).
+"""
+function teuk_Z_extended(tr::TeukRadial, Tnn, Tnm, Tmm, rn, rw, θn, θw)
+    acc = zero(Complex{typeof(tr.ω)})
+    for (r, wr) in zip(rn, rw)
+        for (θ, wθ) in zip(θn, θw)
+            Knn, Kmn, Kmm = teuk_source_kernels(tr, r, θ)
+            acc += wr * wθ * sin(θ) * (Knn * Tnn(r, θ) + Kmn * Tnm(r, θ) + Kmm * Tmm(r, θ))
+        end
+    end
+    return (2π)^2 * acc / tr.W
+end
+
+# Direct forms of the source, with the derivatives taken by automatic
+# differentiation. Used to verify the kernels (test/test_teukolsky_source.jl):
+#   * teuk_source_B2: ST03 eqs. 9-12, B'_2 + B'*_2 with ρ = (r - ia cosθ)^{-1};
+#   * teuk_source_T4: Teukolsky (1973) eq. 2.15, T_4 from the NP spin coefficients
+#     of the Kinnersley tetrad (eq. 4.5 there, ρ_NP = -(r - ia cosθ)^{-1});
+#   B'_2 + B'*_2 = T_4, and T_lmω = 4 ∫dΩ dt ρ^{-5} ρ̄^{-1} (B'_2 + B'*_2) e^{-imφ+iωt} S/√(2π).
+using ForwardDiff
+
+_cderiv(f, x) = ForwardDiff.derivative(t -> real(f(t)), x) + im * ForwardDiff.derivative(t -> imag(f(t)), x)
+_∂r(F) = (r, θ) -> _cderiv(t -> F(t, θ), r)
+_∂θ(F) = (r, θ) -> _cderiv(t -> F(r, t), θ)
+_mul(g, F) = (r, θ) -> g(r, θ) * F(r, θ)
+_add(F, G) = (r, θ) -> F(r, θ) + G(r, θ)
+
+"""B'_2 + B'*_2 (ST03 eqs. 9-12) as a function of (r, θ), for e^{-iωt+imφ} sources."""
+function teuk_source_B2(Tnn, Tnm, Tmm, a, ω, m)
+    ρ(r, θ) = 1 / (r - im * a * cos(θ)); ρb(r, θ) = 1 / (r + im * a * cos(θ))
+    Δ(r) = kerr_Delta(r, a); K(r) = kerr_K(r, a, ω, m)
+    L(s, F) = (r, θ) -> _∂θ(F)(r, θ) + (m / sin(θ) - a * ω * sin(θ) + s * cos(θ) / sin(θ)) * F(r, θ)
+    Jp(F) = (r, θ) -> _∂r(F)(r, θ) + im * K(r) / Δ(r) * F(r, θ)
+    t1 = _mul((r, θ) -> -ρ(r, θ)^8 * ρb(r, θ) / 2,
+              L(-1, _mul((r, θ) -> ρ(r, θ)^-4, L(0, _mul((r, θ) -> ρ(r, θ)^-2 * ρb(r, θ)^-1, Tnn)))))
+    t2 = _mul((r, θ) -> -ρ(r, θ)^8 * ρb(r, θ) * Δ(r)^2 / (2sqrt(2)),
+              L(-1, _mul((r, θ) -> ρ(r, θ)^-4 * ρb(r, θ)^2, Jp(_mul((r, θ) -> ρ(r, θ)^-2 * ρb(r, θ)^-2 / Δ(r), Tnm)))))
+    t3 = _mul((r, θ) -> -ρ(r, θ)^8 * ρb(r, θ) * Δ(r)^2 / 4,
+              Jp(_mul((r, θ) -> ρ(r, θ)^-4, Jp(_mul((r, θ) -> ρ(r, θ)^-2 * ρb(r, θ), Tmm)))))
+    t4 = _mul((r, θ) -> -ρ(r, θ)^8 * ρb(r, θ) * Δ(r)^2 / (2sqrt(2)),
+              Jp(_mul((r, θ) -> ρ(r, θ)^-4 * ρb(r, θ)^2 / Δ(r), L(-1, _mul((r, θ) -> ρ(r, θ)^-2 * ρb(r, θ)^-2, Tnm)))))
+    return (r, θ) -> t1(r, θ) + t2(r, θ) + t3(r, θ) + t4(r, θ)
+end
+
+"""T_4 (Teukolsky 1973 eq. 2.15) as a function of (r, θ), for e^{-iωt+imφ} sources."""
+function teuk_source_T4(Tnn, Tnm, Tmm, a, ω, m)
+    Δ(r) = kerr_Delta(r, a); K(r) = kerr_K(r, a, ω, m); Σ(r, θ) = r^2 + a^2 * cos(θ)^2
+    ρ(r, θ) = -1 / (r - im * a * cos(θ)); ρb(r, θ) = -1 / (r + im * a * cos(θ))      # NP sign
+    β(r, θ) = -ρb(r, θ) * cos(θ) / sin(θ) / (2sqrt(2))
+    π_(r, θ) = im * a * ρ(r, θ)^2 * sin(θ) / sqrt(2)
+    τ(r, θ) = -im * a * ρ(r, θ) * ρb(r, θ) * sin(θ) / sqrt(2)
+    μ(r, θ) = ρ(r, θ)^2 * ρb(r, θ) * Δ(r) / 2
+    γ(r, θ) = μ(r, θ) + ρ(r, θ) * ρb(r, θ) * (r - 1) / 2
+    α(r, θ) = π_(r, θ) - conj(β(r, θ))
+    # directional derivatives on e^{-iωt+imφ}: Δ_NP = n·∂, δ̄ = m̄·∂
+    Dn(F) = (r, θ) -> -Δ(r) / (2Σ(r, θ)) * (_∂r(F)(r, θ) + im * K(r) / Δ(r) * F(r, θ))
+    δb(F) = (r, θ) -> -ρ(r, θ) / sqrt(2) * (_∂θ(F)(r, θ) + (m / sin(θ) - a * ω * sin(θ)) * F(r, θ))
+    # (Δ + 3γ - γ̄ + 4μ + μ̄)[(δ̄ - 2τ̄ + 2α) T_nm̄ - (Δ + 2γ - 2γ̄ + μ̄) T_m̄m̄]
+    #   + (δ̄ - τ̄ + β̄ + 3α + 4π)[(Δ + 2γ + 2μ̄) T_nm̄ - (δ̄ - τ̄ + 2β̄ + 2α) T_nn]
+    br1 = _add(_add(δb(Tnm), _mul((r, θ) -> -2conj(τ(r, θ)) + 2α(r, θ), Tnm)),
+               _mul((r, θ) -> -1, _add(Dn(Tmm), _mul((r, θ) -> 2γ(r, θ) - 2conj(γ(r, θ)) + conj(μ(r, θ)), Tmm))))
+    br2 = _add(_add(Dn(Tnm), _mul((r, θ) -> 2γ(r, θ) + 2conj(μ(r, θ)), Tnm)),
+               _mul((r, θ) -> -1, _add(δb(Tnn), _mul((r, θ) -> -conj(τ(r, θ)) + 2conj(β(r, θ)) + 2α(r, θ), Tnn))))
+    p1 = _add(Dn(br1), _mul((r, θ) -> 3γ(r, θ) - conj(γ(r, θ)) + 4μ(r, θ) + conj(μ(r, θ)), br1))
+    p2 = _add(δb(br2), _mul((r, θ) -> -conj(τ(r, θ)) + conj(β(r, θ)) + 3α(r, θ) + 4π_(r, θ), br2))
+    return (r, θ) -> p1(r, θ) + p2(r, θ)
+end
+
+"""
+    teuk_Z_direct(tr, Tnn, Tnm, Tmm, rn, rw, θn, θw) -> Z^∞
+
+Same as `teuk_Z_extended` but from the direct source form:
+Z^∞ = 4(2π)^2/W ∫dr Δ^{-2} R^in ∫ sinθ dθ ρ^{-5} ρ̄^{-1} (B'_2 + B'*_2) S.
+"""
+function teuk_Z_direct(tr::TeukRadial, Tnn, Tnm, Tmm, rn, rw, θn, θw)
+    B2 = teuk_source_B2(Tnn, Tnm, Tmm, tr.a, tr.ω, tr.m)
+    acc = zero(Complex{typeof(tr.ω)})
+    for (r, wr) in zip(rn, rw)
+        Rin = teuk_in(tr, r)[1]
+        inner = zero(acc)
+        for (θ, wθ) in zip(θn, θw)
+            ρ = 1 / (r - im * tr.a * cos(θ)); ρb = conj(ρ)
+            inner += wθ * sin(θ) * ρ^-5 * ρb^-1 * B2(r, θ) * tr.Sfun(θ)
+        end
+        acc += wr * Rin / kerr_Delta(r, tr.a)^2 * inner
+    end
+    return 4 * (2π)^2 * acc / tr.W
+end
