@@ -1248,9 +1248,13 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
                                RadauIIA5(autodiff=false, κ=radau_kappa, linsolve=radau_lin)) : TRBDF2(autodiff=false)
     t_solve0 = time()
     domain_kw = (solver === :radau && !spinone) ? (isoutofdomain=radau_out_of_domain,) : NamedTuple()
-    # :radau saves the saveat grid itself (cback_saveat, bounded interpolant). As with solve(saveat), t_start
-    # (not on the grid) is not saved, and the end point is (t_max, or the wall-clock stop)
-    save_kw = bounded_saves ? (saveat=Float64[], save_everystep=false, save_start=false, save_end=true) : (saveat=saveat,)
+    # :radau saves the saveat grid itself (cback_saveat, bounded interpolant) and the end point (t_max, or
+    # the wall-clock stop). A fresh run also saves t = 0: the grid starts at t_log_start (>= 1 yr) and
+    # save-on-change only fires once something is saved, so without it nothing before t_log_start is
+    # written (the whole growth of the fastest level when that takes < 1 yr). A resume does not save
+    # t_start, which is the last point of the previous segment.
+    save_kw = bounded_saves ? (saveat=Float64[], save_everystep=false, save_start=(t_start == 0.0), save_end=true) :
+                              (saveat=saveat,)
     sol = if keep_levels === nothing || spinone
         solve(prob, alg, dt=dt_guess, dtmin=floatmin(Float64), callback=cbset,
               maxiters=maxiters; save_kw..., domain_kw...)
