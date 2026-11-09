@@ -764,12 +764,16 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
 
         du[spinI] *= mu ./ hbar .* 3.15e7
         if track_alpha
-            # u = N / (G M_BH^2): dJ = -m dN -> da = -m du (M_BH/M)^2; dM = -mu dN = -mu G M_BH^2 du
+            # u = N / (G M_BH^2): dJ = -m dN -> dJ/(G M^2) = -m du (M_BH/M)^2; dM = -mu dN = -mu G M_BH^2 du
             du[spinI] *= (M_BH / u_real[massI])^2
             du[massI] *= (mu .* M_BH) .* (mu .* GNew .* M_BH) ./ hbar .* 3.15e7
         else
             du[massI] *= (mu .* u_real[massI]) .* (mu .* GNew .* u_real[massI]) ./ hbar .* 3.15e7
         end
+        # a = J/(G M^2): da = dJ/(G M^2) - 2a dM/M, with dM from superradiance and horizon absorption
+        # (before 2026-11-09 only the dJ part was kept, which saturates a single level with less
+        # extraction than emax_211, e.g. 211 at alpha = 0.2, a = 0.95: N = 0.27 instead of 0.40 G M^2)
+        du[spinI] -= 2 * u_real[spinI] * du[massI] / u_real[massI]
 
         if accreting   # already per year
             dM_acc, da_acc = accretion_rhs(u_real[massI], u_real[spinI], acc_mdot(u_real[massI]))
@@ -827,6 +831,9 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
                            (mu .* X[massI]) .* (mu .* GNew .* X[massI]) ./ hbar .* 3.15e7
         D[spinI] *= fs; @views J[spinI, 1:n_lvl] .*= fs
         D[massI] *= fm; @views J[massI, 1:n_lvl] .*= fm
+        # da = dJ/(G M^2) - 2a dM/M, as in RHS_ax!
+        c2a = 2 * X[spinI] / X[massI]
+        D[spinI] -= c2a * D[massI]; @views J[spinI, 1:n_lvl] .-= c2a .* J[massI, 1:n_lvl]
         for i in 1:n                              # f = D / X
             @views J[i, 1:n_lvl] ./= X[i]
             (i <= n_lvl && live[i]) && (J[i, i] -= D[i] / X[i])
