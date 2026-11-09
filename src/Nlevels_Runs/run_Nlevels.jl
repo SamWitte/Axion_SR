@@ -59,6 +59,12 @@ function parse_commandline()
             action   = :store_true
             help     = "Keep the SR and scattering rates at the initial alpha (original behaviour; " *
                        "default: they follow M(t), see solve_system track_alpha)"
+        "--sr_interp"
+            arg_type = String
+            default  = "factorised"
+            help     = "SR-rate interpolation of the Leaver tables (Numerics/rate_interpolation.jl): factorised " *
+                       "(default; zero crossing at the tabulated a_c(alpha)) or legacy (linear in alpha, as before " *
+                       "2026-11-09). legacy output files get an _srlin tag"
         "--save_factor"
             arg_type = Float64
             default  = 5.0
@@ -293,6 +299,9 @@ f_edd >= 0 || error("--f_edd must be >= 0")
 self_grav  = parsed["self_grav"]
 si_sign    = parsed["si_sign"]
 rate_input = isempty(parsed["rate_input"]) ? nothing : parsed["rate_input"]
+sr_interp = Symbol(parsed["sr_interp"])
+sr_interp in (:factorised, :legacy) || error("--sr_interp must be factorised or legacy")
+RateInterpolation.SR_RATE_INTERP[] = sr_interp
 solver  = Symbol(parsed["solver"])
 solver in (:trbdf2, :radau) || error("--solver must be trbdf2 or radau")
 
@@ -331,6 +340,7 @@ println("  resume  = ", do_resume)
 isempty(keep_spec) || println("  keep_levels = ", keep_spec)
 isempty(parsed["gw_table_nmax"]) || println("  gw_table_nmax = ", parsed["gw_table_nmax"])
 println("  regime_split = ", parsed["regime_split"])
+println("  sr_interp = ", sr_interp)
 println("  self_grav = ", self_grav, self_grav ? "  (si_sign = $(si_sign))" : "")
 println("  rate_input = ", rate_input === nothing ? "default (load_rate_input_Nmax_$(Nmax).txt)" : rate_input)
 println("  solver  = ", solver, parsed["analytic_jac"] ? " (analytic Jacobian)" : "",
@@ -343,11 +353,13 @@ println("================================================")
 # With accretion a _fedd_<f_edd> tag goes before _Nmax_ (the *Nmax_N.dat globs and
 # the gw_lines_from_run.jl filename parser still match); without it the name is unchanged.
 fedd_tag = f_edd > 0 ? "_fedd_$(f_edd)" : ""
-# _SG (self-gravity on) and _rin_<list> (custom channel list) tags also go before _Nmax_, so SI-only and
-# SG runs, or default and custom channel lists, never overwrite each other.
+# _SG (self-gravity on), _rin_<list> (custom channel list) and _srlin (legacy SR-rate interpolation) tags also
+# go before _Nmax_, so SI-only and SG runs, default and custom channel lists, or the two SR interpolations never
+# overwrite each other.
 sg_tag  = self_grav ? "_SG" : ""
 rin_tag = rate_input === nothing ? "" : "_rin_" * splitext(basename(rate_input))[1]
-fname = "FullRel_fa_$(f_a)_ma_$(m_a)_MBH_$(MassBH)_spin_$(SpinBH)$(fedd_tag)$(sg_tag)$(rin_tag)_Nmax_$(Nmax).dat"
+srlin_tag = sr_interp === :legacy ? "_srlin" : ""
+fname = "FullRel_fa_$(f_a)_ma_$(m_a)_MBH_$(MassBH)_spin_$(SpinBH)$(fedd_tag)$(sg_tag)$(rin_tag)$(srlin_tag)_Nmax_$(Nmax).dat"
 
 spin_path = joinpath(outdir, "Spin_" * fname)
 if isfile(spin_path) && !do_resume
