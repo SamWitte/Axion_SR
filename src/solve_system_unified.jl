@@ -288,19 +288,21 @@ Handles both standard multi-level mode and spinone single-level mode via the spi
   cloud's back-reaction on M and a also uses the occupation normalisation
   u = N/(G M_BH^2) correctly (without it the old approximation M ~ M_BH is kept:
   the SR / scattering terms in dM/dt and da/dt are then too large by (M/M_BH)^2).
-- `emax2_mode`: cap on the 211 cloud (211 superradiance is switched off above it).
-  :fixed = Emax2, the saturated 211 cloud of a BH that starts at (M_BH, aBH) with
+- `emax2_mode`: cap on the 211 cloud (211 superradiance is switched off above it). Default :none (no cap; see
+  the comment where it is set). :fixed = Emax2, the saturated 211 cloud of a BH that starts at (M_BH, aBH) with
   no cloud (original behaviour). :evolving = current 211 cloud + the 211 cloud the
   BH can still produce from its current (M, a), i.e. Emax2 evaluated on the
   current BH, recomputed every step. It equals the fixed cap at a fresh start,
   stays constant (to first order) while only superradiance acts, grows when
   accretion spins the BH up, and depends only on the current state, so a run
-  resumed from any intermediate state (u0_override) gets the same cap. Default:
-  :evolving with accretion, :fixed otherwise. The evolving cap acts smoothly: the
+  resumed from any intermediate state (u0_override) gets the same cap. Until
+  2026-11-10 the defaults were :evolving with accretion and :fixed otherwise. The evolving cap acts smoothly: the
   211 SR rate is scaled by clamp((cap - u_211) / (emax2_taper * cap), 0, 1).
   Under steady accretion the cloud sits at the cap (the spin is pinned just above
   the 211 threshold), and a hard on/off switch there makes the ODE crawl.
 - `emax2_taper`: width of that taper, as a fraction of the cap (default 0.01).
+- `t_save_start`: first point of the log-spaced saveat grid in years (default max(1, 1e-9 t_max)). A resumed run
+  must use the same value, since the grid is rebuilt from it.
 - `save_factor`, `save_dlna`, `save_rel_floor`: save-on-change output. Besides the
   log-spaced saveat grid, an accepted step is saved whenever, since the last
   saved point, a relevant level's occupation changed by more than a factor
@@ -363,7 +365,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     emax2_taper=0.01, save_factor=5.0, save_dlna=1e-3, save_rel_floor=1e-10, save_max_sub=100,
     track_alpha_dlnM=(0.0025, 0.05), track_alpha_refresh=0.0, self_grav=false, si_sign=1.0, rate_input=nothing,
     skip_floor_channels=true, solver=:trbdf2, analytic_jac=false, keep_levels=nothing, maxiters=5e6, timescale_saves=true, gw_table_nmax=nothing, regime_split=true,
-    radau_kappa=nothing)
+    radau_kappa=nothing, t_save_start=nothing)
 
     # ============================================================================
     # PARAMETER SETUP & VALIDATION
@@ -378,8 +380,17 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     Mdot_acc = f_edd > 0 ? f_edd * eddington_rate(M_BH; eta=acc_eta) : 0.0  # M_sun/yr, constant part
     acc_mdot(M) = Mdot_acc + acc_dlnM_dt * M                                 # M_sun/yr
     track_alpha = (track_alpha === nothing) ? !spinone : track_alpha
-    emax2_mode = (emax2_mode === nothing) ? (accreting ? :evolving : :fixed) : emax2_mode
-    emax2_mode in (:fixed, :evolving) || error("emax2_mode must be :fixed or :evolving")
+    # No cap by default (2026-11-10). emax_211 is exact M, J conservation down to the omega = mu threshold, while
+    # the tabulated SR rate vanishes at the Leaver threshold, lower in spin (0.852 against 0.8575 at alpha = 0.283).
+    # :fixed (the default without accretion until then) therefore switched the 211 rate off while it was still
+    # positive: the solver slid on the switch until GW emission had drained the cloud (10^5-10^6 steps at alpha
+    # 0.1-0.3, and a stall at dt < 1e-13 with gw_model = :rel), and the 211 cloud was held 0.1-5 % below its
+    # maximum meanwhile. :evolving (the default with accretion until then) does not slide but freezes the spin
+    # where emax_211 vanishes, 1e-3 to 4e-3 above the tabulated threshold. Without a cap the 211 cloud stops, like
+    # every other level, where its rate vanishes: same end states as :fixed to <= 1e-7 in spin and mass (alpha 0.1,
+    # 0.2, 0.3, with and without self-interactions, both SR interpolations), 150-1000 times fewer steps.
+    emax2_mode = (emax2_mode === nothing) ? :none : emax2_mode
+    emax2_mode in (:fixed, :evolving, :none) || error("emax2_mode must be :fixed, :evolving or :none")
     if track_alpha && spinone
         error("track_alpha is not implemented for spinone mode")
     end
@@ -638,7 +649,8 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     tspan = (Float64(t_start), Float64(t_max))
     # Log-spaced save points so that early-time dynamics are resolved on the log x-axis.
     # Full-grid base uses (0, t_max) so resume hops splice onto the same grid.
-    t_log_start = max(1.0, t_max * 1e-9)
+    # t_save_start (years) moves the start of the grid earlier, e.g. to resolve the first growth of fast levels
+    t_log_start = t_save_start === nothing ? max(1.0, t_max * 1e-9) : Float64(t_save_start)
     saveat_full = exp10.(range(log10(t_log_start), log10(t_max), length=n_times))
     saveat_full[end] = t_max      # exp10(log10(t_max)) can round above t_max and never be saved
     if t_start > 0.0
@@ -730,9 +742,9 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
                     cap = u_real[1] + rem
                     SR_rates_local[1] *= clamp(rem / (emax2_taper * cap), 0.0, 1.0)
                 end
-            elseif (u_real[1] .> Emax2) && (SR_rates_local[1] > 0)
+            elseif emax2_mode == :fixed && (u_real[1] .> Emax2) && (SR_rates_local[1] > 0)
                 SR_rates_local[1] = 0.0
-            end
+            end                                   # :none: no cap, superradiance stops where its rate vanishes
             return SR_rates_local, false
         end
     end
