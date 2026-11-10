@@ -116,6 +116,7 @@ Ship as archives; unpack into `src/rate_sve/` before evolving:
 | `Eigs.zip` | Superradiance growth tables (`Imag_zeroC_*`, `Imag_ergC_*`) |
 | `Rates.zip` | Self-interaction / scattering tables (`*_LvrHc_.dat`, ~50k; SHA256 in `Rates.zip.sha256`) |
 | `Rates_master_Nmax18_LvrHc.zip` | Full master LvrHc set (84 490 channels; preferred for Nmax≤18) |
+| `gw_kerr_tables.zip` | Relativistic GW corrections for `--gw_model rel`: one table per channel in `gw_kerr/` (Kerr/flat-space rate ratio, Leaver frequencies, horizon part; SHA256 in `gw_kerr_tables.zip.sha256`; repack with `scripts/pack_gw_kerr_tables.sh`) |
 
 Also in this directory (tracked, not zipped):
 
@@ -128,6 +129,7 @@ cd src/rate_sve
 unzip -o Eigs.zip
 unzip -o Rates.zip
 # or: unzip -o Rates_master_Nmax18_LvrHc.zip
+unzip -o gw_kerr_tables.zip        # only needed for --gw_model rel
 ```
 
 Runtime reads the **loose** unpacked files (never the `.zip` directly). Destinations in LvrHc names: `BH` (horizon) or `Inf` (infinity).

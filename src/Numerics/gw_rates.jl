@@ -583,7 +583,8 @@ momentum of the absorbed part (gw_horizon_bh!; negative for superradiant gravito
 """
 function gw_rates_relativistic(c; dir=gw_kerr_table_dir(), verbose::Bool=true, horizon::Bool=true)   # c::GWCache (defined below)
     tabs = gw_kerr_load_tables(dir; verbose=verbose)
-    tabs === nothing && error("gw_model=:rel: no relativistic GW tables in $(dir); build them with " *
+    tabs === nothing && error("gw_model=:rel: no relativistic GW tables in $(dir); unpack them with " *
+                              "`cd src/rate_sve && unzip -o gw_kerr_tables.zip`, or build them with " *
                               "`julia src/scripts/build_gw_kerr_tables.jl --default` (or point NL_GW_KERR_DIR at them)")
     itp = GWInterp2D[]
     lv(i) = (c.n[i], c.l[i], c.m[i])

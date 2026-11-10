@@ -39,3 +39,10 @@ src/Nlevels_Runs/logs/
 # OS / Python clutter (5 .DS_Store files are already tracked; this only stops new ones)
 .DS_Store
 __pycache__/
+
+# relativistic GW tables: tracked as src/rate_sve/gw_kerr_tables.zip (scripts/pack_gw_kerr_tables.sh); the
+# unpacked tables and the per-channel job wrappers and logs are not
+src/rate_sve/gw_kerr/
+src/scripts/gw_kerr_logs/
+src/scripts/gw_kerr_jobs/Script_gwk_*.sh
+src/scripts/gw_kerr_jobs/ids_*.txt
