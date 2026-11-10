@@ -74,6 +74,17 @@ function parse_commandline()
             arg_type = Float64
             default  = 1e-3
             help     = "Also save a point whenever |d ln a| since the last saved point exceeds this (Inf = off)"
+        "--emax2_mode"
+            arg_type = String
+            default  = "auto"
+            help     = "Cap on the 211 cloud (solve_system emax2_mode): auto = none (default since 2026-11-10: no cap), fixed " *
+                       "(hard switch at the initial Emax2; the earlier default) or evolving (cap from the current BH " *
+                       "state with a smooth taper; the earlier default with accretion)"
+        "--t_save_start"
+            arg_type = Float64
+            default  = 0.0
+            help     = "Start of the log-spaced save grid in years (0 = default, max(1, 1e-9 tau_max)); use e.g. 1e-6 to " *
+                       "resolve the first growth of fast levels. A resume must use the same value"
         "--self_grav"
             arg_type = Bool
             default  = false
@@ -443,6 +454,8 @@ timeT, StatesOut, modes_out, spin, massB = @time solve_system(
     keep_levels     = keep_levels,
     maxiters        = parsed["maxiters"],
     timescale_saves = parsed["timescale_saves"],
+    t_save_start    = parsed["t_save_start"] > 0 ? parsed["t_save_start"] : nothing,
+    emax2_mode      = parsed["emax2_mode"] == "auto" ? nothing : Symbol(parsed["emax2_mode"]),
     gw_table_nmax   = isempty(parsed["gw_table_nmax"]) ? nothing : parsed["gw_table_nmax"],
     regime_split    = parsed["regime_split"],
     radau_kappa     = parsed["radau_kappa"] > 0 ? parsed["radau_kappa"] : nothing,
