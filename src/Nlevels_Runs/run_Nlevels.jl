@@ -61,9 +61,10 @@ function parse_commandline()
                        "default: they follow M(t), see solve_system track_alpha)"
         "--sr_interp"
             arg_type = String
-            default  = "factorised"
-            help     = "SR-rate interpolation of the Leaver tables (Numerics/rate_interpolation.jl): factorised " *
-                       "(default; zero crossing at the tabulated a_c(alpha)) or legacy (linear in alpha, as before " *
+            default  = "anchored"
+            help     = "SR-rate interpolation of the Leaver tables (Numerics/rate_interpolation.jl): anchored " *
+                       "(default; monotone cubic along the distance from threshold, zero at the tabulated a_c(alpha)), " *
+                       "factorised (2026-11-09/10 default; tag _srfac) or legacy (linear in alpha, as before " *
                        "2026-11-09). legacy output files get an _srlin tag"
         "--save_factor"
             arg_type = Float64
@@ -311,7 +312,7 @@ self_grav  = parsed["self_grav"]
 si_sign    = parsed["si_sign"]
 rate_input = isempty(parsed["rate_input"]) ? nothing : parsed["rate_input"]
 sr_interp = Symbol(parsed["sr_interp"])
-sr_interp in (:factorised, :legacy) || error("--sr_interp must be factorised or legacy")
+sr_interp in (:anchored, :factorised, :legacy) || error("--sr_interp must be anchored, factorised or legacy")
 RateInterpolation.SR_RATE_INTERP[] = sr_interp
 solver  = Symbol(parsed["solver"])
 solver in (:trbdf2, :radau) || error("--solver must be trbdf2 or radau")
@@ -369,7 +370,7 @@ fedd_tag = f_edd > 0 ? "_fedd_$(f_edd)" : ""
 # overwrite each other.
 sg_tag  = self_grav ? "_SG" : ""
 rin_tag = rate_input === nothing ? "" : "_rin_" * splitext(basename(rate_input))[1]
-srlin_tag = sr_interp === :legacy ? "_srlin" : ""
+srlin_tag = sr_interp === :legacy ? "_srlin" : sr_interp === :factorised ? "_srfac" : ""
 fname = "FullRel_fa_$(f_a)_ma_$(m_a)_MBH_$(MassBH)_spin_$(SpinBH)$(fedd_tag)$(sg_tag)$(rin_tag)$(srlin_tag)_Nmax_$(Nmax).dat"
 
 spin_path = joinpath(outdir, "Spin_" * fname)
