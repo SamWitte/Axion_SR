@@ -69,19 +69,7 @@ end
 # Angular emission pattern
 # ----------------------------------------------------------------------------
 
-"""Wigner small-d matrix element d^j_{m'm}(beta), with cos(beta) = c."""
-function wigner_d(j::Int, mp::Int, m::Int, c::Float64)
-    (abs(m) > j || abs(mp) > j) && return 0.0
-    ch, sh = sqrt((1 + c) / 2), sqrt(max(1 - c, 0.0) / 2)
-    lf(n) = loggamma(n + 1.0)
-    pre = 0.5 * (lf(j + m) + lf(j - m) + lf(j + mp) + lf(j - mp))
-    s = 0.0
-    for k in max(0, m - mp):min(j + m, j - mp)
-        term = exp(pre - lf(j + m - k) - lf(k) - lf(j - k - mp) - lf(k - m + mp))
-        s += (isodd(k - m + mp) ? -1 : 1) * term * ch^(2j - 2k + m - mp) * sh^(2k - m + mp)
-    end
-    return s
-end
+# wigner_d (small-d matrix element) comes from Numerics/gw_kerr_tables.jl (included through super_rad.jl).
 
 """
     gw_pattern(L, m, cos_iota)
@@ -94,12 +82,22 @@ gw_pattern(L, m, c) = (2L + 1) / 2 * (wigner_d(L, m, 2, c)^2 + wigner_d(L, -m, 2
 const TRANSITION_CHANNELS = Dict{Tuple{NTuple{3,Int},NTuple{3,Int}}, Vector{Tuple{Int,Symbol,Float64}}}()
 
 """
-    inclination_factor(line, cos_iota, alpha, a) -> h(iota) / h_avg
+    inclination_factor(line, cos_iota, alpha, a; gw_model=:nonrel) -> h(iota) / h_avg
 
-`line` is an entry of gw_lines(...).lines; alpha and a are today's values.
+`line` is an entry of gw_lines(...).lines; alpha and a are today's values. With
+gw_model = :rel and a Kerr table for the channel (rate_sve/gw_kerr), the pattern is the
+tabulated per-ℓ̃ power fractions weighted with the spin-weighted spheroidal harmonics at
+the line's spheroidicity (gw_rel_pattern); otherwise the non-relativistic multipoles.
 """
-function inclination_factor(line, c, α, a)
+function inclination_factor(line, c, α, a; gw_model::Symbol=:nonrel)
     sa, sb = line.a, line.b
+    if gw_model == :rel
+        tabs = gw_kerr_load_tables()
+        if tabs !== nothing
+            pat = gw_rel_pattern(tabs, line.kind == :annihilation ? :ann : :tr, sa, sb, α, a, c)
+            pat === nothing || return sqrt(pat)
+        end
+    end
     if line.kind == :annihilation
         m = sa[3] + sb[3]
         return sqrt(gw_pattern(max(2, m), m, c))
@@ -162,7 +160,7 @@ function forward_model(p; mu, fa, Nmax=3, n_times=4000, window=0.9, rel_floor=1e
     lines = NamedTuple[]
     for L in res.lines
         L.P[end] > 0 || continue
-        hι = L.h0[end] * inclination_factor(L, p.cos_iota, α, sp[end])
+        hι = L.h0[end] * inclination_factor(L, p.cos_iota, α, sp[end]; gw_model=gw_model)
         push!(lines, (kind = L.kind, a = L.a, b = L.b, f = L.f[end],
                       fdot = (L.f[end] - L.f[kp]) / dt_s, df_cloud = L.df_cloud[end],
                       P = L.P[end], h_avg = L.h0[end], h_iota = hι))

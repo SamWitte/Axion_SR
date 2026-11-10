@@ -1,10 +1,60 @@
-# Quasi-bound Kerr modes (src/Numerics/kerr_modes.jl): eigenfrequencies, Klein-Gordon residuals, norm.
+# Quasi-bound Kerr modes (src/Numerics/kerr_modes.jl): eigenfrequencies, Klein-Gordon residuals, norm,
+# ODE continuation of the series for radial overtones.
 #   julia test/test_kerr_modes.jl
-using Test, ForwardDiff
+using Test, ForwardDiff, Suppressor
+include(joinpath(@__DIR__, "..", "src", "Core", "constants.jl"))
+include(joinpath(@__DIR__, "..", "src", "state_utils.jl"))
+@suppress include(joinpath(@__DIR__, "..", "src", "Numerics", "gw_rates.jl"))      # gw_hydrogen_radial
 include(joinpath(@__DIR__, "..", "src", "Numerics", "teukolsky.jl"))
 include(joinpath(@__DIR__, "..", "src", "Numerics", "kerr_modes.jl"))
 
+evalR(R, r) = sum(c * r^p for (p, c) in zip(R.pows, R.coefs)) * exp(-R.beta * r)
+
 @testset "Kerr modes" begin
+    @testset "ODE continuation for radial overtones" begin
+        # the series solution satisfies the f-ODE of km_ode_coeffs, whose coefficient derivatives are exact
+        for (n, l, m, α, a) in ((2, 1, 1, 0.3, 0.9), (4, 2, 2, 0.2, 0.7))
+            md, _ = kerr_mode(n, l, m, α, a; radial=:series)
+            for r in (2.0, 5.0, 30.0, 200.0, 1000.0)
+                f, f1, f2 = kerr_radial_f(md, r)
+                A, B, dA, dB = km_ode_coeffs(md, r)
+                @test abs(f2 + A * f1 + B * f) < 1e-12 * (abs(B * f) + abs(A * f1))
+                @test ForwardDiff.derivative(t -> real(km_ode_coeffs(md, t)[1]), r) ≈ real(dA) rtol = 1e-8
+                @test ForwardDiff.derivative(t -> imag(km_ode_coeffs(md, t)[2]), r) ≈ imag(dB) rtol = 1e-8
+            end
+        end
+        # N <= 1 (series accurate): :ode reproduces the series inside the outer turning point, and the norm
+        for (n, l, m, α, a) in ((3, 1, 1, 0.3, 0.9), (7, 6, 6, 0.6, 0.9))
+            ms, _ = kerr_mode(n, l, m, α, a; radial=:series)
+            mo, _ = kerr_mode(n, l, m, α, a; radial=:ode)
+            @test mo.ode !== nothing && ms.ode === nothing
+            @test mo.norm ≈ ms.norm rtol = 1e-6
+            for r in (3.0, 10.0, n^2 / α^2)
+                fs = kerr_radial_f(ms, r); fo = kerr_radial_f(mo, r)
+                @test all(abs.(fs .- fo) .<= 1e-6 .* abs.(fs))
+                @test kerr_radial_f3(ms, r) ≈ kerr_radial_f3(mo, r) rtol = 1e-5
+            end
+        end
+        # radial overtones use the ODE by default; the inner profile then scales like the hydrogenic one relative
+        # to the ground level (for n >> l the inner function is n-independent up to the n^-3/2 normalisation), while
+        # the Float64 series is wrong there by many orders of magnitude
+        α, a = 0.6, 0.9
+        md7, _ = kerr_mode(7, 6, 6, α, a); md20, _ = kerr_mode(20, 6, 6, α, a); md20s, _ = kerr_mode(20, 6, 6, α, a; radial=:series)
+        @test md7.ode === nothing && md20.ode !== nothing
+        R7 = gw_hydrogen_radial(7, 6; T=BigFloat); R20 = gw_hydrogen_radial(20, 6; T=BigFloat)
+        for r in (10.0, 30.0)
+            hyd = Float64(evalR(R20, big(r) * α^2)^2 / evalR(R7, big(r) * α^2)^2)          # Bohr radius 1/α²
+            @test 0.8 < abs2(kerr_radial_f(md20, r)[1]) / abs2(kerr_radial_f(md7, r)[1]) / hyd < 1.25
+            @test abs2(kerr_radial_f(md20s, r)[1]) / abs2(kerr_radial_f(md7, r)[1]) < 1e-20 * hyd
+        end
+        # beyond the outer turning point: f at r_end is far below its peak and the asymptotic branch joins continuously
+        sol, r0, r_end = md20.ode
+        fpk = maximum(abs(kerr_radial_f(md20, r)[1]) for r in range(r0, r_end, length=400))
+        @test abs(kerr_radial_f(md20, r_end)[1]) < 1e-2 * fpk
+        @test kerr_radial_f(md20, r_end * (1 + 1e-12))[1] ≈ kerr_radial_f(md20, r_end * (1 - 1e-12))[1] rtol = 1e-7   # f ~ e^{iωr}: 1e-12 r_end ~ 1e-9
+        @test kerr_radial_f(md20, 3r_end)[1] != 0 && abs(kerr_radial_f(md20, 3r_end)[1]) < abs(kerr_radial_f(md20, r_end)[1])
+    end
+
     cases = ((2, 1, 1, 0.1, 0.9), (2, 1, 1, 0.3, 0.9), (3, 2, 2, 0.2, 0.5), (4, 3, 3, 0.4, 0.95), (3, 1, 1, 0.1, 0.7), (2, 1, 1, 0.05, 0.0))
     for (n, l, m, alph, a) in cases
         md, res = kerr_mode(n, l, m, alph, a)

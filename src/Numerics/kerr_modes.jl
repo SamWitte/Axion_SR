@@ -18,11 +18,25 @@ Normalisation: N_j quanta correspond to the field √(N_j/(2ω_j)) (ψ_j + ψ_j*
 with ψ_j of unit Klein-Gordon norm on a v = const slice (finite at the
 horizon; the Boyer-Lindquist slice diverges there for real ω). In the
 non-relativistic limit this is ∫|ψ|² d³x = 1.
+
+Radial overtones (N = n - l - 1 ≥ 2, kerr_mode radial=:auto): the series Σ b_n uⁿ
+behaves as (1-u)^N g(u) with large alternating b_n, so at large r (u → 1) it cancels
+to ~r^{-N} of its terms: in Float64 the sum is wrong beyond a few overtones, and since
+the Klein-Gordon norm is set there, the normalised profile came out too small by many
+orders of magnitude in the inner region that overlaps compact levels. For N ≥ 2 the
+series is used only up to u = 0.2, and f is continued outward by integrating its ODE,
+
+    f'' + (Δ' - 2iK)/Δ f' - [iK' + μ²r² + a²ω² - 2amω + Λ]/Δ f = 0,   K = (r²+a²)ω - am,
+
+which is stable up to the outer turning point (the regular solution dominates or
+oscillates there) and is stopped 6/|q| beyond it; further out f follows the leading
+asymptotic form (r-r_-)^{iσ+χ-1} e^{(q+iω)r}, where it is below e^{-6} of its peak.
 """
 
 using LinearAlgebra
 using ForwardDiff
 using QuadGK: gauss
+using OrdinaryDiffEq: ODEProblem, solve, Vern9
 
 # ----------------------------------------------------------------------------
 # Spherical harmonics (θ part, Condon-Shortley; works for ForwardDiff duals)
@@ -141,16 +155,58 @@ struct KerrMode
     L::LeaverCoeffs
     b::Vector{ComplexF64}
     norm::Float64            # f is multiplied by this (unit Klein-Gordon norm after kerr_mode_normalize!)
+    ode::Any                 # nothing (pure series) or (sol, r0, r_end): ODE continuation for r > r0 (radial overtones)
+end
+KerrMode(n, l, m, alph, a, ω, Λ, sph, L, b, norm) = KerrMode(n, l, m, alph, a, ω, Λ, sph, L, b, norm, nothing)
+
+"""Coefficients A, B of the radial ODE f'' + A f' + B f = 0 of the horizon-regular profile (A = (Δ' - 2iK)/Δ,
+B = -[iK' + μ²r² + a²ω² - 2amω + Λ]/Δ), and their r-derivatives."""
+@inline function km_ode_coeffs(md::KerrMode, r)
+    a = md.a; ω = md.ω; m = md.m
+    Δ = r^2 - 2r + a^2; dΔ = 2(r - 1)
+    K = (r^2 + a^2) * ω - a * m
+    NA = dΔ - 2im * K; dNA = 2 - 4im * r * ω
+    NB = -(2im * r * ω + md.alph^2 * r^2 + a^2 * ω^2 - 2a * m * ω + md.Λ); dNB = -(2im * ω + 2md.alph^2 * r)
+    A = NA / Δ; B = NB / Δ
+    return A, B, (dNA * Δ - NA * dΔ) / Δ^2, (dNB * Δ - NB * dΔ) / Δ^2
+end
+
+function km_ode_rhs!(du, u, md::KerrMode, r)
+    A, B, _, _ = km_ode_coeffs(md, r)
+    du[1] = u[2]
+    du[2] = -A * u[2] - B * u[1]
+    return nothing
+end
+
+"""Radius where the series is handed over to the ODE (u = 0.2) and where the integration stops (outer turning
+point of the hydrogenic orbit plus 6/|q|), for a mode with alph, a, n, q."""
+function km_ode_range(alph, a, n, q)
+    rp, rm = 1 + sqrt(1 - a^2), 1 - sqrt(1 - a^2)
+    u0 = 0.2
+    r0 = (rp - u0 * rm) / (1 - u0)
+    r_end = 2n^2 / alph^2 + 6 / abs(real(q))
+    return r0, max(r_end, 2r0)
+end
+
+"""ODE continuation of the series: solve from r0 (series initial data) to r_end; stored as (sol, r0, r_end)."""
+function km_ode_continue(md::KerrMode; rtol=1e-13)
+    r0, r_end = km_ode_range(md.alph, md.a, md.n, md.L.q)
+    f0, f1, _ = kerr_radial_f(KerrMode(md.n, md.l, md.m, md.alph, md.a, md.ω, md.Λ, md.sph, md.L, md.b, md.norm, nothing), r0)
+    prob = ODEProblem(km_ode_rhs!, ComplexF64[f0, f1], (r0, r_end), md)
+    sol = solve(prob, Vern9(); reltol=rtol, abstol=rtol * abs(f0) * 1e-3, maxiters=10^8)
+    return (sol, r0, r_end)
 end
 
 """
-    kerr_mode(n, l, m, alph, a; ω0=km_omega_guess(...), K, tol=1e-13, maxit=60) -> (KerrMode, residual)
+    kerr_mode(n, l, m, alph, a; ω0=km_omega_guess(...), K, tol=1e-13, maxit=60, radial=:auto) -> (KerrMode, residual)
 
 Quasi-bound state (n, l, m) at μM = alph and spin a: secant iteration on the
 continued fraction from ω0, then the series coefficients. The returned mode is
-normalised to unit Klein-Gordon norm (kerr_mode_norm).
+normalised to unit Klein-Gordon norm (kerr_mode_norm). radial = :auto continues
+the series by its ODE for n - l - 1 ≥ 2 (see the file docstring), :ode always, :series never.
 """
-function kerr_mode(n::Int, l::Int, m::Int, alph, a; ω0=nothing, K=nothing, tol=1e-13, maxit=60, normalize=true)
+function kerr_mode(n::Int, l::Int, m::Int, alph, a; ω0=nothing, K=nothing, tol=1e-13, maxit=60, normalize=true,
+                   radial::Symbol=:auto)
     ω0 === nothing && (ω0 = km_omega_guess(n, l, m, alph, a))
     Kt = K === nothing ? leaver_terms(alph, ω0, a) : K
     function resid(ω)
@@ -185,16 +241,64 @@ function kerr_mode(n::Int, l::Int, m::Int, alph, a; ω0=nothing, K=nothing, tol=
             break
         end
     end
-    md = KerrMode(n, l, m, alph, a, ω, Λ, sph, L, b[1:nb], 1.0)
+    md = KerrMode(n, l, m, alph, a, ω, Λ, sph, L, b[1:nb], 1.0, nothing)
+    use_ode = radial == :ode || (radial == :auto && n - l - 1 >= 2)
+    radial in (:auto, :ode, :series) || error("kerr_mode: radial must be :auto, :ode or :series")
+    if use_ode
+        md = KerrMode(n, l, m, alph, a, ω, Λ, sph, L, b[1:nb], 1.0, km_ode_continue(md))
+    end
     if normalize
-        md = KerrMode(n, l, m, alph, a, ω, Λ, sph, L, b[1:nb], 1 / sqrt(kerr_mode_norm(md)))
+        md = KerrMode(n, l, m, alph, a, ω, Λ, sph, L, b[1:nb], 1 / sqrt(kerr_mode_norm(md)), md.ode)
     end
     return md, res
 end
 
 """f, f', f'' at r (the horizon-regular ingoing radial function, including md.norm). The series is
-summed in the precision of `r` (BigFloat r avoids rounding accumulation over the ~10^4-10^5 terms)."""
+summed in the precision of `r` (BigFloat r avoids rounding accumulation over the ~10^4-10^5 terms).
+With an ODE continuation (md.ode, radial overtones) the series is used only for r <= r0; beyond r_end
+the leading asymptotic form scales the value at r_end."""
 function kerr_radial_f(md::KerrMode, r)
+    if md.ode !== nothing && r > md.ode[2]
+        f, f1, f2, _ = kerr_radial_ode_jet(md, Float64(r))
+        C = Complex{promote_type(typeof(r), Float64)}
+        return C(f), C(f1), C(f2)
+    end
+    return kerr_radial_f_series(md, r)
+end
+
+"""f, f', f'', f''' from the ODE continuation (r > r0); beyond r_end the asymptotic prefactor scales f(r_end)."""
+function kerr_radial_ode_jet(md::KerrMode, r::Float64)
+    sol, r0, r_end = md.ode
+    if r <= r_end
+        u = sol(r)
+        f, f1 = u[1], u[2]
+        A, B, dA, dB = km_ode_coeffs(md, r)
+        f2 = -A * f1 - B * f
+        f3 = -dA * f1 - A * f2 - dB * f - B * f1
+    else
+        a = md.a; rp, rm = 1 + sqrt(1 - a^2), 1 - sqrt(1 - a^2); L = md.L; ω = md.ω; m = md.m
+        p = im * L.σ + L.χ - 1 - im * (2rm * ω - m * a) / (rp - rm)
+        fe = sol(r_end)[1]
+        P(x) = exp(p * log(x - rm) + (L.q + im * ω) * x)
+        f = fe * P(r) / P(r_end)
+        lp = p / (r - rm) + (L.q + im * ω)
+        f1 = f * lp
+        f2 = f * (lp^2 - p / (r - rm)^2)
+        f3 = f * (lp^3 - 3lp * p / (r - rm)^2 + 2p / (r - rm)^3)
+    end
+    return md.norm * f, md.norm * f1, md.norm * f2, md.norm * f3
+end
+
+"""f''' of the mode's horizon-regular radial function at r (analytic on the ODE branch, else one ForwardDiff pass through f'')."""
+function kerr_radial_f3(md::KerrMode, r::Real)
+    if md.ode !== nothing && r > md.ode[2]
+        return kerr_radial_ode_jet(md, Float64(r))[4]
+    end
+    d = ForwardDiff.derivative(t -> (f2 = kerr_radial_f_series(md, t)[3]; [real(f2), imag(f2)]), r)
+    return complex(d[1], d[2])
+end
+
+function kerr_radial_f_series(md::KerrMode, r)
     a = md.a; rp, rm = 1 + sqrt(1 - a^2), 1 - sqrt(1 - a^2); L = md.L; ω = md.ω; m = md.m
     p = im * L.σ + L.χ - 1 - im * (2rm * ω - m * a) / (rp - rm)
     u = (r - rp) / (r - rm); du = (rp - rm) / (r - rm)^2; d2u = -2 * (rp - rm) / (r - rm)^3

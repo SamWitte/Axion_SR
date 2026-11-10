@@ -55,27 +55,28 @@ function _scatter_terms!(du, X, rate_cache, sc_rates, track_alpha::Bool, idx_lvl
 end
 
 # gw_rhs! (Numerics/gw_rates.jl) with the floor skip
-function _gw_terms!(du, X, c::GWCache, α, a, xfl::Float64)
-    @inbounds for i in eachindex(c.n)
-        c.ω[i] = gw_omega(c.n[i], c.l[i], c.m[i], α, a)
-    end
+function _gw_terms!(du, X, c::GWCache, α, a, xfl::Float64, spinI::Int=0, massI::Int=0)
+    gw_set_omegas_cache!(c, α, a)       # gw_omega, plus the tabulated Leaver frequencies for gw_model=:rel
     @inbounds for k in eachindex(c.ann_i)
         i, j = c.ann_i[k], c.ann_j[k]
         (X[i] <= xfl && X[j] <= xfl) && continue
-        r = c.ann_C[k] * α^c.ann_p[k] * X[i] * X[j]
+        r = gw_ann_rate(c, k, α, a) * X[i] * X[j]
         du[i] -= r
         du[j] -= r        # i == j: -2r, two quanta per annihilation
     end
     @inbounds for t in eachindex(c.tr_i)
         i, j = c.tr_i[t], c.tr_j[t]
         (X[i] <= xfl && X[j] <= xfl) && continue
-        δ = c.ω[i] - c.ω[j]
+        δ = gw_pair_delta(c, i, j)
         δ == 0 && continue
-        r = gw_transition_rate_cached(c, t, α, abs(δ)) * X[i] * X[j]
+        r = gw_tr_rate(c, t, α, a, abs(δ)) * X[i] * X[j]
         hi, lo = δ > 0 ? (i, j) : (j, i)
         du[hi] -= r
         du[lo] += r
     end
+    # gw_model=:rel with horizon tables: the hole absorbs (or, for superradiant gravitons, feeds) the
+    # horizon part of the emission; raw units of the superradiance terms in the BH rows
+    massI > 0 && gw_horizon_bh!(du, X, c, α, a, xfl, spinI, massI)
     return du
 end
 
@@ -168,14 +169,12 @@ function _scatter_jac!(J, D, X, live, rate_cache, sc_rates, track_alpha::Bool, i
     return
 end
 
-function _gw_jac!(J, D, X, live, c::GWCache, α, a, xfl::Float64)
-    for i in eachindex(c.n)
-        c.ω[i] = gw_omega(c.n[i], c.l[i], c.m[i], α, a)
-    end
+function _gw_jac!(J, D, X, live, c::GWCache, α, a, xfl::Float64, spinI::Int=0, massI::Int=0)
+    gw_set_omegas_cache!(c, α, a)
     for k in eachindex(c.ann_i)
         i, j = c.ann_i[k], c.ann_j[k]
         (X[i] <= xfl && X[j] <= xfl) && continue
-        r = c.ann_C[k] * α^c.ann_p[k] * X[i] * X[j]
+        r = gw_ann_rate(c, k, α, a) * X[i] * X[j]
         D[i] -= r; D[j] -= r
         for o in (i, j)
             if live[o]
@@ -186,14 +185,48 @@ function _gw_jac!(J, D, X, live, c::GWCache, α, a, xfl::Float64)
     for t in eachindex(c.tr_i)
         i, j = c.tr_i[t], c.tr_j[t]
         (X[i] <= xfl && X[j] <= xfl) && continue
-        δ = c.ω[i] - c.ω[j]
+        δ = gw_pair_delta(c, i, j)
         δ == 0 && continue
-        r = gw_transition_rate_cached(c, t, α, abs(δ)) * X[i] * X[j]
+        r = gw_tr_rate(c, t, α, a, abs(δ)) * X[i] * X[j]
         hi, lo = δ > 0 ? (i, j) : (j, i)
         D[hi] -= r; D[lo] += r
         for o in (i, j)
             if live[o]
                 J[hi, o] -= r; J[lo, o] += r
+            end
+        end
+    end
+    # horizon part in the BH rows (gw_horizon_bh!): each term is ∝ X_i X_j, so its ln X_o derivative is itself
+    (massI > 0 && gw_has_horizon(c)) || return
+    for k in eachindex(c.ann_i)
+        h = c.ann_hitp[k]
+        h == 0 && continue
+        i, j = c.ann_i[k], c.ann_j[k]
+        (X[i] <= xfl && X[j] <= xfl) && continue
+        rH = gw_ann_rate_inf(c, k, α, a) * gw_hfrac(c, h, α, a) * X[i] * X[j]
+        wi, wj = gw_pair_omegas(c, i, j, true)
+        eM = (wi + wj) * rH; eJ = (c.m[i] + c.m[j]) * rH
+        D[massI] += eM; D[spinI] += eJ
+        for o in (i, j)
+            if live[o]
+                J[massI, o] += eM; J[spinI, o] += eJ
+            end
+        end
+    end
+    for t in eachindex(c.tr_i)
+        h = c.tr_hitp[t]
+        h == 0 && continue
+        i, j = c.tr_i[t], c.tr_j[t]
+        (X[i] <= xfl && X[j] <= xfl) && continue
+        δ = gw_pair_delta(c, i, j)
+        δ == 0 && continue
+        hi, lo = δ > 0 ? (i, j) : (j, i)
+        rH = gw_tr_rate_inf(c, t, α, a, abs(δ)) * gw_hfrac(c, h, α, a) * X[i] * X[j]
+        eM = abs(δ) * rH; eJ = (c.m[hi] - c.m[lo]) * rH
+        D[massI] += eM; D[spinI] += eJ
+        for o in (i, j)
+            if live[o]
+                J[massI, o] += eM; J[spinI, o] += eJ
             end
         end
     end
@@ -746,7 +779,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
             track_alpha && refresh_sc_rates!(u_real[massI])
             _scatter_terms!(du, u_real, rate_cache, sc_rates_now, track_alpha_on, n_lvl, massI,
                             rP_ratio_now, alph_now, omH_now, x_floor)
-            _gw_terms!(du, u_real, gw_cache, alph_now, a_now, x_floor)
+            _gw_terms!(du, u_real, gw_cache, alph_now, a_now, x_floor, spinI, massI)
         end
 
         # Unit corrections
@@ -814,7 +847,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         track_alpha && refresh_sc_rates!(X[massI])
         _scatter_jac!(J, D, X, live, rate_cache, sc_rates_now, track_alpha_on, n_lvl, massI,
                       rP_now / rP_initial, alph_now, omH_now, x_floor)
-        _gw_jac!(J, D, X, live, gw_cache, alph_now, a_now, x_floor)
+        _gw_jac!(J, D, X, live, gw_cache, alph_now, a_now, x_floor, spinI, massI)
         K = mu ./ hbar .* 3.15e7
         thr = SOLVER_TOLERANCES.bosenova_threshold
         for i in 1:n_lvl

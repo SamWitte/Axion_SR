@@ -250,6 +250,47 @@ function teuk_eval_horizon(f::Vector, s::Int, m::Int, ω, a, r)
     return g * F, g * (dF + p * F)
 end
 
+"""
+    teuk_series_horizon_out(s, m, ω, a, λ, N, T) -> coefficients g_n
+
+The second solution at the horizon, e^{+ikr*} Σ_n g_n (r - r_+)^n, g_0 = 1 (the outgoing
+piece C^up e^{ikr*} of R^up; converges for r - r_+ < r_+ - r_-). Together with the ingoing
+series this continues R^up analytically into r < r_h0 (teuk_radial r_up_min).
+"""
+function teuk_series_horizon_out(s::Int, m::Int, ω, a, λ, N::Int, ::Type{T}) where T
+    C = Complex{T}
+    rp, rm = kerr_rpm(T(a))
+    k = T(ω) - m * T(a) / (2rp)
+    hi = N + 8
+    Δ = lseries(1, C[rp - rm, 1], hi)
+    dΔ = lseries(0, C[2(rp - 1), 2], hi)
+    r = lseries(0, C[rp, 1], hi)
+    r2a2 = lseries(0, C[rp^2 + a^2, 2rp, 1], hi)
+    invΔ = ls_inv(Δ)
+    p = ((im * k) * r2a2) * invΔ                          # g'/g, g = e^{+ikr*}
+    dp = ls_deriv(p)
+    A2, A1, A0 = _teuk_operator_series(s, m, C(ω), C(a), C(λ), Δ, dΔ, r, r2a2, p, dp, C)
+    return ls_frobenius(A2, A1, A0, N, -1; tol=sqrt(eps(T)) * 1e3)
+end
+
+"""e^{+ikr*} Σ g_n (r - r_+)^n and its r-derivative at r."""
+function teuk_eval_horizon_out(g::Vector, s::Int, m::Int, ω, a, r)
+    rp, rm = kerr_rpm(a)
+    k = ω - m * a / (2rp)
+    x = r - rp
+    F = zero(eltype(g)); dF = zero(eltype(g))
+    xp = one(x)
+    for (n, gn) in enumerate(g)
+        F += gn * xp
+        n > 1 && (dF += (n - 1) * gn * xp / x)
+        xp *= x
+    end
+    Δ = kerr_Delta(r, a)
+    e = exp(im * k * kerr_rstar(r, a))
+    p = im * k * (r^2 + a^2) / Δ
+    return e * F, e * (dF + p * F)
+end
+
 """R^up and dR^up/dr from the asymptotic series at r."""
 function teuk_eval_infinity(f::Vector, s::Int, m::Int, ω, a, r)
     u = 1 / r
@@ -314,6 +355,8 @@ struct TeukRadial{T, S1, S2}
     W::Complex{T}                            # Δ^{s+1}(R^in R^up' - R^up R^in') = 2iω B^inc
     W_spread::T                              # relative variation of W over [r_m, r_inf] (diagnostic)
     Sfun                                     # S(θ; theta_derivative)
+    fout::Vector{Complex{T}}                 # outgoing horizon series (empty unless r_up_min < r_h0)
+    up_h::Tuple{Complex{T},Complex{T}}       # R^up = up_h[1] R^in_series + up_h[2] R^out_series for r < r_h0
 end
 
 """
@@ -330,7 +373,7 @@ radii (e.g. quadrature nodes), so that `teuk_in` there needs no interpolation.
 """
 function teuk_radial(s::Int, l::Int, m::Int, ω, a; T=Float64, N::Int=40, rtol=nothing, atol=nothing,
                      ωr_inf=25.0, r_inf_min=200.0, hfrac=0.1, ωr_m=0.5, λ=nothing, nW=8,
-                     r_in_max=nothing, tstops_in=nothing)
+                     r_in_max=nothing, tstops_in=nothing, r_up_min=nothing, tstops_up=nothing)
     ω == 0 && error("teuk_radial: ω = 0 (static) is not handled")
     ωT, aT = T(ω), T(a)
     rp, rm = kerr_rpm(aT)
@@ -360,21 +403,39 @@ function teuk_radial(s::Int, l::Int, m::Int, ω, a; T=Float64, N::Int=40, rtol=n
     # R^up is carried into the near zone, where the Wronskian has no cancellation between the
     # r^{-2s-1} parts of the two solutions (the contamination of R^up by the solution that
     # grows inward is ~ (ωr_inf)^4 × the starting error)
-    r_m = max(min(T(ωr_m) / abs(ωT), r_inf / 10), 2 * r_h0)
+    r_mW = max(min(T(ωr_m) / abs(ωT), r_inf / 10), 2 * r_h0)
+    # for the horizon amplitude Z^H (an extended source down to r_+) R^up is carried further in, to
+    # r_up_min: towards the horizon the other solution (R^in ~ Δ^{-s} e^{-ikr*}) decays for s = -2, so the
+    # inward integration stays stable there; the (ωr_inf)^4 contamination of the wave zone is unchanged
+    r_m = r_up_min === nothing ? r_mW : max(min(r_mW, T(r_up_min)), r_h0)
+    r_up_min === nothing || T(r_up_min) > rp || error("teuk_radial: r_up_min = $(r_up_min) must exceed r_+ = $(rp)")
     R1, dR1 = teuk_eval_infinity(finf, s, m, ωT, aT, r_inf)
     prob_up = ODEProblem(teuk_rhs!, C[R1, dR1], (r_inf, r_m), prm)
-    sol_up = solve(prob_up, Vern9(); reltol=rtol, abstol=atol, maxiters=10^8)
+    tsu = tstops_up === nothing ? T[] : T[x for x in tstops_up if r_m < x < r_inf]
+    sol_up = solve(prob_up, Vern9(); reltol=rtol, abstol=atol, maxiters=10^8, tstops=tsu)
     OrdinaryDiffEq.SciMLBase.successful_retcode(sol_up) || error("teuk_radial: R^up integration failed ($(sol_up.retcode))")
 
     # Wronskian on the overlap
-    rs = exp.(range(log(r_m), log(r_inf), length=nW))
+    rs = exp.(range(log(r_mW), log(r_inf), length=nW))
     Ws = map(rs) do r
         ui = sol_in(r); uu = sol_up(r)
         kerr_Delta(r, aT)^(s + 1) * (ui[1] * uu[2] - uu[1] * ui[2])
     end
     W = Ws[1]
     W_spread = maximum(abs.(Ws .- W)) / abs(W)
-    return TeukRadial(s, l, m, ωT, aT, λT, k, fh, r_h0, finf, r_inf, r_m, r_in_end, sol_in, sol_up, W, W_spread, Sfun)
+    # inside r_h0 the ODE is singular; R^up is continued there as a combination of the two horizon
+    # series, matched at r_h0 (needed for the horizon amplitude of a source that reaches r_+)
+    fout = Complex{T}[]
+    up_h = (C(NaN), C(NaN))
+    if r_up_min !== nothing && T(r_up_min) < r_h0
+        fout = teuk_series_horizon_out(s, m, ωT, aT, λT, N, T)
+        uu = sol_up(r_h0); Ru, dRu = uu[1], uu[2]
+        Ri, dRi = teuk_eval_horizon(fh, s, m, ωT, aT, r_h0)
+        Ro, dRo = teuk_eval_horizon_out(fout, s, m, ωT, aT, r_h0)
+        det = Ri * dRo - Ro * dRi
+        up_h = ((Ru * dRo - Ro * dRu) / det, (Ri * dRu - Ru * dRi) / det)
+    end
+    return TeukRadial(s, l, m, ωT, aT, λT, k, fh, r_h0, finf, r_inf, r_m, r_in_end, sol_in, sol_up, W, W_spread, Sfun, fout, up_h)
 end
 
 """(R^in, R^in', R^in'') at r."""
@@ -389,20 +450,49 @@ function teuk_in(tr::TeukRadial, r)
     return R, dR, teuk_R2(tr.s, tr.m, tr.ω, tr.a, tr.λ, r, R, dR)
 end
 
-"""(R^up, R^up', R^up'') at r (only for r >= r_m)."""
+"""(R^up, R^up', R^up'') at r (for r >= r_m, or anywhere above r_+ when teuk_radial had r_up_min < r_h0)."""
 function teuk_up(tr::TeukRadial, r)
     if r >= tr.r_inf
         R, dR = teuk_eval_infinity(tr.finf, tr.s, tr.m, tr.ω, tr.a, r)
-    else
-        r >= tr.r_m || error("teuk_up: r = $r below r_m = $(tr.r_m)")
+    elseif r >= tr.r_m
         u = tr.sol_up(r)
         R, dR = u[1], u[2]
+    else
+        isempty(tr.fout) && error("teuk_up: r = $r below r_m = $(tr.r_m) (pass r_up_min to teuk_radial)")
+        Ri, dRi = teuk_eval_horizon(tr.fh, tr.s, tr.m, tr.ω, tr.a, r)
+        Ro, dRo = teuk_eval_horizon_out(tr.fout, tr.s, tr.m, tr.ω, tr.a, r)
+        A, B = tr.up_h
+        R = A * Ri + B * Ro; dR = A * dRi + B * dRo
     end
     return R, dR, teuk_R2(tr.s, tr.m, tr.ω, tr.a, tr.λ, r, R, dR)
 end
 
 """B^inc of R^in (with R^in -> Δ^{-s} e^{-ikr*} at the horizon)."""
 teuk_Binc(tr::TeukRadial) = tr.W / (2im * tr.ω)
+
+"""
+    teuk_horizon_alpha(tr) -> α_{ℓmω}
+
+Coefficient of the energy flux into the horizon, dE_H/dt = α |Z^H|²/(4πω²), for the
+horizon amplitude Z^H = (1/W) ∫ R^up 𝒯 Δ^{-2} dr of this file's normalisation
+(R^in -> Δ² e^{-ikr*}, R^up -> r³ e^{iωr*}, S unit-normalised over the sphere;
+Teukolsky & Press 1974 eq. 4.44, Tagoshi, Mano & Takasugi 1997 eqs. 13-14, Hughes 2000):
+
+    α = 256 (2r_+)^5 k (k² + 4ε²)(k² + 16ε²) ω³ / |C|²,   ε = √(1-a²)/(4r_+),  k = ω - mΩ_H,
+    |C|² = [(λ+2)² + 4aωm - 4a²ω²][λ² + 36aωm - 36a²ω²] + (2λ+3)(96a²ω² - 48aωm) + 144ω²(1-a²),
+
+λ the s = -2 eigenvalue (-> (ℓ-1)(ℓ+2); Schwarzschild: |C|² = [(ℓ-1)ℓ(ℓ+1)(ℓ+2)]² + 144ω²).
+Negative for superradiant modes (k < 0): the hole loses energy to the wave.
+"""
+function teuk_horizon_alpha(tr::TeukRadial)
+    tr.s == -2 || error("teuk_horizon_alpha: s = -2 only")
+    a, ω, m, λ, k = tr.a, tr.ω, tr.m, tr.λ, tr.k
+    rp, _ = kerr_rpm(a)
+    ε = sqrt(1 - a^2) / (4rp)
+    C2 = ((λ + 2)^2 + 4a * ω * m - 4a^2 * ω^2) * (λ^2 + 36a * ω * m - 36a^2 * ω^2) +
+         (2λ + 3) * (96a^2 * ω^2 - 48a * ω * m) + 144ω^2 * (1 - a^2)
+    return 256 * (2rp)^5 * k * (k^2 + 4ε^2) * (k^2 + 16ε^2) * ω^3 / C2
+end
 
 # ----------------------------------------------------------------------------
 # Source kernels (s = -2)
@@ -481,7 +571,7 @@ end
 Z^∞ for the mode (l, m) of `tr` from a unit-mass particle on the prograde
 circular equatorial orbit at r0; requires tr.ω = m Ω(r0).
 """
-function teuk_circular_Z(tr::TeukRadial, r0)
+function teuk_circular_Z(tr::TeukRadial, r0; horizon::Bool=false)
     E, Lz, Ω, tdot = teuk_circular_orbit(tr.a, r0)
     abs(tr.ω - tr.m * Ω) <= 1e-12 * abs(tr.ω) || error("teuk_circular_Z: tr.ω must equal m Ω(r0)")
     a = tr.a
@@ -490,8 +580,35 @@ function teuk_circular_Z(tr::TeukRadial, r0)
     Cnn = X^2 / (4 * r0^6 * tdot)
     Cmn = -im * X * Y / (2sqrt(2) * r0^5 * tdot)
     Cmm = -Y^2 / (2 * r0^4 * tdot)
-    Knn, Kmn, Kmm = teuk_source_kernels(tr, r0, oftype(r0, π) / 2)
+    θ0 = oftype(r0, π) / 2
+    if horizon        # Z^H: the same kernels with R^up in place of R^in
+        S = tr.Sfun(θ0); dS = tr.Sfun(θ0; theta_derivative=1); d2S = tr.Sfun(θ0; theta_derivative=2)
+        Knn, Kmn, Kmm = teuk_kernels_point(tr, r0, θ0, teuk_up(tr, r0)..., S, dS, d2S)
+    else
+        Knn, Kmn, Kmm = teuk_source_kernels(tr, r0, θ0)
+    end
     return 2π * (Knn * Cnn + Kmn * Cmn + Kmm * Cmm) / tr.W
+end
+
+"""
+    teuk_circular_flux_H(a, r0; lmax=6, T=Float64, kwargs...) -> (P_H, modes)
+
+Energy flux into the horizon, in units of (μ/M)^2, from a unit-mass particle on the
+prograde circular equatorial orbit at r0 (negative when the modes are superradiant).
+"""
+function teuk_circular_flux_H(a, r0; lmax::Int=6, T=Float64, kwargs...)
+    _, _, Ω, _ = teuk_circular_orbit(T(a), T(r0))
+    modes = Dict{Tuple{Int,Int}, T}()
+    P = zero(T)
+    for l in 2:lmax, m in -l:l
+        m == 0 && continue
+        ω = m * Ω
+        tr = teuk_radial(-2, l, m, ω, T(a); T=T, r_up_min=T(r0) / 2, kwargs...)
+        Z = teuk_circular_Z(tr, T(r0); horizon=true)
+        modes[(l, m)] = teuk_horizon_alpha(tr) * abs2(Z) / (4π * ω^2)
+        P += modes[(l, m)]
+    end
+    return P, modes
 end
 
 """
@@ -555,16 +672,24 @@ pn_flux_newtonian(a, r0) = 32 // 5 * (1 / (r0^(3 // 2) + a))^(10 // 3)
 # ----------------------------------------------------------------------------
 
 """
-    teuk_Z_grid(tr, Tnn, Tnm, Tmm, rn, rw, θn, θw) -> Z^∞
+    teuk_Z_grid(tr, Tnn, Tnm, Tmm, rn, rw, θn, θw; horizon=false) -> Z^∞ (or Z^H)
 
 As `teuk_Z_extended`, with the tetrad components given as matrices on the
-(rn, θn) grid; R^in and S are evaluated once per node.
+(rn, θn) grid; R^in and S are evaluated once per node. With horizon = true the
+horizon amplitude Z^H (R^up in the kernels) is returned instead; its flux is
+teuk_horizon_alpha(tr) |Z^H|²/(4πω²). The kernel form drops the boundary terms of
+the integrations by parts, which vanish at r_+ for R^in (∝ Δ²) but NOT for R^up
+(O(1) there): for a source that extends to the horizon use teuk_Z_direct_jets
+with horizon = true; here the source must vanish at both ends of the r range.
 """
-function teuk_Z_grid(tr::TeukRadial, Tnn::AbstractMatrix, Tnm::AbstractMatrix, Tmm::AbstractMatrix, rn, rw, θn, θw)
+function teuk_Z_grid(tr::TeukRadial, Tnn::AbstractMatrix, Tnm::AbstractMatrix, Tmm::AbstractMatrix, rn, rw, θn, θw;
+                     horizon::Bool=false)
     Sv = [(tr.Sfun(θ), tr.Sfun(θ; theta_derivative=1), tr.Sfun(θ; theta_derivative=2)) for θ in θn]
     acc = zero(Complex{typeof(tr.ω)})
     for (i, r) in enumerate(rn)
-        Rin, dRin, d2Rin = teuk_in(tr, r)
+        # horizon = true: the horizon amplitude Z^H = (1/W) ∫ R^up 𝒯 Δ^{-2} (same kernels, R^up for R^in;
+        # teuk_radial needs r_up_min <= rn[1])
+        Rin, dRin, d2Rin = horizon ? teuk_up(tr, r) : teuk_in(tr, r)
         inner = zero(acc)
         for (j, θ) in enumerate(θn)
             Knn, Kmn, Kmm = teuk_kernels_point(tr, r, θ, Rin, dRin, d2Rin, Sv[j]...)
@@ -671,6 +796,129 @@ function teuk_Z_direct(tr::TeukRadial, Tnn, Tnm, Tmm, rn, rw, θn, θw)
             inner += wθ * sin(θ) * ρ^-5 * ρb^-1 * B2(r, θ) * tr.Sfun(θ)
         end
         acc += wr * Rin / kerr_Delta(r, tr.a)^2 * inner
+    end
+    return 4 * (2π)^2 * acc / tr.W
+end
+
+# ----------------------------------------------------------------------------
+# Direct source form with second-order jets: the source operators (ST03 eqs. 9-12) evaluated
+# from the value and the (r, θ)-derivatives to second order of T_nn, T_nm̄, T_m̄m̄ at a node.
+# A Jet2 carries (v, ∂r, ∂θ, ∂rr, ∂rθ, ∂θθ); after a derivative operator only the lower
+# orders remain valid, and the operators here are at most second order, so the final
+# value is exact. This is what teuk_source_B2 does with ForwardDiff, at a fraction of the
+# cost, and it allows the horizon amplitude Z^H = (1/W)∫ R^up 𝒯 Δ^{-2} of an extended
+# source that reaches the horizon (where the by-parts kernel form fails).
+# ----------------------------------------------------------------------------
+
+struct Jet2{T}
+    v::Complex{T}; r::Complex{T}; t::Complex{T}; rr::Complex{T}; rt::Complex{T}; tt::Complex{T}
+end
+Jet2{T}(v::Number) where T = Jet2{T}(v, 0, 0, 0, 0, 0)
+jet_var_r(r0::T) where T = Jet2{T}(r0, 1, 0, 0, 0, 0)
+jet_var_t(θ0::T) where T = Jet2{T}(θ0, 0, 1, 0, 0, 0)
+Base.:+(a::Jet2{T}, b::Jet2{T}) where T = Jet2{T}(a.v + b.v, a.r + b.r, a.t + b.t, a.rr + b.rr, a.rt + b.rt, a.tt + b.tt)
+Base.:-(a::Jet2{T}, b::Jet2{T}) where T = Jet2{T}(a.v - b.v, a.r - b.r, a.t - b.t, a.rr - b.rr, a.rt - b.rt, a.tt - b.tt)
+Base.:-(a::Jet2{T}) where T = Jet2{T}(-a.v, -a.r, -a.t, -a.rr, -a.rt, -a.tt)
+Base.:+(a::Jet2{T}, c::Number) where T = Jet2{T}(a.v + c, a.r, a.t, a.rr, a.rt, a.tt)
+Base.:+(c::Number, a::Jet2) = a + c
+Base.:-(a::Jet2, c::Number) = a + (-c)
+Base.:*(c::Number, a::Jet2{T}) where T = Jet2{T}(c * a.v, c * a.r, c * a.t, c * a.rr, c * a.rt, c * a.tt)
+Base.:*(a::Jet2, c::Number) = c * a
+Base.:*(a::Jet2{T}, b::Jet2{T}) where T = Jet2{T}(a.v * b.v, a.r * b.v + a.v * b.r, a.t * b.v + a.v * b.t,
+                                                a.rr * b.v + 2a.r * b.r + a.v * b.rr,
+                                                a.rt * b.v + a.r * b.t + a.t * b.r + a.v * b.rt,
+                                                a.tt * b.v + 2a.t * b.t + a.v * b.tt)
+Base.conj(a::Jet2{T}) where T = Jet2{T}(conj(a.v), conj(a.r), conj(a.t), conj(a.rr), conj(a.rt), conj(a.tt))
+"""f(g) for a jet g from f, f', f'' at g.v."""
+jet_apply(f0, f1, f2, g::Jet2{T}) where T = Jet2{T}(f0, f1 * g.r, f1 * g.t, f2 * g.r^2 + f1 * g.rr, f2 * g.r * g.t + f1 * g.rt, f2 * g.t^2 + f1 * g.tt)
+Base.inv(g::Jet2) = jet_apply(1 / g.v, -1 / g.v^2, 2 / g.v^3, g)
+jet_pow(g::Jet2, n::Int) = jet_apply(g.v^n, n * g.v^(n - 1), n * (n - 1) * g.v^(n - 2), g)
+jet_sin(g::Jet2) = jet_apply(sin(g.v), cos(g.v), -sin(g.v), g)
+jet_cos(g::Jet2) = jet_apply(cos(g.v), -sin(g.v), -cos(g.v), g)
+"""∂_r and ∂_θ of a jet (the result is valid to one order less)."""
+jet_dr(g::Jet2{T}) where T = Jet2{T}(g.r, g.rr, g.rt, 0, 0, 0)
+jet_dt(g::Jet2{T}) where T = Jet2{T}(g.t, g.rt, g.tt, 0, 0, 0)
+"""Jet of a function of r only from (f, f', f'') at r0 (θ-derivatives zero)."""
+jet_radial(f0, f1, f2, ::Type{T}) where T = Jet2{T}(f0, f1, 0, f2, 0, 0)
+"""Jet of a function of θ only from (f, f', f'') at θ0."""
+jet_angular(f0, f1, f2, ::Type{T}) where T = Jet2{T}(f0, 0, f1, 0, 0, f2)
+
+"""
+    teuk_source_B2_jet(Tnn, Tnm, Tmm, a, ω, m, r0, θ0; phase_factored=false) -> B'_2 + B'*_2 at (r0, θ0)
+
+ST03 eqs. 9-12 (ρ = (r - ia cosθ)^{-1}, sources ∝ e^{-iωt+imφ}) from the second-order jets
+of the tetrad components at the node; equals teuk_source_B2(...)(r0, θ0).
+
+phase_factored = true: the jets are those of T̂_ab = T_ab/Ph with Ph = e^{-iωr* + imr#}, the
+horizon phase of the Teukolsky mode (ω, m), and the result is (B'_2 + B'*_2)/Ph. Since
+J_+(Ph X) = Ph ∂_r X, the radial operators then act as plain ∂_r on functions that are
+regular at r_+, which avoids the 1/Δ cancellations of J_+ near the horizon.
+"""
+function teuk_source_B2_jet(Tnn::Jet2{T}, Tnm::Jet2{T}, Tmm::Jet2{T}, a, ω, m, r0, θ0; phase_factored::Bool=false) where T
+    jr = jet_var_r(T(r0)); jθ = jet_var_t(T(θ0))
+    sθ = jet_sin(jθ); cθ = jet_cos(jθ)
+    Δ = jr * jr + (-2) * jr + T(a)^2
+    K = T(ω) * (jr * jr + T(a)^2) + (-T(a) * m)
+    ρ = inv(jr + (-im * T(a)) * cθ); ρb = conj(ρ)
+    invΔ = inv(Δ); invs = inv(sθ)
+    L(s, F) = jet_dt(F) + (m * invs + (-T(a) * T(ω)) * sθ + s * (cθ * invs)) * F
+    Jp(F) = phase_factored ? jet_dr(F) : jet_dr(F) + ((im * K) * invΔ) * F
+    ρ8b = jet_pow(ρ, 8) * ρb
+    ρm4 = jet_pow(ρ, -4); ρm2 = jet_pow(ρ, -2); ρbm2 = jet_pow(ρb, -2)
+    Δ2 = Δ * Δ
+    t1 = (-1 / 2) * (ρ8b * L(-1, ρm4 * L(0, (ρm2 * inv(ρb)) * Tnn)))
+    t2 = (-1 / (2sqrt(T(2)))) * (ρ8b * Δ2 * L(-1, (ρm4 * ρb * ρb) * Jp((ρm2 * ρbm2 * invΔ) * Tnm)))
+    t3 = (-1 / 4) * (ρ8b * Δ2 * Jp(ρm4 * Jp((ρm2 * ρb) * Tmm)))
+    t4 = (-1 / (2sqrt(T(2)))) * (ρ8b * Δ2 * Jp((ρm4 * ρb * ρb * invΔ) * L(-1, (ρm2 * ρbm2) * Tnm)))
+    return (t1 + t2 + t3 + t4).v
+end
+
+"""
+    teuk_Z_direct_jets(tr, jets, rn, rw, θn, θw; horizon=false) -> Z^∞ (or Z^H)
+
+Amplitude from the direct source form, Z = 4(2π)²/W ∫dr Δ^{-2} R ∫ sinθ dθ ρ^{-5} ρ̄^{-1} (B'_2 + B'*_2) S,
+with R = R^in (horizon = false) or R^up (horizon = true, the horizon amplitude; teuk_radial
+needs r_up_min <= rn[1]). `jets(i, j)` returns the Jet2 triple (T_nn, T_nm̄, T_m̄m̄) of the
+source at (rn[i], θn[j]). No integration by parts, so the source may be finite at r_+.
+"""
+function teuk_Z_direct_jets(tr::TeukRadial, jets, rn, rw, θn, θw; horizon::Bool=false)
+    Sv = [tr.Sfun(θ) for θ in θn]
+    acc = zero(Complex{typeof(tr.ω)})
+    for (i, r) in enumerate(rn)
+        R = horizon ? teuk_up(tr, r)[1] : teuk_in(tr, r)[1]
+        inner = zero(acc)
+        for (j, θ) in enumerate(θn)
+            Tnn, Tnm, Tmm = jets(i, j)
+            ρ = 1 / (r - im * tr.a * cos(θ)); ρb = conj(ρ)
+            inner += θw[j] * sin(θ) * ρ^-5 * ρb^-1 * teuk_source_B2_jet(Tnn, Tnm, Tmm, tr.a, tr.ω, tr.m, r, θ) * Sv[j]
+        end
+        acc += rw[i] * R / kerr_Delta(r, tr.a)^2 * inner
+    end
+    return 4 * (2π)^2 * acc / tr.W
+end
+
+"""
+    teuk_Z_hat(tr, Shat, Ph, rn, rw, θn, θw; horizon=false) -> Z^∞ (or Z^H)
+
+Direct-form amplitude for a source tabulated on the (rn, θn) grid as
+Shat[i, j] = ρ^{-5} ρ̄^{-1} (B'_2 + B'*_2)/Ph[i] (phase-factored jets, e.g. gw_kerr_source_hat):
+
+    Z = 4(2π)²/W Σ_i rw_i R(r_i) Ph_i Δ_i^{-2} Σ_j θw_j sinθ_j S(θ_j) Shat_ij,
+
+with R = R^in (Z^∞) or R^up (horizon = true: the horizon amplitude, whose flux is
+teuk_horizon_alpha(tr) |Z^H|²/(4πω²); teuk_radial needs r_up_min <= rn[1]). Shat and Ph do
+not depend on ℓ, so one tabulation serves every ℓ.
+"""
+function teuk_Z_hat(tr::TeukRadial, Shat::AbstractMatrix, Ph::AbstractVector, rn, rw, θn, θw; horizon::Bool=false)
+    Sv = [tr.Sfun(θ) * sin(θ) * w for (θ, w) in zip(θn, θw)]
+    acc = zero(Complex{typeof(tr.ω)})
+    for (i, r) in enumerate(rn)
+        R = horizon ? teuk_up(tr, r)[1] : teuk_in(tr, r)[1]
+        inner = zero(acc)
+        @inbounds for j in eachindex(Sv)
+            inner += Sv[j] * Shat[i, j]
+        end
+        acc += rw[i] * R * Ph[i] / kerr_Delta(r, tr.a)^2 * inner
     end
     return 4 * (2π)^2 * acc / tr.W
 end

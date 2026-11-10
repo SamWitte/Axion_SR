@@ -37,7 +37,10 @@ Physics (NR limit)
 
 All lengths are in Bohr units a0 = 1/(mu alpha).
 
-Hook for relativistic rates: `gw_rates_relativistic` (not implemented yet).
+Relativistic rates (gw_model = :rel): the cache built here is multiplied, channel by
+channel, by the tabulated ratio Γ_Kerr/Γ_NR of the Teukolsky calculation
+(gw_kerr.jl, tables in rate_sve/gw_kerr/ read by gw_kerr_tables.jl), and the level
+frequencies come from the Leaver eigenvalues where tabulated (`gw_rates_relativistic`).
 """
 
 using WignerSymbols: clebschgordan
@@ -562,10 +565,61 @@ function gw_literature_annihilation(sa, sb)
     return (C211 * w(sa[1]) * w(sb[1]) * (sa == sb ? 1 : 4), 14)
 end
 
-function gw_rates_relativistic(args...; kwargs...)
-    # Should return a GWCache-compatible object for (Nmax, modes, mu, M, a).
-    error("Relativistic GW rates (gw_model=:rel) are not implemented yet. " *
-          "This is the hook for Teukolsky-based annihilation/transition rates.")
+include(joinpath(@__DIR__, "gw_kerr_tables.jl"))
+
+"""
+    gw_rates_relativistic(c::GWCache; dir=gw_kerr_table_dir(), verbose=true) -> GWCache
+
+Attach the Teukolsky correction tables (gw_kerr_tables.jl) to a non-relativistic
+cache: every annihilation / transition channel with a table gets an interpolant
+of ln(Γ_Kerr/Γ_NR) in (α, a) that multiplies its rate in gw_rhs!, and every level
+with a table gets the Leaver Re ω/μ in place of gw_omega. Channels and levels
+without a table are unchanged (ratio 1, gw_omega). Errors if `dir` holds no table.
+
+horizon = true also attaches, where the tables have it, the horizon fraction
+Γ_H/Γ_∞ of each channel: the levels are then depleted at Γ_∞ + Γ_H (the gravitons
+that fall into the hole are emitted too) and the hole gains the energy and angular
+momentum of the absorbed part (gw_horizon_bh!; negative for superradiant gravitons).
+"""
+function gw_rates_relativistic(c; dir=gw_kerr_table_dir(), verbose::Bool=true, horizon::Bool=true)   # c::GWCache (defined below)
+    tabs = gw_kerr_load_tables(dir; verbose=verbose)
+    tabs === nothing && error("gw_model=:rel: no relativistic GW tables in $(dir); build them with " *
+                              "`julia src/scripts/build_gw_kerr_tables.jl --default` (or point NL_GW_KERR_DIR at them)")
+    itp = GWInterp2D[]
+    lv(i) = (c.n[i], c.l[i], c.m[i])
+    ω_itp = zeros(Int, length(c.n))
+    for i in eachindex(c.n)
+        it = get(tabs.omega, lv(i), nothing)
+        it === nothing || (push!(itp, it); ω_itp[i] = length(itp))
+    end
+    ann_itp = zeros(Int, length(c.ann_i))
+    for k in eachindex(c.ann_i)
+        it = get(tabs.ratio_ann, gw_pair_key(lv(c.ann_i[k]), lv(c.ann_j[k])), nothing)
+        it === nothing || (push!(itp, it); ann_itp[k] = length(itp))
+    end
+    tr_itp = zeros(Int, length(c.tr_i))
+    for t in eachindex(c.tr_i)
+        it = get(tabs.ratio_tr, gw_pair_key(lv(c.tr_i[t]), lv(c.tr_j[t])), nothing)
+        it === nothing || (push!(itp, it); tr_itp[t] = length(itp))
+    end
+    ann_hitp = zeros(Int, length(c.ann_i)); tr_hitp = zeros(Int, length(c.tr_i))
+    if horizon
+        for k in eachindex(c.ann_i)
+            it = get(tabs.hfrac, (:ann, gw_pair_key(lv(c.ann_i[k]), lv(c.ann_j[k]))...), nothing)
+            it === nothing || (push!(itp, it); ann_hitp[k] = length(itp))
+        end
+        for t in eachindex(c.tr_i)
+            it = get(tabs.hfrac, (:tr, gw_pair_key(lv(c.tr_i[t]), lv(c.tr_j[t]))...), nothing)
+            it === nothing || (push!(itp, it); tr_hitp[t] = length(itp))
+        end
+    end
+    verbose && println("GW (rel): Teukolsky tables for $(count(!=(0), ann_itp))/$(length(ann_itp)) annihilation and " *
+                       "$(count(!=(0), tr_itp))/$(length(tr_itp)) transition channels (horizon flux for " *
+                       "$(count(!=(0), ann_hitp)) + $(count(!=(0), tr_hitp))); Leaver frequencies for " *
+                       "$(count(!=(0), ω_itp))/$(length(ω_itp)) levels")
+    return GWCache(c.n, c.l, c.m, c.ω, c.ann_i, c.ann_j, c.ann_C, c.ann_p, c.tr_i, c.tr_j, c.tr_off,
+                   c.ch_lnK, c.ch_apow, c.ch_dpow, true, fill(NaN, length(c.n)), itp, ω_itp, ann_itp, tr_itp,
+                   ann_hitp, tr_hitp)
 end
 
 # ----------------------------------------------------------------------------
@@ -599,17 +653,31 @@ GW channels resolved to solver level indices. Annihilation k: rate C α^p.
 Transition t: rate sum_q K_q α^{apow_q} |δ|^{dpow_q} over channels
 q in off[t]:off[t+1]-1 (stored as ln K), with δ = ω_i - ω_j recomputed from the current α and
 spin (the emission direction follows the sign of δ).
+
+Relativistic corrections (rel = true, gw_rates_relativistic): itp holds the (α, a)
+interpolants; ω_itp[i], ann_itp[k], tr_itp[t] index into it (0 = none). A level with
+ω_itp ≠ 0 uses the tabulated Leaver Re ω/μ (kept in ωrel; NaN otherwise) and a
+channel with ann_itp / tr_itp ≠ 0 has its rate to infinity multiplied by
+exp(itp) = Γ_Kerr/Γ_NR. ann_hitp / tr_hitp index the horizon fraction h = Γ_H/Γ_∞
+(0 = none, h = 0): the levels are depleted at (1 + h) Γ_∞ and the hole absorbs h Γ_∞.
 """
 struct GWCache
     n::Vector{Int}; l::Vector{Int}; m::Vector{Int}; ω::Vector{Float64}
     ann_i::Vector{Int}; ann_j::Vector{Int}; ann_C::Vector{Float64}; ann_p::Vector{Int}
     tr_i::Vector{Int}; tr_j::Vector{Int}; tr_off::Vector{Int}
     ch_lnK::Vector{Float64}; ch_apow::Vector{Int}; ch_dpow::Vector{Int}
+    rel::Bool; ωrel::Vector{Float64}; itp::Vector{GWInterp2D}
+    ω_itp::Vector{Int}; ann_itp::Vector{Int}; tr_itp::Vector{Int}
+    ann_hitp::Vector{Int}; tr_hitp::Vector{Int}
 end
 
 gw_empty_cache(modes) = GWCache([md[1] for md in modes], [md[2] for md in modes], [md[3] for md in modes],
                                 zeros(length(modes)), Int[], Int[], Float64[], Int[], Int[], Int[], [1],
-                                Float64[], Int[], Int[])
+                                Float64[], Int[], Int[], false, Float64[], GWInterp2D[], zeros(Int, length(modes)), Int[], Int[],
+                                Int[], Int[])
+
+"""true if any channel of the cache carries a horizon flux (then the BH mass and spin rows get gw_horizon_bh!)."""
+gw_has_horizon(c::GWCache) = c.rel && (any(!=(0), c.ann_hitp) || any(!=(0), c.tr_hitp))
 
 """
     gw_build_cache(Nmax, modes, mu, M, a; gw_model=:nonrel, min_rate_per_yr=1e-10,
@@ -618,8 +686,9 @@ gw_empty_cache(modes) = GWCache([md[1] for md in modes], [md[2] for md in modes]
 Resolve the GW table for `Nmax` onto the solver's level list `modes`
 ((n,l,m,...) tuples, as from setup_quantum_levels_standard).
 
-gw_model: :nonrel (NR tables, Numerics/gw_rates.jl), :rel (relativistic hook,
-not implemented) or :off (no GW emission).
+gw_model: :nonrel (NR tables, Numerics/gw_rates.jl), :rel (the same channels with the
+Teukolsky correction tables of rate_sve/gw_kerr attached, gw_rates_relativistic) or
+:off (no GW emission).
 
 Channels with rate * mu/hbar * yr < min_rate_per_yr at the initial (α, a) are
 dropped: with the default 1e-10 their e-fold time exceeds a Hubble time even at
@@ -635,10 +704,19 @@ covers every level of gw_state_list(Nmax), so this is where a run's channel list
 restricts GW emission.
 """
 function gw_build_cache(Nmax, modes, mu, M, a; gw_model=:nonrel, min_rate_per_yr=1e-10,
-                        literature_overrides=true, M_cut=M, levels=nothing)
+                        literature_overrides=true, M_cut=M, levels=nothing,
+                        rel_horizon::Bool=get(ENV, "NL_GW_KERR_HORIZON", "1") != "0", keep_pairs=nothing)
     c = gw_empty_cache(modes)
     gw_model == :off && return c
-    gw_model == :rel && return gw_rates_relativistic(Nmax, modes, mu, M, a)
+    if gw_model == :rel
+        # transitions the hole can reverse (tabulated h < -1 somewhere) are kept whatever their radiation rate:
+        # the channel floor below tests Γ_∞, which for the same-n pairs is far smaller than |Γ_H|
+        tabs = (rel_horizon && GW_HFRAC_FLOOR[] < -1) ? gw_kerr_load_tables() : nothing
+        keep = tabs === nothing ? nothing : gw_kerr_reversible_pairs(tabs)
+        cnr = gw_build_cache(Nmax, modes, mu, M, a; gw_model=:nonrel, min_rate_per_yr=min_rate_per_yr,
+                             literature_overrides=literature_overrides, M_cut=M_cut, levels=levels, keep_pairs=keep)
+        return gw_rates_relativistic(cnr; horizon=rel_horizon)
+    end
     gw_model == :nonrel || error("unknown gw_model $(gw_model); use :nonrel, :rel or :off")
     path = gw_table_path(Nmax)
     isfile(path) || error("GW table $(path) missing; build it with `julia src/scripts/build_gw_tables.jl $(Nmax)`")
@@ -661,7 +739,8 @@ function gw_build_cache(Nmax, modes, mu, M, a; gw_model=:nonrel, min_rate_per_yr
         (haskey(idx, sa) && haskey(idx, sb)) || continue
         δ = gw_omega(sa..., α, a) - gw_omega(sb..., α, a)
         δc = gw_omega(sa..., αc, a) - gw_omega(sb..., αc, a)
-        ((δ != 0 && gw_transition_rate(ch, α, abs(δ)) >= floor_rate) ||
+        ((keep_pairs !== nothing && gw_pair_key(sa, sb) in keep_pairs) ||
+         (δ != 0 && gw_transition_rate(ch, α, abs(δ)) >= floor_rate) ||
          (δc != 0 && gw_transition_rate(ch, αc, abs(δc)) >= floor_rate)) || continue
         push!(c.tr_i, idx[sa]); push!(c.tr_j, idx[sb])
         for (L, kind, K) in ch
@@ -669,7 +748,114 @@ function gw_build_cache(Nmax, modes, mu, M, a; gw_model=:nonrel, min_rate_per_yr
         end
         push!(c.tr_off, length(c.ch_lnK) + 1)
     end
+    append!(c.ann_itp, zeros(Int, length(c.ann_i)))
+    append!(c.tr_itp, zeros(Int, length(c.tr_i)))
+    append!(c.ann_hitp, zeros(Int, length(c.ann_i)))
+    append!(c.tr_hitp, zeros(Int, length(c.tr_i)))
     return c
+end
+
+"""Fill c.ω with gw_omega and, for a relativistic cache, c.ωrel with the tabulated Leaver Re ω/μ (NaN where absent)."""
+function gw_set_omegas_cache!(c::GWCache, α, a)
+    @inbounds for i in eachindex(c.n)
+        c.ω[i] = gw_omega(c.n[i], c.l[i], c.m[i], α, a)
+    end
+    if c.rel
+        @inbounds for i in eachindex(c.n)
+            k = c.ω_itp[i]
+            c.ωrel[i] = k == 0 ? NaN : c.ω[i] + gw_interp2(c.itp[k], α, a)     # expansion + tabulated Leaver correction
+        end
+    end
+    return c
+end
+
+"""ω_i - ω_j (units of μ) of a transition pair: Leaver frequencies when both levels have them, else gw_omega."""
+@inline function gw_pair_delta(c::GWCache, i, j)
+    if c.rel
+        @inbounds wi, wj = c.ωrel[i], c.ωrel[j]
+        (isnan(wi) | isnan(wj)) || return wi - wj
+    end
+    @inbounds return c.ω[i] - c.ω[j]
+end
+
+"""(ω_i, ω_j) of a line in units of μ: per level the Leaver value where tabulated for annihilations;
+for transitions both Leaver or both gw_omega (consistent with gw_pair_delta)."""
+@inline function gw_pair_omegas(c::GWCache, i, j, isann::Bool)
+    if c.rel
+        @inbounds wi, wj = c.ωrel[i], c.ωrel[j]
+        if isann
+            return (isnan(wi) ? c.ω[i] : wi), (isnan(wj) ? c.ω[j] : wj)
+        elseif !(isnan(wi) | isnan(wj))
+            return wi, wj
+        end
+    end
+    @inbounds return c.ω[i], c.ω[j]
+end
+
+@inline gw_rel_factor(c::GWCache, k::Int, α, a) = k == 0 ? 1.0 : exp(gw_interp2(c.itp[k], α, a))
+
+# Lower bound on the horizon fraction h = Γ_H/Γ_∞ used in the evolution. -Inf (default since 2026-11-10): no
+# bound. A channel whose horizon part is superradiant and larger than its radiation (h < -1: the same-n
+# transitions such as 322 <-> 311, and pairs with an absorbed level at large α) then has a negative net rate
+# (1 + h) Γ_∞: the transfer runs from the lower-frequency to the higher-frequency level, pumped by the hole,
+# which loses ω̃ and m̃ per quantum (gw_horizon_bh!). -1 restores the earlier floor (net rate >= 0: such a
+# transition is switched off). Set with ENV NL_GW_HFRAC_FLOOR before loading, or GW_HFRAC_FLOOR[] = x.
+# See GW_note/horizon_tide_note.tex.
+if !@isdefined(GW_HFRAC_FLOOR)
+    const GW_HFRAC_FLOOR = Ref(parse(Float64, get(ENV, "NL_GW_HFRAC_FLOOR", "-Inf")))
+end
+
+"""Horizon fraction h = Γ_H/Γ_∞ from interpolant k (0 -> 0), bounded below by GW_HFRAC_FLOOR[] (default: unbounded)."""
+@inline gw_hfrac(c::GWCache, k::Int, α, a) = k == 0 ? 0.0 : max(GW_HFRAC_FLOOR[], GW_HFRAC_SCALE * sinh(gw_interp2(c.itp[k], α, a)))
+
+"""Rate of annihilation channel k to infinity at (α, a), per u_i u_j (NR coefficient times the tabulated Kerr ratio)."""
+@inline gw_ann_rate_inf(c::GWCache, k, α, a) = c.ann_C[k] * α^c.ann_p[k] * gw_rel_factor(c, c.ann_itp[k], α, a)
+
+"""Rate of transition pair t to infinity at (α, a) with |δ| = ad, per u_i u_j (NR multipoles times the Kerr ratio)."""
+@inline gw_tr_rate_inf(c::GWCache, t, α, a, ad) = gw_transition_rate_cached(c, t, α, ad) * gw_rel_factor(c, c.tr_itp[t], α, a)
+
+"""Total rate (infinity + horizon) of annihilation channel k: what depletes the levels."""
+@inline gw_ann_rate(c::GWCache, k, α, a) = gw_ann_rate_inf(c, k, α, a) * (1 + gw_hfrac(c, c.ann_hitp[k], α, a))
+
+"""Total rate (infinity + horizon) of transition pair t: what moves quanta between the levels."""
+@inline gw_tr_rate(c::GWCache, t, α, a, ad) = gw_tr_rate_inf(c, t, α, a, ad) * (1 + gw_hfrac(c, c.tr_hitp[t], α, a))
+
+"""
+    gw_horizon_bh!(du, X, c, α, a, xfl, spinI, massI) -> du
+
+Horizon part of the GW emission for the BH rows, in the raw units of the solver's
+superradiance terms (number rate per τ in u units, times the energy per quantum in units of
+μ for the mass row and times the azimuthal number for the spin row): for every channel with
+a horizon fraction h, the hole gains energy ω̃ h Γ_∞ u_a u_b and angular momentum
+m̃ h Γ_∞ u_a u_b (ω̃ = ω_a + ω_b or ω_hi - ω_lo in units of μ, m̃ the graviton's m; both
+negative for superradiant gravitons, where the hole feeds the radiation). Needs the cache
+frequencies at (α, a) (gw_set_omegas_cache!). No-op without horizon tables.
+"""
+function gw_horizon_bh!(du, X, c::GWCache, α, a, xfl::Float64, spinI::Int, massI::Int)
+    gw_has_horizon(c) || return du
+    @inbounds for k in eachindex(c.ann_i)
+        h = c.ann_hitp[k]
+        h == 0 && continue
+        i, j = c.ann_i[k], c.ann_j[k]
+        (X[i] <= xfl && X[j] <= xfl) && continue
+        rH = gw_ann_rate_inf(c, k, α, a) * gw_hfrac(c, h, α, a) * X[i] * X[j]
+        wi, wj = gw_pair_omegas(c, i, j, true)
+        du[massI] += (wi + wj) * rH
+        du[spinI] += (c.m[i] + c.m[j]) * rH
+    end
+    @inbounds for t in eachindex(c.tr_i)
+        h = c.tr_hitp[t]
+        h == 0 && continue
+        i, j = c.tr_i[t], c.tr_j[t]
+        (X[i] <= xfl && X[j] <= xfl) && continue
+        δ = gw_pair_delta(c, i, j)
+        δ == 0 && continue
+        hi, lo = δ > 0 ? (i, j) : (j, i)
+        rH = gw_tr_rate_inf(c, t, α, a, abs(δ)) * gw_hfrac(c, h, α, a) * X[i] * X[j]
+        du[massI] += abs(δ) * rH
+        du[spinI] += (c.m[hi] - c.m[lo]) * rH
+    end
+    return du
 end
 
 @inline function gw_transition_rate_cached(c::GWCache, t, α, ad)
@@ -690,20 +876,18 @@ current α = G M mu and BH spin a. Mass and spin are untouched: the gravitons
 leave the system.
 """
 function gw_rhs!(du, u, c::GWCache, α, a)
-    @inbounds for i in eachindex(c.n)
-        c.ω[i] = gw_omega(c.n[i], c.l[i], c.m[i], α, a)
-    end
+    gw_set_omegas_cache!(c, α, a)
     @inbounds for k in eachindex(c.ann_i)
         i, j = c.ann_i[k], c.ann_j[k]
-        r = c.ann_C[k] * α^c.ann_p[k] * u[i] * u[j]
+        r = gw_ann_rate(c, k, α, a) * u[i] * u[j]
         du[i] -= r
         du[j] -= r        # i == j: -2r, two quanta per annihilation
     end
     @inbounds for t in eachindex(c.tr_i)
         i, j = c.tr_i[t], c.tr_j[t]
-        δ = c.ω[i] - c.ω[j]
+        δ = gw_pair_delta(c, i, j)
         δ == 0 && continue
-        r = gw_transition_rate_cached(c, t, α, abs(δ)) * u[i] * u[j]
+        r = gw_tr_rate(c, t, α, a, abs(δ)) * u[i] * u[j]
         hi, lo = δ > 0 ? (i, j) : (j, i)
         du[hi] -= r
         du[lo] += r
@@ -719,14 +903,15 @@ Instantaneous rates for inspection / signal modelling. ann: (i, j, rate) with
 (frequencies in units of mu, from gw_omega).
 """
 function gw_channel_rates(c::GWCache, α, a)
-    ann = [(c.ann_i[k], c.ann_j[k], c.ann_C[k] * α^c.ann_p[k]) for k in eachindex(c.ann_i)]
+    gw_set_omegas_cache!(c, α, a)
+    ann = [(c.ann_i[k], c.ann_j[k], gw_ann_rate(c, k, α, a)) for k in eachindex(c.ann_i)]
     tr = Tuple{Int,Int,Float64}[]
     for t in eachindex(c.tr_i)
         i, j = c.tr_i[t], c.tr_j[t]
-        δ = gw_omega(c.n[i], c.l[i], c.m[i], α, a) - gw_omega(c.n[j], c.l[j], c.m[j], α, a)
+        δ = gw_pair_delta(c, i, j)
         δ == 0 && continue
         hi, lo = δ > 0 ? (i, j) : (j, i)
-        push!(tr, (hi, lo, gw_transition_rate_cached(c, t, α, abs(δ))))
+        push!(tr, (hi, lo, gw_tr_rate(c, t, α, a, abs(δ))))
     end
     return ann, tr
 end
@@ -784,7 +969,7 @@ function gw_lines(timeT, states, modes, spin, mass, mu, Nmax; d_kpc=1.0, rel_flo
     for k in gw_time_samples(timeT, n_peak_samples)
         α = gw_set_omegas!(ω, c, mass[k], spin[k], mu)
         for q in 1:nlines
-            peak[q] = max(peak[q], gw_line_at(c, q, ω, α, states, k, M0, mu)[2])
+            peak[q] = max(peak[q], gw_line_at(c, q, α, spin[k], states, k, M0, mu)[2])
         end
     end
     lines = NamedTuple[]
@@ -814,9 +999,11 @@ function gw_lines(timeT, states, modes, spin, mass, mu, Nmax; d_kpc=1.0, rel_flo
             ωs[Iset] .+= gw_level_shifts(KG, X, states[Jset, k], α; fa=fa)
         end
         for (row, q) in enumerate(keep)
-            F0, Pw[row, col] = gw_line_at(c, q, ω, α, states, k, M0, mu)
+            F0, Pw[row, col] = gw_line_at(c, q, α, spin[k], states, k, M0, mu)
             i, j = lvl(q)
-            F[row, col] = (q <= na ? ωs[i] + ωs[j] : abs(ωs[i] - ωs[j])) * mu / hbar / (2π)
+            wi, wj = gw_pair_omegas(c, i, j, q <= na)      # Leaver frequencies where tabulated (gw_model=:rel)
+            wi += ωs[i] - ω[i]; wj += ωs[j] - ω[j]          # cloud shifts
+            F[row, col] = (q <= na ? wi + wj : abs(wi - wj)) * mu / hbar / (2π)
             dF[row, col] = F[row, col] - F0
         end
     end
@@ -824,7 +1011,7 @@ function gw_lines(timeT, states, modes, spin, mass, mu, Nmax; d_kpc=1.0, rel_flo
     for (row, q) in enumerate(keep)
         isann = q <= na
         ia, ib = isann ? (c.ann_i[q], c.ann_j[q]) : (c.tr_i[q - na], c.tr_j[q - na])
-        if !isann && ω[ia] < ω[ib]      # label transitions hi -> lo (at the last output time)
+        if !isann && gw_pair_delta(c, ia, ib) < 0      # label transitions hi -> lo (at the last output time)
             ia, ib = ib, ia
         end
         f = F[row, :]
@@ -845,26 +1032,32 @@ function gw_time_samples(timeT, n)
     return unique(vcat(1, ks, length(timeT)))
 end
 
+# Sets the cache frequencies at (M, a) and fills ω with the per-level frequency used for the lines
+# (the tabulated Leaver value where the cache has one, else gw_omega); returns α.
 function gw_set_omegas!(ω, c::GWCache, M, a, mu)
     α = GNew * M * mu
+    gw_set_omegas_cache!(c, α, a)
     @inbounds for i in eachindex(c.n)
-        ω[i] = gw_omega(c.n[i], c.l[i], c.m[i], α, a)
+        ω[i] = (c.rel && !isnan(c.ωrel[i])) ? c.ωrel[i] : c.ω[i]
     end
     return α
 end
 
-# (f [Hz], P [erg/s]) of line q at output time index k; q <= n_ann: annihilation.
-function gw_line_at(c::GWCache, q, ω, α, states, k, M0, mu)
+# (f [Hz], P [erg/s]) of line q at output time index k; q <= n_ann: annihilation. The cache
+# frequencies must be current (gw_set_omegas! at the same (α, a)). The power is the flux to
+# infinity only (the horizon part never reaches a detector).
+function gw_line_at(c::GWCache, q, α, a, states, k, M0, mu)
     na = length(c.ann_i)
     if q <= na
         i, j = c.ann_i[q], c.ann_j[q]
-        wgw = ω[i] + ω[j]
-        r = c.ann_C[q] * α^c.ann_p[q]
+        wi, wj = gw_pair_omegas(c, i, j, true)
+        wgw = wi + wj
+        r = gw_ann_rate_inf(c, q, α, a)
     else
         t = q - na
         i, j = c.tr_i[t], c.tr_j[t]
-        wgw = abs(ω[i] - ω[j])
-        r = wgw == 0 ? 0.0 : gw_transition_rate_cached(c, t, α, wgw)
+        wgw = abs(gw_pair_delta(c, i, j))
+        r = wgw == 0 ? 0.0 : gw_tr_rate_inf(c, t, α, a, wgw)
     end
     events_per_s = r * states[i, k] * states[j, k] * (GNew * M0^2 * M_to_eV) * mu / hbar
     return wgw * mu / hbar / (2π), events_per_s * wgw * mu * GW_ERG_PER_EV

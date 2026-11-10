@@ -165,7 +165,10 @@ evalR(R, r) = sum(c * r^p for (p, c) in zip(R.pows, R.coefs)) * exp(-R.beta * r)
         k = findfirst(k -> c.ann_i[k] == i211 && c.ann_j[k] == i211, eachindex(c.ann_i))
         @test c.ann_p[k] == 14
         @test gw_build_cache(5, modes, mu, M, a; gw_model=:off).ann_i == Int[]
-        @test_throws ErrorException gw_build_cache(5, modes, mu, M, a; gw_model=:rel)
+        # :rel needs the Teukolsky tables (test_gw_kerr_tables.jl); without them it must fail loudly
+        withenv("NL_GW_KERR_DIR" => mktempdir()) do
+            @test_throws ErrorException gw_build_cache(5, modes, mu, M, a; gw_model=:rel)
+        end
     end
 
     @testset "cloud self-gravity / self-interaction level shifts" begin
