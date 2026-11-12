@@ -1,0 +1,10 @@
+=== a=0.95 (Lextra = 4, drho = 0.03)
+modes: w1 = 0.199549146770+1.73e-14i (res 3.8e-14)   w3 = 0.198959055136+1.60e-09i (res 1.7e-14)
+  pinned ([:d, :t]): assemble+factor 31.9s, frame fields+solves 37.1s;  struts tau0 = ComplexF64[6.99e-8 - 4.32e-8im, -1.46e-18 - 1.12e-17im]  a = ComplexF64[7.254e-6 - 8.74e-6im, 2.396e-16 + 3.06e-16im]  cond(M) = 10.1
+  alpha=0.2000 l4=3: A_GR/A_N = -0.628798-0.004483i (|.|^2 = 0.39541)   A_NR/A_N = -0.552158-0.000004i (|.|^2 = 0.30488)   A_GR/A_NR |.|^2 = 1.29693   C_N = 7.8940e+08
+  time 121.3
+=== a=0.95 (Lextra = 4, drho = 0.025)
+modes: w1 = 0.199549146770+1.73e-14i (res 3.8e-14)   w3 = 0.198959055136+1.60e-09i (res 1.7e-14)
+  pinned ([:d, :t]): assemble+factor 36.5s, frame fields+solves 40.8s;  struts tau0 = ComplexF64[6.87e-8 - 2.95e-9im, 2.32e-18 - 2.9e-17im]  a = ComplexF64[4.12e-5 + 4.772e-5im, 2.03e-14 + 1.755e-14im]  cond(M) = 7.26
+  alpha=0.2000 l4=3: A_GR/A_N = -0.606604-0.039926i (|.|^2 = 0.36956)   A_NR/A_N = -0.552158-0.000004i (|.|^2 = 0.30488)   A_GR/A_NR |.|^2 = 1.21216   C_N = 7.8940e+08
+  time 101.6

@@ -1,0 +1,52 @@
+=== 322 211 Inf 0.05 0.0 0.03 4
+modes: w1 = 0.049993048887-1.36e-21i (res 4.1e-12)   w3 = 0.049984333245-9.30e-15i (res 1.3e-13)
+  pinned ([:d]): assemble+factor 15.8s, frame fields+solves 7.7s;  struts tau0 = ComplexF64[-6.16e-12 - 6.2e-13im]  a = ComplexF64[1.749e-9 + 5.248e-10im]  cond(M) = 1.0
+  alpha=0.0500 l4=3: A_GR/A_N = -0.601289-0.005208i (|.|^2 = 0.36158)   A_NR/A_N = -0.586571+0.000000i (|.|^2 = 0.34407)   A_GR/A_NR |.|^2 = 1.05089   C_N = 2.2737e+11
+=== 322 211 Inf 0.1 0.0 0.03 4
+modes: w1 = 0.099944229750-1.07e-18i (res 5.2e-12)   w3 = 0.099873638769-1.34e-11i (res 1.1e-13)
+  pinned ([:d]): assemble+factor 11.3s, frame fields+solves 6.1s;  struts tau0 = ComplexF64[-3.93e-10 - 8.07e-11im]  a = ComplexF64[1.036e-7 + 6.773e-8im]  cond(M) = 1.0
+  alpha=0.1000 l4=3: A_GR/A_N = -0.613859-0.001105i (|.|^2 = 0.37682)   A_NR/A_N = -0.579790+0.000000i (|.|^2 = 0.33616)   A_GR/A_NR |.|^2 = 1.12098   C_N = 1.3853e+10
+=== 322 211 Inf 0.05 0.95 0.03 8
+modes: w1 = 0.049993049034-3.10e-21i (res 1.0e-13)   w3 = 0.049984334494+2.24e-14i (res 2.4e-14)
+  pinned ([:d, :t]): assemble+factor 56.9s, frame fields+solves 50.6s;  struts tau0 = ComplexF64[NaN + NaN*im, NaN + NaN*im]  a = ComplexF64[NaN + NaN*im, NaN + NaN*im]  cond(M) = 10.9
+FAILED: MethodError: reducing over an empty collection is not allowed; consider supplying `init` to the reducer
+
+Stacktrace:
+  [1] mapreduce_empty(#unused#::typeof(identity), op::Function, T::Type)
+    @ Base ./reduce.jl:367
+  [2] reduce_empty(op::Base.MappingRF{typeof(identity), typeof(max)}, #unused#::Type{Float64})
+    @ Base ./reduce.jl:356
+  [3] reduce_empty_iter
+    @ ./reduce.jl:379 [inlined]
+  [4] mapreduce_empty_iter(f::Function, op::Function, itr::Vector{Float64}, ItrEltype::Base.HasEltype)
+    @ Base ./reduce.jl:375
+  [5] _mapreduce(f::typeof(identity), op::typeof(max), #unused#::IndexLinear, A::Vector{Float64})
+    @ Base ./reduce.jl:427
+  [6] _mapreduce_dim
+    @ ./reducedim.jl:365 [inlined]
+  [7] #mapreduce#765
+    @ ./reducedim.jl:357 [inlined]
+  [8] mapreduce
+    @ ./reducedim.jl:357 [inlined]
+  [9] #_maximum#783
+    @ ./reducedim.jl:999 [inlined]
+ [10] _maximum
+    @ ./reducedim.jl:999 [inlined]
+ [11] #_maximum#782
+    @ ./reducedim.jl:998 [inlined]
+ [12] _maximum
+    @ ./reducedim.jl:998 [inlined]
+ [13] #maximum#780
+    @ ./reducedim.jl:994 [inlined]
+ [14] maximum(a::Vector{Float64})
+    @ Base ./reducedim.jl:994
+ [15] run_channel(st1::Tuple{Int64, Int64, Int64}, st3::Tuple{Int64, Int64, Int64}, to_inf::Bool, alph::Float64; a::Float64, Lextra::Int64, drho::Float64, rpts::Int64, verbose::Bool, kap0::Float64, kappow::Int64, method::Symbol, R1fac::Float64, R2fac::Float64, frame_scale::Float64, nstrut::Int64, setup_kw::Base.Pairs{Symbol, Int64, Tuple{Symbol}, NamedTuple{(:ord,), Tuple{Int64}}})
+    @ Main ~/Dropbox/Axion_SR_relsg/src/ongoing_tests/sg_relativistic/run_exchange.jl:56
+ [16] top-level scope
+    @ ~/Dropbox/Axion_SR_relsg/src/ongoing_tests/sg_relativistic/scan.jl:14
+ [17] include(mod::Module, _path::String)
+    @ Base ./Base.jl:419
+ [18] exec_options(opts::Base.JLOptions)
+    @ Base ./client.jl:303
+ [19] _start()
+    @ Base ./client.jl:522

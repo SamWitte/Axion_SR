@@ -1,0 +1,8 @@
+=== 322 211 Inf 0.05 0.0 0.02 4
+modes: w1 = 0.049993048887-1.36e-21i (res 4.1e-12)   w3 = 0.049984333245-9.30e-15i (res 1.3e-13)
+  pinned ([:d]): assemble+factor 25.4s, frame fields+solves 12.6s;  struts tau0 = ComplexF64[-4.32e-12 - 4.35e-13im]  a = ComplexF64[-1.359e-7 - 3.298e-8im]  cond(M) = 1.0
+  alpha=0.0500 l4=3: A_GR/A_N = -0.596343+0.024552i (|.|^2 = 0.35623)   A_NR/A_N = -0.586571+0.000000i (|.|^2 = 0.34407)   A_GR/A_NR |.|^2 = 1.03535   C_N = 2.2737e+11
+=== 322 211 Inf 0.1 0.0 0.02 4
+modes: w1 = 0.099944229750-1.07e-18i (res 5.2e-12)   w3 = 0.099873638769-1.34e-11i (res 1.1e-13)
+  pinned ([:d]): assemble+factor 19.3s, frame fields+solves 10.7s;  struts tau0 = ComplexF64[-2.76e-10 - 5.65e-11im]  a = ComplexF64[-8.565e-7 - 4.103e-7im]  cond(M) = 1.0
+  alpha=0.1000 l4=3: A_GR/A_N = -0.604516+0.001158i (|.|^2 = 0.36544)   A_NR/A_N = -0.579790+0.000000i (|.|^2 = 0.33616)   A_GR/A_NR |.|^2 = 1.08712   C_N = 1.3853e+10

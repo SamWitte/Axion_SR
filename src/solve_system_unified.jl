@@ -1066,7 +1066,6 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # since nothing else is written until the run ends.
     progress_sec = parse(Float64, get(ENV, "NL_PROGRESS_SEC", "3600"))
     next_progress_ms = progress_sec * 1e3
-
     function time_limit_callback(u, t, integrator)
         elapsed_time = Dates.now() - start_time
         if Dates.value(elapsed_time) > next_progress_ms
