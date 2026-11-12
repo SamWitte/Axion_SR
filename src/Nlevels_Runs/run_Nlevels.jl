@@ -146,9 +146,19 @@ function parse_commandline()
             default  = ""
             help     = "Truncate the basis (approximate): \"lm\" keeps l == m levels, optionally plus a list, " *
                        "e.g. \"lm,8-7-6,8-7-5\" (pair with a matching --rate_input). Empty = full basis"
+        "--dlnM_sc"
+            arg_type = Float64
+            default  = 0.05
+            help     = "Spacing in ln M of the mass grid on which the scattering rates are tabulated under track_alpha " *
+                       "(see solve_system track_alpha_dlnM); use ~0.002 to resolve an SI-SG cancellation in f_a"
         "--resume"
             action   = :store_true
             help     = "Continue from last row of existing Time_/States_/Spin_/MassBH_ .dat"
+        "--n_times"
+            arg_type = Int
+            default  = 1000000
+            help     = "Number of log-spaced output times in (t_max*1e-9, t_max); transients are still resolved by the " *
+                       "save_factor / save_dlna adaptive saves. 1e6 (default) writes ~14 GB per Nmax 15 run, 2e4 ~0.3 GB"
     end
     return parse_args(s)
 end
@@ -353,6 +363,7 @@ isempty(keep_spec) || println("  keep_levels = ", keep_spec)
 isempty(parsed["gw_table_nmax"]) || println("  gw_table_nmax = ", parsed["gw_table_nmax"])
 println("  regime_split = ", parsed["regime_split"])
 println("  sr_interp = ", sr_interp)
+println("  n_times = ", parsed["n_times"])
 println("  self_grav = ", self_grav, self_grav ? "  (si_sign = $(si_sign))" : "")
 println("  rate_input = ", rate_input === nothing ? "default (load_rate_input_Nmax_$(Nmax).txt)" : rate_input)
 println("  solver  = ", solver, parsed["analytic_jac"] ? " (analytic Jacobian)" : "",
@@ -384,7 +395,7 @@ mkpath(outdir)
 # Fixed numerical parameters -- taken from single_BH.jl
 impose_low_cut   = 1e-100
 return_all_info  = true
-n_times          = 1000000
+n_times          = parsed["n_times"]
 eq_threshold     = 1e-100
 stop_on_a        = 0.0
 abstol           = 1e-30
@@ -444,6 +455,7 @@ timeT, StatesOut, modes_out, spin, massB = @time solve_system(
     f_edd           = f_edd,
     acc_eta         = acc_eta,
     track_alpha     = !parsed["no_track_alpha"],
+    track_alpha_dlnM = (0.0025, parsed["dlnM_sc"]),
     save_factor     = parsed["save_factor"],
     save_dlna       = parsed["save_dlna"],
     self_grav       = self_grav,
