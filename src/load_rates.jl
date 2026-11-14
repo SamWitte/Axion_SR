@@ -60,6 +60,7 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
     alph = mu * GNew * M
     rP = 1 + sqrt.(1 - a^2)
     faFac = (M_pl ./ f_a)^4
+    si_from_sg = get(ENV, "NL_SI_FROM_SG", "0") == "1"
 
     rate_file = rate_input_path(Nmax; lm_only=lm_only, rate_input=rate_input)
     rate_list = readdlm(rate_file)
@@ -274,10 +275,25 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
                     g_si = 10 .^itp(log10.(alph))
                     rate_out = g_si .* faFac
                 end
-                if sg !== nothing && size(sg, 1) >= 2 && alph .<= maximum(sg[:, 1])
+                # A regime-split channel has the same SG table under both labels (each row is computed in the regime
+                # the energies give at that alpha), so the SG part follows the same mask as the SI part.
+                sg_in_regime = split_ch === nothing || !regime_mask ||
+                               ((s4 == split_ch[2]) ? (alph < split_ch[1]) : (alph >= split_ch[1]))
+                if sg !== nothing && size(sg, 1) >= 2 && alph .<= maximum(sg[:, 1]) && sg_in_regime
                     itp_sg = LinearInterpolation(log10.(sg[:, 1]), log10.(sg[:, 3]), extrapolation_bc=Line())
                     itp_ka = LinearInterpolation(log10.(sg[:, 1]), sg[:, 5], extrapolation_bc=Flat())
                     g_sg = 10 .^itp_sg(log10.(alph))
+                    # NL_SI_FROM_SG=1: take Gamma_SI from the SG table too (its second column: same run, alpha grid
+                    # and step as Gamma_SG and kappa) wherever alpha lies inside that table, instead of from the
+                    # separate *_LvrHc_.dat table.
+                    if si_from_sg && alph >= minimum(sg[:, 1]) * (1 - 1e-9)
+                        pos = sg[:, 2] .> 0.0
+                        if count(pos) >= 2
+                            itp_si2 = LinearInterpolation(log10.(sg[pos, 1]), log10.(sg[pos, 2]), extrapolation_bc=Line())
+                            g_si = 10 .^itp_si2(log10.(alph))
+                            rate_out = g_si .* faFac
+                        end
+                    end
                     rate_out += si_sign * 2 * itp_ka(log10.(alph)) * sqrt(g_si * g_sg) * sqrt(faFac) + g_sg
                 end
                 if s4 == "BH"
