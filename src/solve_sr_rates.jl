@@ -12,6 +12,7 @@ using SpinWeightedSpheroidalHarmonics
 using NPZ
 using LinearAlgebra
 using WignerSymbols
+import Serialization
 # NOTE: Core/constants.jl should be included by the parent file
 include("heunc.jl")
 include("state_utils.jl")
@@ -1639,8 +1640,42 @@ function sg_radial_source(tr, Za_prof, ma, rf_a, Z4_prof, m4, r, a)
     return rf_a .* T
 end
 
-function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, debug=false, Ntot_safe=10000,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=500000, eps_fac=1e-10, NON_REL=false, h_mve=1, to_inf=false, rmaxT=100, prec=200, cvg_acc=1e-4, NptsCh=60, iterC=40, Lcheb=4, run_leaver=false, der_acc=1e-20, use_heunc=false, pre_erg1=nothing, pre_erg2=nothing, pre_erg3=nothing, BHlmax=0, self_grav=false, sg_test_contact=false, sg_recoil=false, ang_method=:mc)
+# Optional caches for gf_radial (set by Compute_sg_points.jl). The eigenvalue search find_im_part (~4.6 s per level
+# and alpha, three calls per rate point) and the relativistic radial solve of a level depend only on the level and on
+# (mu, M, a), so task lists that revisit the same levels can reuse them. GF_CACHE_DIR[] = "" (the default) switches
+# both off and leaves gf_radial exactly as before; otherwise the results are kept in memory and on disk in that
+# directory (one small file per level, alpha and kind), shared between processes.
+const GF_CACHE_DIR = Ref("")
+const GF_CACHE_MEM = Dict{Any, Any}()
+function gf_cached(f, kind::String, key)
+    dir = GF_CACHE_DIR[]
+    isempty(dir) && return f()
+    k = (kind, key)
+    haskey(GF_CACHE_MEM, k) && return GF_CACHE_MEM[k]
+    fn = joinpath(dir, kind, join(repr.(key), "_") * ".jls")
+    if isfile(fn)
+        val = try Serialization.deserialize(fn) catch; nothing end
+        if val !== nothing
+            GF_CACHE_MEM[k] = val
+            return val
+        end
+    end
+    val = f()
+    GF_CACHE_MEM[k] = val
+    try
+        mkpath(dirname(fn))
+        tmp = fn * "." * string(getpid()) * ".tmp"
+        Serialization.serialize(tmp, val)
+        mv(tmp, fn; force=true)
+    catch
+    end
+    return val
+end
 
+function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, debug=false, Ntot_safe=10000,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=500000, eps_fac=1e-10, NON_REL=false, h_mve=1, to_inf=false, rmaxT=100, prec=200, cvg_acc=1e-4, NptsCh=60, iterC=40, Lcheb=4, run_leaver=false, der_acc=1e-20, use_heunc=false, pre_erg1=nothing, pre_erg2=nothing, pre_erg3=nothing, BHlmax=0, self_grav=false, sg_test_contact=false, sg_recoil=false, ang_method=:mc, NR_states=nothing)
+
+    # NR_states = (b1, b2, b3): hydrogenic (true) or relativistic (false) bound state per level; default NON_REL for all
+    nr_st = NR_states === nothing ? (NON_REL, NON_REL, NON_REL) : NR_states
     
     rp = BigFloat(1.0 .+ sqrt.(1.0 .- a.^2))
     rmm = BigFloat(1.0 .- sqrt.(1.0 .- a.^2))
@@ -1657,9 +1692,15 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     erg_3G = 0.0
     ### quick check if to inf to not!
     try
-        erg_1G, erg1I = find_im_part(mu, M, a, n1, l1, m1; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
-        erg_2G, erg2I = find_im_part(mu, M, a, n2, l2, m2; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
-        erg_3G, erg3I = find_im_part(mu, M, a, n3, l3, m3; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
+        erg_1G, erg1I = gf_cached("erg", (n1, l1, m1, mu, M, a, Ntot_safe)) do
+            find_im_part(mu, M, a, n1, l1, m1; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
+        end
+        erg_2G, erg2I = gf_cached("erg", (n2, l2, m2, mu, M, a, Ntot_safe)) do
+            find_im_part(mu, M, a, n2, l2, m2; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
+        end
+        erg_3G, erg3I = gf_cached("erg", (n3, l3, m3, mu, M, a, Ntot_safe)) do
+            find_im_part(mu, M, a, n3, l3, m3; Ntot_force=Ntot_safe, for_s_rates=true, return_both=true)
+        end
 
         if erg_1G == 0 || erg_2G == 0 || erg_3G == 0
             erg_1G = ergL(n1, l1, m1, mu, M, a; full=true) .* GNew .* M
@@ -1739,13 +1780,16 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     
     # simplify_radial = check_slv_rad(alph, m1)
     simplify_radial = false
-    if NON_REL||simplify_radial
+    if nr_st[1]||simplify_radial
         rf_1 = radial_bound_NR(n1, l1, m1, mu, M, rlist)
         erg_1 = erg_1G
     else
         try
             if run_leaver
-                rl, r1, erg_1 = solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe, use_heunc=use_heunc, debug=debug, pre_compute_erg=pre_erg1)
+                rl, r1, erg_1 = pre_erg1 !== nothing ? solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe, use_heunc=use_heunc, debug=debug, pre_compute_erg=pre_erg1) :
+                    gf_cached("wf", (n1, l1, m1, mu, M, a, Npts_Bnd, Ntot_safe, use_heunc)) do
+                        solve_radial(mu, M, a, n1, l1, m1; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe, use_heunc=use_heunc, debug=debug, pre_compute_erg=nothing)
+                    end
                 erg_1G = erg_1
             else
                 wR, wI, rl, r1 = eigensys_Cheby(M, a, mu, n1, l1, m1, return_wf=true, Npoints=NptsCh, Iter=iterC, L=Lcheb, cvg_acc=cvg_acc, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=false, der_acc=der_acc, debug=debug)
@@ -1773,7 +1817,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     
     # simplify_radial = check_slv_rad(alph, m2)
     simplify_radial = false
-    if NON_REL||simplify_radial
+    if nr_st[2]||simplify_radial
         rf_2 = radial_bound_NR(n2, l2, m2, mu, M, rlist)
         erg_2 = erg_2G
     else
@@ -1783,7 +1827,10 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         else
             try
                 if run_leaver
-                    rl, r2, erg_2 = solve_radial(mu, M, a, n2, l2, m2; rpts=Npts_Bnd,  return_erg=true, Ntot_safe=Ntot_safe, use_heunc=use_heunc, debug=debug, pre_compute_erg=pre_erg2)
+                    rl, r2, erg_2 = pre_erg2 !== nothing ? solve_radial(mu, M, a, n2, l2, m2; rpts=Npts_Bnd,  return_erg=true, Ntot_safe=Ntot_safe, use_heunc=use_heunc, debug=debug, pre_compute_erg=pre_erg2) :
+                    gf_cached("wf", (n2, l2, m2, mu, M, a, Npts_Bnd, Ntot_safe, use_heunc)) do
+                        solve_radial(mu, M, a, n2, l2, m2; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe, use_heunc=use_heunc, debug=debug, pre_compute_erg=nothing)
+                    end
                     erg_2G = erg_2
                 else
                     wR, wI, rl, r2 = eigensys_Cheby(M, a, mu, n2, l2, m2, return_wf=true, Npoints=NptsCh, Iter=iterC, cvg_acc=cvg_acc, L=Lcheb,  Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=false, der_acc=der_acc, debug=debug)
@@ -1809,13 +1856,16 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     
     # simplify_radial = check_slv_rad(alph, m3)
     simplify_radial = false
-    if NON_REL||simplify_radial
+    if nr_st[3]||simplify_radial
         rf_3 = radial_bound_NR(n3, l3, m3, mu, M, rlist)
         erg_3 = erg_3G
     else
         try
         if run_leaver
-            rl, r3, erg_3 = solve_radial(mu, M, a, n3, l3, m3; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe, use_heunc=use_heunc, debug=debug, pre_compute_erg=pre_erg3)
+            rl, r3, erg_3 = pre_erg3 !== nothing ? solve_radial(mu, M, a, n3, l3, m3; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe, use_heunc=use_heunc, debug=debug, pre_compute_erg=pre_erg3) :
+                    gf_cached("wf", (n3, l3, m3, mu, M, a, Npts_Bnd, Ntot_safe, use_heunc)) do
+                        solve_radial(mu, M, a, n3, l3, m3; rpts=Npts_Bnd, return_erg=true, Ntot_safe=Ntot_safe, use_heunc=use_heunc, debug=debug, pre_compute_erg=nothing)
+                    end
             erg_3G = erg_3
         else
             wR, wI, rl, r3 = eigensys_Cheby(M, a, mu, n3, l3, m3, return_wf=true, Npoints=NptsCh, Iter=iterC, cvg_acc=cvg_acc, L=Lcheb, Npts_r=Npts_Bnd, return_nu=false, prec=prec, sfty_run=false, der_acc=der_acc, debug=debug)
