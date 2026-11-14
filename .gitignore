@@ -8,6 +8,8 @@ src/rate_sve/Imag_*.dat
 # large GW rate tables: rebuild with `julia src/scripts/build_gw_tables.jl 15 18`
 src/rate_sve/gw_nr_rates_Nmax_15.txt
 src/rate_sve/gw_nr_rates_Nmax_18.txt
+# GW table of the extended SG level list: rebuild with src/scripts/sg_ext/build_gw_nr_custom.jl
+src/rate_sve/gw_nr_rates_Nmax_sgx*.txt
 
 # LaTeX build files
 GW_note/*.aux
