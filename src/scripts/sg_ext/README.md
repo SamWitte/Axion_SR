@@ -34,7 +34,13 @@ Tables (unzip in `src/rate_sve/`, after `Rates_master_Nmax18_LvrHc.zip` and `rat
   rows below are the new ones. A regime-split channel has the same table under both labels.
 - `rates_si_ext.zip`: `*_LvrHc_.dat` (alpha, Gamma_SI) for the channels that have no table in the master archive.
 
-New tables stop at alpha = 0.28. Channels whose rates are zero on this grid have no SG table.
+- `rates_ext_update_20261116.zip`: 499 SG and 138 SI tables that are new or changed since the two archives above (the
+  channels finished after 2026-11-14). Unzip it last.
+
+New tables stop at alpha = 0.28. Channels whose rates are zero on this grid have no SG table (179, for example
+(n,16,16) pairs to (n',8,8)). 128 channels between the (n,10,10) and (n,20,20) towers at n > 20 are incomplete: their
+bound fourth quanta need more than 20 GB per process at low alpha, and two attempts ran out of memory. `sgx_channels.txt`
+lists all 56,879 channels; one without an SG table uses its SI table only.
 
 ## Using the tables
 
