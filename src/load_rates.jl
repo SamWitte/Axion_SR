@@ -46,6 +46,8 @@ end
 #     Gamma(f_a) = Gamma_SI (M_pl/f_a)^4 + si_sign * 2 kappa sqrt(Gamma_SI Gamma_SG) (M_pl/f_a)^2 + Gamma_SG,
 # with kappa = cos(relative phase) = +-1 tabulated per channel and si_sign = +1 for an attractive
 # quartic (axion cosine potential), -1 for a repulsive one. Only available with non_rel = false.
+# NL_SI_FROM_SG=1 takes Gamma_SI from the SG table inside that table's alpha range; with self_grav = false this gives
+# a self-interaction-only run with exactly the Gamma_SI of the corresponding self_grav = true run.
 #
 # rate_input: custom channel list (file name in rate_sve/ or absolute path, same format as
 # load_rate_input_Nmax_X.txt, e.g. written by rate_sve/gen_custom_input.py) used instead of the default
@@ -61,6 +63,7 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
     rP = 1 + sqrt.(1 - a^2)
     faFac = (M_pl ./ f_a)^4
     si_from_sg = get(ENV, "NL_SI_FROM_SG", "0") == "1"
+    sg_overlay = get(ENV, "NL_SG_OVERLAY", "")
 
     rate_file = rate_input_path(Nmax; lm_only=lm_only, rate_input=rate_input)
     rate_list = readdlm(rate_file)
@@ -244,14 +247,20 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
             end
             split_ch = get(split_tab, s1 * "_" * s2 * "_" * s3, nothing)
             sg = nothing
-            if self_grav
+            if self_grav || si_from_sg     # NL_SI_FROM_SG=1 without self_grav: the SG table is read for its Gamma_SI column only
                 fileSG = dirN * s1 * "_" * s2 * "_" * s3 * "_" * s4 * ftag * "SG.dat"
+                # NL_SG_OVERLAY=<dir>: a table of the same name in that directory replaces the one in rate_sve
+                # (e.g. the fully relativistic self-gravity tables of ongoing_tests/sg_relativistic).
+                if !isempty(sg_overlay)
+                    alt = joinpath(sg_overlay, basename(fileSG))
+                    isfile(alt) && (fileSG = alt)
+                end
                 sg = get!(LVR_FILE_CACHE, fileSG) do
                     isfile(fileSG) || return nothing
                     d = open(readdlm, fileSG)        # alpha, Gamma_SI, Gamma_SG, Gamma_x, kappa
                     d[d[:, 3] .> 0.0, :]
                 end
-                sg === nothing && (n_sg_missing += 1)
+                self_grav && sg === nothing && (n_sg_missing += 1)
             end
             if data !== nothing || sg !== nothing
 
@@ -294,7 +303,7 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
                             rate_out = g_si .* faFac
                         end
                     end
-                    rate_out += si_sign * 2 * itp_ka(log10.(alph)) * sqrt(g_si * g_sg) * sqrt(faFac) + g_sg
+                    self_grav && (rate_out += si_sign * 2 * itp_ka(log10.(alph)) * sqrt(g_si * g_sg) * sqrt(faFac) + g_sg)
                 end
                 if s4 == "BH"
                     rate_out *= rP_ratio
