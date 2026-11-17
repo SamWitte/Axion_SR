@@ -18,6 +18,11 @@ The solver builds a GWCache once (gw_build_cache) and calls gw_rhs! on every
 right-hand-side evaluation, so the rates follow the evolving BH mass (α) and
 spin (hyperfine part of Δω).
 
+M in u = N/(G M^2) is the mass of the α the rate is evaluated at: a rate contains one
+factor G M^2. The solver's occupations are instead normalised to the initial mass,
+u_0 = N/(G M_0^2), for which the rate per u_0a u_0b is rate(α) (M_0/M)^2 = rate(α) (α_0/α)^2
+(_gw_terms! and gw_line_at apply this factor).
+
 Physics (NR limit)
 ------------------
 * Annihilation (omega_GW ~ 2 mu, graviton wavelength << cloud): flat-space
@@ -822,7 +827,7 @@ end
 @inline gw_tr_rate(c::GWCache, t, α, a, ad) = gw_tr_rate_inf(c, t, α, a, ad) * (1 + gw_hfrac(c, c.tr_hitp[t], α, a))
 
 """
-    gw_horizon_bh!(du, X, c, α, a, xfl, spinI, massI) -> du
+    gw_horizon_bh!(du, X, c, α, a, xfl, spinI, massI, nrm=1.0) -> du
 
 Horizon part of the GW emission for the BH rows, in the raw units of the solver's
 superradiance terms (number rate per τ in u units, times the energy per quantum in units of
@@ -830,16 +835,17 @@ superradiance terms (number rate per τ in u units, times the energy per quantum
 a horizon fraction h, the hole gains energy ω̃ h Γ_∞ u_a u_b and angular momentum
 m̃ h Γ_∞ u_a u_b (ω̃ = ω_a + ω_b or ω_hi - ω_lo in units of μ, m̃ the graviton's m; both
 negative for superradiant gravitons, where the hole feeds the radiation). Needs the cache
-frequencies at (α, a) (gw_set_omegas_cache!). No-op without horizon tables.
+frequencies at (α, a) (gw_set_omegas_cache!). No-op without horizon tables. nrm = (M_0/M)^2 when X is
+normalised to a mass M_0 other than the mass M of α (see Conventions).
 """
-function gw_horizon_bh!(du, X, c::GWCache, α, a, xfl::Float64, spinI::Int, massI::Int)
+function gw_horizon_bh!(du, X, c::GWCache, α, a, xfl::Float64, spinI::Int, massI::Int, nrm::Float64=1.0)
     gw_has_horizon(c) || return du
     @inbounds for k in eachindex(c.ann_i)
         h = c.ann_hitp[k]
         h == 0 && continue
         i, j = c.ann_i[k], c.ann_j[k]
         (X[i] <= xfl && X[j] <= xfl) && continue
-        rH = gw_ann_rate_inf(c, k, α, a) * gw_hfrac(c, h, α, a) * X[i] * X[j]
+        rH = nrm * gw_ann_rate_inf(c, k, α, a) * gw_hfrac(c, h, α, a) * X[i] * X[j]
         wi, wj = gw_pair_omegas(c, i, j, true)
         du[massI] += (wi + wj) * rH
         du[spinI] += (c.m[i] + c.m[j]) * rH
@@ -852,7 +858,7 @@ function gw_horizon_bh!(du, X, c::GWCache, α, a, xfl::Float64, spinI::Int, mass
         δ = gw_pair_delta(c, i, j)
         δ == 0 && continue
         hi, lo = δ > 0 ? (i, j) : (j, i)
-        rH = gw_tr_rate_inf(c, t, α, a, abs(δ)) * gw_hfrac(c, h, α, a) * X[i] * X[j]
+        rH = nrm * gw_tr_rate_inf(c, t, α, a, abs(δ)) * gw_hfrac(c, h, α, a) * X[i] * X[j]
         du[massI] += abs(δ) * rH
         du[spinI] += (c.m[hi] - c.m[lo]) * rH
     end
@@ -938,7 +944,7 @@ level `modes[i]` = (n, l, m, ...) (rows of a Modes_ file; pruned lists are fine)
 Each annihilation a x b and transition a -> b is one line with, at every time,
   f  [Hz]    = ω_GW μ / (2π ħ),   ω_GW = ω_a + ω_b  or  |ω_a - ω_b|   (gw_omega)
   P  [erg/s] = (emission events per s) × ħ ω_GW,
-               events/s = rate(α(t), a(t)) u_a u_b G M_0^2 μ/ħ
+               events/s = rate(α(t), a(t)) (M_0/M(t))^2 u_a u_b G M_0^2 μ/ħ
   h0         = sqrt(8 G P / (c^3 (2πf)^2 d^2)),  i.e. sqrt(A_+^2 + A_x^2) averaged
                over source orientation, for a source at distance d_kpc.
 Lines whose peak power (on `n_peak_samples` sampled times) is below
@@ -1060,7 +1066,8 @@ function gw_line_at(c::GWCache, q, α, a, states, k, M0, mu)
         wgw = abs(gw_pair_delta(c, i, j))
         r = wgw == 0 ? 0.0 : gw_tr_rate_inf(c, t, α, a, wgw)
     end
-    events_per_s = r * states[i, k] * states[j, k] * (GNew * M0^2 * M_to_eV) * mu / hbar
+    # r is per pair of N/(G M^2) at the current mass M = α/(G mu); the states are N/(G M0^2)
+    events_per_s = r * (GNew * M0 * mu / α)^2 * states[i, k] * states[j, k] * (GNew * M0^2 * M_to_eV) * mu / hbar
     return wgw * mu / hbar / (2π), events_per_s * wgw * mu * GW_ERG_PER_EV
 end
 

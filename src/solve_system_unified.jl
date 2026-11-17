@@ -54,13 +54,14 @@ function _scatter_terms!(du, X, rate_cache, sc_rates, track_alpha::Bool, idx_lvl
     return
 end
 
-# gw_rhs! (Numerics/gw_rates.jl) with the floor skip
-function _gw_terms!(du, X, c::GWCache, α, a, xfl::Float64, spinI::Int=0, massI::Int=0)
+# gw_rhs! (Numerics/gw_rates.jl) with the floor skip. nrm = (M_BH/M)^2 converts the rates, which are per
+# pair of occupations N/(G M^2) at the mass of α, to the solver's X = N/(G M_BH^2) (see lnR_sc in solve_system).
+function _gw_terms!(du, X, c::GWCache, α, a, xfl::Float64, spinI::Int=0, massI::Int=0, nrm::Float64=1.0)
     gw_set_omegas_cache!(c, α, a)       # gw_omega, plus the tabulated Leaver frequencies for gw_model=:rel
     @inbounds for k in eachindex(c.ann_i)
         i, j = c.ann_i[k], c.ann_j[k]
         (X[i] <= xfl && X[j] <= xfl) && continue
-        r = gw_ann_rate(c, k, α, a) * X[i] * X[j]
+        r = nrm * gw_ann_rate(c, k, α, a) * X[i] * X[j]
         du[i] -= r
         du[j] -= r        # i == j: -2r, two quanta per annihilation
     end
@@ -69,14 +70,14 @@ function _gw_terms!(du, X, c::GWCache, α, a, xfl::Float64, spinI::Int=0, massI:
         (X[i] <= xfl && X[j] <= xfl) && continue
         δ = gw_pair_delta(c, i, j)
         δ == 0 && continue
-        r = gw_tr_rate(c, t, α, a, abs(δ)) * X[i] * X[j]
+        r = nrm * gw_tr_rate(c, t, α, a, abs(δ)) * X[i] * X[j]
         hi, lo = δ > 0 ? (i, j) : (j, i)
         du[hi] -= r
         du[lo] += r
     end
     # gw_model=:rel with horizon tables: the hole absorbs (or, for superradiant gravitons, feeds) the
     # horizon part of the emission; raw units of the superradiance terms in the BH rows
-    massI > 0 && gw_horizon_bh!(du, X, c, α, a, xfl, spinI, massI)
+    massI > 0 && gw_horizon_bh!(du, X, c, α, a, xfl, spinI, massI, nrm)
     return du
 end
 
@@ -169,12 +170,12 @@ function _scatter_jac!(J, D, X, live, rate_cache, sc_rates, track_alpha::Bool, i
     return
 end
 
-function _gw_jac!(J, D, X, live, c::GWCache, α, a, xfl::Float64, spinI::Int=0, massI::Int=0)
+function _gw_jac!(J, D, X, live, c::GWCache, α, a, xfl::Float64, spinI::Int=0, massI::Int=0, nrm::Float64=1.0)
     gw_set_omegas_cache!(c, α, a)
     for k in eachindex(c.ann_i)
         i, j = c.ann_i[k], c.ann_j[k]
         (X[i] <= xfl && X[j] <= xfl) && continue
-        r = gw_ann_rate(c, k, α, a) * X[i] * X[j]
+        r = nrm * gw_ann_rate(c, k, α, a) * X[i] * X[j]
         D[i] -= r; D[j] -= r
         for o in (i, j)
             if live[o]
@@ -187,7 +188,7 @@ function _gw_jac!(J, D, X, live, c::GWCache, α, a, xfl::Float64, spinI::Int=0, 
         (X[i] <= xfl && X[j] <= xfl) && continue
         δ = gw_pair_delta(c, i, j)
         δ == 0 && continue
-        r = gw_tr_rate(c, t, α, a, abs(δ)) * X[i] * X[j]
+        r = nrm * gw_tr_rate(c, t, α, a, abs(δ)) * X[i] * X[j]
         hi, lo = δ > 0 ? (i, j) : (j, i)
         D[hi] -= r; D[lo] += r
         for o in (i, j)
@@ -203,7 +204,7 @@ function _gw_jac!(J, D, X, live, c::GWCache, α, a, xfl::Float64, spinI::Int=0, 
         h == 0 && continue
         i, j = c.ann_i[k], c.ann_j[k]
         (X[i] <= xfl && X[j] <= xfl) && continue
-        rH = gw_ann_rate_inf(c, k, α, a) * gw_hfrac(c, h, α, a) * X[i] * X[j]
+        rH = nrm * gw_ann_rate_inf(c, k, α, a) * gw_hfrac(c, h, α, a) * X[i] * X[j]
         wi, wj = gw_pair_omegas(c, i, j, true)
         eM = (wi + wj) * rH; eJ = (c.m[i] + c.m[j]) * rH
         D[massI] += eM; D[spinI] += eJ
@@ -221,7 +222,7 @@ function _gw_jac!(J, D, X, live, c::GWCache, α, a, xfl::Float64, spinI::Int=0, 
         δ = gw_pair_delta(c, i, j)
         δ == 0 && continue
         hi, lo = δ > 0 ? (i, j) : (j, i)
-        rH = gw_tr_rate_inf(c, t, α, a, abs(δ)) * gw_hfrac(c, h, α, a) * X[i] * X[j]
+        rH = nrm * gw_tr_rate_inf(c, t, α, a, abs(δ)) * gw_hfrac(c, h, α, a) * X[i] * X[j]
         eM = abs(δ) * rH; eJ = (c.m[hi] - c.m[lo]) * rH
         D[massI] += eM; D[spinI] += eJ
         for o in (i, j)
@@ -284,7 +285,11 @@ Handles both standard multi-level mode and spinone single-level mode via the spi
   fast transient that collapses the step size, a sawtooth in ln N of ~1e-4-1e-3
   (BH 10, alpha 1, f_a 1e14, Nmax 8, refresh 1e-5), and the jump times depend on
   the solver's trial states, so the small modes are not reproducible. The GW rates always follow M(t);
-  the bosenova caps and Emax2 always use the initial alpha. With track_alpha the
+  the bosenova caps and Emax2 always use the initial alpha. The rate coefficients are defined for
+  occupations N/(G M^2) at the mass of their alpha; with track_alpha they are converted to the state's
+  u = N/(G M_BH^2) by (M_BH/M)^4 (scattering, three occupation factors) and (M_BH/M)^2 (GW, two), so
+  that only the physical alpha dependence follows M(t), not the normalisation (2026-11-17; before
+  that the factor was missing and the rates were off by (M/M_BH)^4 and (M/M_BH)^2). With track_alpha the
   cloud's back-reaction on M and a also uses the occupation normalisation
   u = N/(G M_BH^2) correctly (without it the old approximation M ~ M_BH is kept:
   the SR / scattering terms in dM/dt and da/dt are then too large by (M/M_BH)^2).
@@ -591,12 +596,25 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # Accretion: ln|rate| of every rate_cache entry at each scattering-grid mass
     # (same key order as rate_cache; sign taken from the initial-mass rate).
     rate_keys = spinone ? String[] : collect(keys(rates))
+    # Occupation normalisation. The tabulated coefficients gamma(alpha) multiply occupations N/(G M^2) with M
+    # the mass of that alpha, so a term with p occupation factors contains (G M^2)^(p-1): alpha^4 of the
+    # alpha^11 (BH) and alpha^8 (Inf) of the 2 -> 2 channels. The state is u = N/(G M_BH^2), initial mass, so
+    # the coefficient in u units at mass M is gamma(alpha(M)) (M_BH/M)^(2(p-1)): only the physical part of the
+    # alpha dependence follows M(t). ln of that factor is linear in ln M, so adding it at the nodes is exact
+    # under the interpolation of refresh_sc_rates!. (Until 2026-11-17 the factor was missing: with M != M_BH
+    # the scattering rates were off by (M/M_BH)^4 and the GW rates by (M/M_BH)^2.)
+    sc_npow = Int[2 * (count(j -> 0 < j <= idx_lvl, r[1]) - 1) for r in rate_cache]
     lnR_sc = if track_alpha
-        [log(max(abs(get(rates_sc[j], k, 0.0)) < 1e20 ? abs(get(rates_sc[j], k, 0.0)) : 0.0, 1e-300))
-         for k in rate_keys, j in 1:nM_sc]
+        [log(max(abs(get(rates_sc[j], k, 0.0)) < 1e20 ? abs(get(rates_sc[j], k, 0.0)) : 0.0, 1e-300)) +
+         sc_npow[kk] * (log(M_BH) - (lnM_lo + dlnM_sc * (j - 1)))
+         for (kk, k) in enumerate(rate_keys), j in 1:nM_sc]
     else
         zeros(0, 0)
     end
+    # same conversion for the GW rates (p = 2), evaluated in the RHS at the current mass (clamped to the grid
+    # range, as the scattering rates are: trial Newton states may be wild)
+    M_nrm_lo, M_nrm_hi = track_alpha ? (exp(lnM_lo), Float64(M_hi)) : (Float64(M_BH), Float64(M_BH))
+    M_BH_f = Float64(M_BH)
     # Current scattering rates under track_alpha, recomputed only when ln M has
     # moved by more than 1e-5 since the last refresh (rates ~ alpha^p with p <~ 11,
     # so the error is <~ 1e-4), instead of one exp per rate in every RHS call.
@@ -791,7 +809,8 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
             track_alpha && refresh_sc_rates!(u_real[massI])
             _scatter_terms!(du, u_real, rate_cache, sc_rates_now, track_alpha_on, n_lvl, massI,
                             rP_ratio_now, alph_now, omH_now, x_floor)
-            _gw_terms!(du, u_real, gw_cache, alph_now, a_now, x_floor, spinI, massI)
+            gw_nrm = track_alpha_on ? (M_BH_f / clamp(u_real[massI], M_nrm_lo, M_nrm_hi))^2 : 1.0
+            _gw_terms!(du, u_real, gw_cache, alph_now, a_now, x_floor, spinI, massI, gw_nrm)
         end
 
         # Unit corrections
@@ -859,7 +878,8 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         track_alpha && refresh_sc_rates!(X[massI])
         _scatter_jac!(J, D, X, live, rate_cache, sc_rates_now, track_alpha_on, n_lvl, massI,
                       rP_now / rP_initial, alph_now, omH_now, x_floor)
-        _gw_jac!(J, D, X, live, gw_cache, alph_now, a_now, x_floor, spinI, massI)
+        gw_nrm = track_alpha_on ? (M_BH_f / clamp(X[massI], M_nrm_lo, M_nrm_hi))^2 : 1.0
+        _gw_jac!(J, D, X, live, gw_cache, alph_now, a_now, x_floor, spinI, massI, gw_nrm)
         K = mu ./ hbar .* 3.15e7
         thr = SOLVER_TOLERANCES.bosenova_threshold
         for i in 1:n_lvl

@@ -34,13 +34,14 @@ function rank(leaf)
         α = GNew * M[k] * mu; a = S[k]
         ann, tr = gw_channel_rates(c, α, a)
         dt = T[k] - tprev; tprev = T[k]
+        nrm = (M[1] / M[k])^2      # rates are per pair of N/(G M^2) at the current mass; U is N/(G M[1]^2)
         for (i, j, r) in ann
             key = (:ann, min(i, j), max(i, j))
-            E[key] = get(E, key, 0.0) + (c.ω[i] + c.ω[j]) * r * U[i, k] * U[j, k] * dt
+            E[key] = get(E, key, 0.0) + (c.ω[i] + c.ω[j]) * nrm * r * U[i, k] * U[j, k] * dt
         end
         for (hi, lo, r) in tr
             key = (:tr, hi, lo)
-            E[key] = get(E, key, 0.0) + abs(c.ω[hi] - c.ω[lo]) * r * U[hi, k] * U[lo, k] * dt
+            E[key] = get(E, key, 0.0) + abs(c.ω[hi] - c.ω[lo]) * nrm * r * U[hi, k] * U[lo, k] * dt
         end
     end
     tot = sum(values(E))
