@@ -1417,8 +1417,23 @@ function compute_gridded(mu, M, a, n, l, m; Ntot=2000, iter=50, xtol=1e-7, npts=
 end
 
 function generalized_laguerre(n, α, x)
-    return (-1).^ n ./ factorial(big(n)) .* HypergeometricFunctions.U.(-n, α+1 ,x)
-    # return binomial(n + α, n) .* HypergeometricFunctions.M.(-n, α+1 , x)
+    # L_n^(α)(x) from the three-term recurrence in BigFloat (stable for every argument type).
+    # Until 2026-11-16 this was (-1)^n / n! * HypergeometricFunctions.U(-n, α+1, x).  That form is accurate when x is a
+    # BigFloat, which is how radial_bound_NR is called from gf_radial (rlist is BigFloat): 3,221 rate points recomputed
+    # with the recurrence are identical to the old ones.  With Float64 arguments it loses all precision at small x for
+    # n >~ 7 (the hydrogenic 15-4-4 becomes noise for r < 5 a0; scripts/sg_ext/laguerre_survey.jl), which matters for any
+    # caller that passes Float64 radii.
+    function lag1(xi)
+        xb = big(xi)
+        L0 = one(xb)
+        n == 0 && return L0
+        L1 = 1 + α - xb
+        for k in 1:n-1
+            L0, L1 = L1, ((2k + 1 + α - xb) * L1 - (k + α) * L0) / (k + 1)
+        end
+        return L1
+    end
+    return x isa AbstractArray ? lag1.(x) : lag1(x)
 end
 
 function test_projection_scatter(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=20000, Npts_Bnd=4000, rmaxT=100, debug=false, Ntot_safe=5000, sve_for_test=false)
