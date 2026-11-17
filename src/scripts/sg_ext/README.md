@@ -13,6 +13,10 @@ where these scripts live when they run); change the paths at the top of each scr
 rule-allowed channel (rules of `rate_sve/gen_custom_input.py`) that contains an (n,4,4) level, among the levels with
 n <= 20. `states_lib.py` defines the level sets.
 
+Since 2026-11-17 the list also holds every other rule-allowed channel among the levels with n <= 20 that contains an
+(n,8,8) level (`plan_n88.py`): 17,130 more channels, 74,009 in total, on the same 215 levels. The first 56,879 lines
+of `sgx_channels.txt` are the earlier list.
+
 ## Rate tables
 
 Each channel is computed for self-interactions and self-gravity together by `src/Compute_sg_points.jl`
@@ -35,12 +39,21 @@ Tables (unzip in `src/rate_sve/`, after `Rates_master_Nmax18_LvrHc.zip` and `rat
 - `rates_si_ext.zip`: `*_LvrHc_.dat` (alpha, Gamma_SI) for the channels that have no table in the master archive.
 
 - `rates_ext_update_20261116.zip`: 499 SG and 138 SI tables that are new or changed since the two archives above (the
-  channels finished after 2026-11-14). Unzip it last.
+  channels finished after 2026-11-14). Unzip it after the two archives above.
+- `rates_ext_n88_20261117.zip`: the SG and SI tables of the 17,130 (n,8,8) channels (34,260 files), same alpha grid
+  and settings. Unzip it last.
 
 New tables stop at alpha = 0.28. Channels whose rates are zero on this grid have no SG table (179, for example
 (n,16,16) pairs to (n',8,8)). 128 channels between the (n,10,10) and (n,20,20) towers at n > 20 are incomplete: their
 bound fourth quanta need more than 20 GB per process at low alpha, and two attempts ran out of memory. `sgx_channels.txt`
-lists all 56,879 channels; one without an SG table uses its SI table only.
+lists all 74,009 channels; one without an SG table uses its SI table only.
+
+Ten of the (n,8,8) channels, all of the form 15-x 20-y -> 12-z, are labelled as emitting to infinity although the
+energies of the computed points give a bound fourth quantum (nine at every alpha, 15-8-8 20-6-6 -> 12-8-8 for
+alpha >= 0.2). In the hydrogenic spectrum the fourth quantum of these channels sits exactly at threshold
+(1/15^2 + 1/20^2 = 1/12^2), so small corrections decide the regime and their rates are not reliable either way.
+In the evolution runs of this campaign (M = 10 and 1e4 Msun, alpha_0 = 0.05-0.25) the (n,8,8) channels change final
+spins by at most 1e-4.
 
 ## Using the tables
 
