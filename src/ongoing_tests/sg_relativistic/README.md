@@ -105,3 +105,26 @@ in the 5-level network these are 211x211->322xBH, 211x322->433xBH, 211x433->544x
 322x433->211xInf, 322x544->211xInf, 322x766->211xInf, 433x544->322xInf, 433x766->322xInf, 544x766->433xInf.
 `run_Nlevels.jl --dlnM_sc` sets the mass-grid spacing of the tabulated scattering rates (needed to resolve the SI-SG
 cancellation at f_a = f_a^*).
+
+## General channels (November 2026): `exchange_gen.jl`, `scan_gen.jl`
+
+`exchange_gen.jl` extends the calculation to N1 x N2 -> N3 x {BH, Inf} with different incoming states and any n: the
+source of mode 4 is the symmetrised sum of the two exchanges, the bound states come from the radial ODE (the Leaver
+series cancels catastrophically for states with radial nodes), and every multipole l4 summed by the production code is
+projected. Per l4 it returns the contact (SI), Newtonian (fixed hole), Newtonian + recoil and relativistic amplitudes
+with a common normalisation. `scan_gen.jl <jobfile> <outdir> [newton_only]` is the worker (job lines `S1 S2 S3 alpha`,
+one result file per point, claims by lock directories so that many workers share a list).
+
+Dipole exchanges (`|m_b - m3| = 1`) use the hole-frame solver of `pinned.jl` and need the larger angular basis
+`Lextra_dip = 10`. The procedure (pin the horizon, hold it with a strut, add the accelerated-frame field, release the
+hole by cancelling the strut) is written out in Section 3.5 of `note_source/sg_source_note.pdf`. Test switch
+`SGX_HOLD_FIXED=1`: the struts are left in, i.e. the hole is held at rest; the relativistic amplitude then reproduces
+the Newtonian one WITHOUT recoil (0.1 % at alpha = 0.05-0.1), while the normal solution tends to Newton + recoil as
+alpha^2 (`src/scripts/sg_exact/frame_check`).
+
+Products (archives in `src/rate_sve`, scripts in `src/scripts/sg_exact`):
+- `sg_relativistic_points_20261117.zip`: the computed points (2,488 relativistic, 24,887 with Newtonian amplitudes and
+  Kerr bound states), their job lists and level energies.
+- `rates_sg_relativistic_20261117.zip`: three sets of overlay tables built from them (relativistic exchange;
+  relativistic exchange + Kerr bound states; Kerr bound states with the Newtonian exchange). They have the names of
+  the production tables: do not unzip them into `rate_sve`, read them with `NL_SG_OVERLAY=<dir>`.
