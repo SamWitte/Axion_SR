@@ -1,0 +1,374 @@
+\documentclass[11pt]{article}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,mathtools}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=blue!45!black,urlcolor=blue!45!black]{hyperref}
+
+\newcommand{\bx}{\mathbf{x}}\newcommand{\by}{\mathbf{y}}
+\newcommand{\dd}{\mathrm{d}}
+\newcommand{\Mpl}{M_{\rm pl}}
+\newcommand{\BoxK}{\Box_{\rm Kerr}}
+
+\title{\textbf{The sourced Klein--Gordon equation behind the $2\to2$ rates}\\[3pt]
+\large self-interactions, self-gravity, black-hole recoil, and the limits we compute}
+\author{}
+\date{16 November 2026 (Section~\ref{sec:pin} added 18 November)}
+
+\begin{document}
+\maketitle
+
+\noindent
+Every $2\to2$ rate in the level-evolution code comes from one equation,
+\begin{equation}
+(\BoxK-\mu^2)\,\phi_4 = S(x), \label{eq:master}
+\end{equation}
+solved with the Kerr Green's function. The self-interaction rates and the three levels of self-gravity
+(Newtonian, Newtonian with black-hole recoil, fully relativistic) differ only in the source $S$.
+This note states what $S$ is in general and how it is reduced in each limit.
+Conventions: signature $(-,+,+,+)$, $G=1/\Mpl^2$, $\alpha=GM\mu$, and $\Box=\nabla^\mu\nabla_\mu$ of the Kerr metric of mass $M$ and spin $a$.
+
+\section{The equation}
+
+The field is a real scalar with potential $V=\mu^2f_a^2\,[1-\cos(\phi/f_a)]$, minimally coupled to gravity:
+\begin{equation}
+\Box_g\phi = V'(\phi)=\mu^2\phi-\frac{\mu^2}{6f_a^2}\phi^3+\dots,\qquad G_{\mu\nu}[g]=8\pi G\,T_{\mu\nu}[\phi]. \label{eq:full}
+\end{equation}
+The cloud is a superposition of quasi-bound Kerr modes,
+$\phi=\sum_N\big[c_N\phi_N+{\rm c.c.}\big]$, with $\phi_N=e^{-i\omega_Nt+im_N\varphi}R_N(r)S_N(\theta)$ and
+$(\BoxK-\mu^2)\phi_N=0$. The occupation number of level $N$ is proportional to $|c_N|^2$.
+
+Both nonlinearities in \eqref{eq:full} generate, at order $c_1c_2c_3^*$, a field component with
+\begin{equation}
+\omega_4=\omega_1+\omega_2-\omega_3,\qquad m_4=m_1+m_2-m_3 .
+\end{equation}
+This component is not a level of the cloud. It is forced, and it obeys \eqref{eq:master} with $S\propto c_1c_2c_3^*$:
+two quanta in levels 1 and 2 scatter, one ends in level 3, and the other (``4'') carries the remaining energy and angular momentum.
+If $\omega_4<\mu$ it cannot propagate to infinity and is absorbed by the hole (``BH'' channels); if $\omega_4>\mu$ it escapes (``Inf'' channels).
+
+\paragraph{Solution.} Equation \eqref{eq:master} separates. With $\Sigma=r^2+a^2\cos^2\theta$, $\Delta=r^2-2GMr+a^2$ and the spheroidal harmonics
+$S_{l m_4}(\theta)$ of mode 4, the radial function of each multipole obeys
+\begin{equation}
+\frac{\dd}{\dd r}\!\Big(\Delta\frac{\dd R_{4l}}{\dd r}\Big)+\Big[\frac{K^2}{\Delta}-\lambda_l-\mu^2r^2\Big]R_{4l}=T_l(r),\qquad
+T_l(r)=\int\!\dd\Omega\;\Sigma\,S(x)\,S^*_{lm_4}(\theta)\,e^{i\omega_4t-im_4\varphi},
+\end{equation}
+with $K=(r^2+a^2)\omega_4-am_4$. It is solved with the two homogeneous solutions $R_{\rm in}$ (ingoing at the horizon) and
+$R_{\rm up}$ (decaying for $\omega_4<\mu$, outgoing for $\omega_4>\mu$) and their Wronskian $W$:
+\begin{equation}
+A^{\rm BH}_l=\frac1W\int_{r_+}^{\infty}\!\dd r\,R_{\rm up}(r)\,T_l(r),\qquad
+A^{\infty}_l=\frac1W\int_{r_+}^{\infty}\!\dd r\,R_{\rm in}(r)\,T_l(r).
+\end{equation}
+These are the amplitudes of the ingoing wave at the horizon and of the outgoing wave at infinity. The rate is the corresponding flux,
+$\Gamma\propto(\omega_4-m_4\Omega_H)\sum_l|A_l^{\rm BH}|^2$ or $\Gamma\propto k_4\sum_l|A_l^\infty|^2$ with $k_4=\sqrt{\omega_4^2-\mu^2}$.
+This part, the left-hand side of \eqref{eq:master}, is treated identically for all sources: it is always the Kerr operator.
+
+\section{The source in general}
+
+Collecting the terms of order $c_1c_2c_3^*$ in \eqref{eq:full}, with $g=g_{\rm Kerr}+h$ and $h$ the metric perturbation produced by the cloud,
+\begin{equation}
+\boxed{\;S=\sigma_{12}\Big\{-\frac{\mu^2}{f_a^2}\,\phi_1\phi_2\phi_3^*
+\;-\;\delta\Box\big[h^{(23)}\big]\phi_1\;-\;\delta\Box\big[h^{(13)}\big]\phi_2\Big\}\;} \label{eq:S}
+\end{equation}
+where $\sigma_{12}=1$ for different incoming levels and $\tfrac12$ for identical ones. The first term is the self-interaction.
+In the other two, $\delta\Box[h]$ is the first-order change of the wave operator,
+\begin{equation}
+-\delta\Box[h]\phi=h^{\mu\nu}\nabla_\mu\nabla_\nu\phi+\big(\nabla_\mu h^{\mu\nu}-\tfrac12\nabla^\nu h\big)\nabla_\nu\phi , \label{eq:dbox}
+\end{equation}
+and $h^{(b3)}$ is the metric perturbation sourced by the \emph{transition} stress tensor of levels $b$ and 3,
+\begin{equation}
+\delta G_{\mu\nu}\big[h^{(b3)}\big]=8\pi G\,T^{(b3)}_{\mu\nu},\qquad
+T^{(b3)}_{\mu\nu}=\nabla_\mu\phi_b\nabla_\nu\phi_3^*+\nabla_\nu\phi_b\nabla_\mu\phi_3^*
+-g_{\mu\nu}\big(\nabla\phi_b\!\cdot\!\nabla\phi_3^*+\mu^2\phi_b\phi_3^*\big). \label{eq:lin}
+\end{equation}
+$T^{(b3)}$ oscillates at $\omega_g=\omega_b-\omega_3$ with azimuthal number $m_b-m_3$. Physically: the interference of levels $b$ and 3
+is an oscillating mass distribution; its gravitational field acts on the quanta of level $a$ and scatters them into mode 4.
+There are two terms because either incoming level can play the role of $b$.
+
+Equations \eqref{eq:S}--\eqref{eq:lin} are exact to first order in the cloud mass. Nothing has been assumed about velocities, and the hole is
+dynamical: the solution of \eqref{eq:lin} contains its tidal response and its recoil.
+Since all three terms multiply $c_1c_2c_3^*$, the amplitudes add coherently,
+\begin{equation}
+A=A_{\rm SI}\Big(\frac{\Mpl}{f_a}\Big)^{\!2}+A_{\rm SG}\quad\Longrightarrow\quad
+\Gamma=\Gamma_{\rm SI}\Big(\frac{\Mpl}{f_a}\Big)^{\!4}+\Gamma_{\times}\Big(\frac{\Mpl}{f_a}\Big)^{\!2}+\Gamma_{\rm SG},
+\end{equation}
+which is the form stored in the rate tables ($\Gamma_{\rm SI}$, $\Gamma_{\rm SG}$, $\Gamma_\times$ at $f_a=\Mpl$, and $\kappa=\Gamma_\times/2\sqrt{\Gamma_{\rm SI}\Gamma_{\rm SG}}$).
+
+\section{Limits of the gravitational source}
+
+\subsection{Fully relativistic (``exact'')}
+Solve \eqref{eq:lin} on Kerr as it stands. We do this in Lorenz gauge, where the bracket in \eqref{eq:dbox} vanishes and
+\begin{equation}
+S_{\rm SG}=\sigma_{12}\big\{h^{(23)\,\mu\nu}\nabla_\mu\nabla_\nu\phi_1+h^{(13)\,\mu\nu}\nabla_\mu\nabla_\nu\phi_2\big\},
+\end{equation}
+as a boundary-value problem in $(r,\theta)$ at frequency $\omega_g$: all ten components of $h$, regular at the future horizon, outgoing at infinity.
+This contains retardation, the gravitomagnetic and spatial components, frame dragging and the response of the hole.
+For transitions with $|m_b-m_3|=1$ the hole is displaced by the dipole of the cloud. Obtaining that part of the solution needs a
+separate procedure, in which the equations are solved in the frame of the hole; it is written out in Section~\ref{sec:pin}.
+
+\subsection{Post-Newtonian expansion}
+For a bound state $v^2\sim GM/r\sim\alpha^2/n^2$, so \eqref{eq:lin} can be expanded in $v$. The first correction (1PN) is of relative
+order $\alpha^2$. We have computed it for four channels with identical incoming levels, as a test; it is not used in any table.
+The ingredients are the following.
+
+\paragraph{Non-relativistic field and its stress tensor.} Write $\phi=(2\mu)^{-1/2}\big(\psi\,e^{-i\mu t}+{\rm c.c.}\big)$, with
+$|\dot\psi|\sim\mu\alpha^2|\psi|$ and $|\nabla\psi|\sim\mu\alpha|\psi|$. Dropping the terms that oscillate at $2\mu$,
+\begin{equation}
+\begin{aligned}
+T_{00}&=\mu|\psi|^2+\tfrac{i}{2}\big(\bar\psi\dot\psi-\psi\dot{\bar\psi}\big)+\tfrac{1}{2\mu}|\nabla\psi|^2, &\qquad
+T_{0i}&=-j_i,\quad \mathbf j=-\tfrac{i}{2}\big(\bar\psi\nabla\psi-\psi\nabla\bar\psi\big),\\
+T_{kk}&=\tfrac1\mu|\nabla\psi|^2-\tfrac{3}{4\mu}\nabla^2|\psi|^2 ,
+\end{aligned}
+\end{equation}
+so that $T_{00}\sim\rho$, $T_{0i}\sim\rho v$ and $T_{ij}\sim\rho v^2$.
+
+\paragraph{Metric.} In harmonic gauge and in the near zone, with $\bar h_{\mu\nu}=h_{\mu\nu}-\tfrac12\eta_{\mu\nu}h$,
+\begin{equation}
+\bar h_{\mu\nu}(\bx)=4G\!\int\!\dd^3y\,\frac{T_{\mu\nu}(\by)}{|\bx-\by|},\qquad
+h_{00}=\tfrac12\big(\bar h_{00}+\bar h_{kk}\big),\quad h_{0i}=\bar h_{0i},\quad
+h_{ij}=\bar h_{ij}+\tfrac12\delta_{ij}\big(\bar h_{00}-\bar h_{kk}\big).
+\end{equation}
+The leading terms are Newtonian, $h_{00}=-2\Phi$ and $h_{ij}=-2\Phi\,\delta_{ij}$. At the next order there are four effects:
+the gravitomagnetic potential $h_{0i}=-4G\!\int\!j_i/|\bx-\by|$, sourced by the mass current; the stresses $T_{kk}$ as a source of $h_{00}$;
+the spatial curvature $h_{ij}$ acting on the motion of the field; and retardation, which for a source oscillating at
+$k_0=\omega_b-\omega_3$ replaces $1/|\bx-\by|\to1/|\bx-\by|-\tfrac12k_0^2|\bx-\by|$.
+
+\paragraph{Effective interaction.} Eliminating $h$ gives a source--source interaction,
+\begin{equation}
+L_{\rm eff}=G\!\int\!\!\int\frac{1}{|\bx-\by|}\Big[\tfrac12T_{00}T'_{00}+\tfrac12\big(T_{00}T'_{kk}+T_{kk}T'_{00}\big)-2\,T_{0i}T'_{0i}\Big]
++\text{retardation}+O(v^4),
+\end{equation}
+with unprimed quantities at $\bx$ and primed ones at $\by$. The three terms are Newton (including the $O(v^2)$ part of $T_{00}$),
+stresses and spatial curvature, and gravitomagnetism. One further term is of the same order, because $GM/r\sim v^2$: the exchanged
+graviton propagates in the field of the hole, which linearised gravity on flat space does not contain,
+\begin{equation}
+L_{G^2}=-\frac{G^2M\mu^2}{2}\!\int\!\!\int|\psi(\bx)|^2|\psi(\by)|^2
+\Big[\frac{1}{r_xr_y}+\Big(\frac1{r_x}+\frac1{r_y}\Big)\frac{1}{|\bx-\by|}\Big].
+\end{equation}
+
+\paragraph{Amplitudes.} For $1+1\to3+4$, with the transition bilinears $\rho^{BA}=\bar\psi_B\psi_A$,
+$\mathbf j^{BA}=-\tfrac{i}{2}(\bar\psi_B\nabla\psi_A-\psi_A\nabla\bar\psi_B)$ and
+$t^{BA}=\nabla\bar\psi_B\!\cdot\!\nabla\psi_A-\tfrac34\nabla^2(\bar\psi_B\psi_A)$,
+\begin{align}
+A_{\rm N}&=-G\mu^2\!\int\!\!\int\frac{\rho^{41}\rho^{31\prime}}{|\bx-\by|}, \qquad\qquad
+A_{h_{0i}}=+4G\!\int\!\!\int\frac{\mathbf j^{41}\!\cdot\mathbf j^{31\prime}}{|\bx-\by|},\nonumber\\
+A_{h_{ij}}&=A_{h_{00}[T_{kk}]}=-\frac G2\!\int\!\!\int\frac{\rho^{41}t^{31\prime}+t^{41}\rho^{31\prime}}{|\bx-\by|}, \qquad
+A_{\rm ret}=+\frac{G\mu^2k_0^2}{2}\!\int\!\!\int\rho^{41}\rho^{31\prime}\,|\bx-\by|,\nonumber\\
+A_{T_{00}}&=-\frac G2\!\int\!\!\int\frac{\rho^{41}(\nabla\bar\psi_3\!\cdot\!\nabla\psi_1)'+(\nabla\bar\psi_4\!\cdot\!\nabla\psi_1)\,\rho^{31\prime}}{|\bx-\by|},\\
+A_{G^2}&=+G^2M\mu^2\!\int\!\!\int\rho^{41}\rho^{31\prime}\Big[\frac1{r_xr_y}+\Big(\frac1{r_x}+\frac1{r_y}\Big)\frac1{|\bx-\by|}\Big].\nonumber
+\end{align}
+Mode 4 is defined only through the Green's function of Section~1, so each amplitude is rewritten as $\int\!\bar\psi_4\,S_X$ by moving the
+derivatives off $\psi_4$ (integration by parts, and the continuity equation $\nabla\!\cdot\mathbf j^{31}=i\mu k_0\rho^{31}$). With
+$\Phi=\int\!\rho^{31}/|\bx-\by|$ and $\mathbf A=\int\!\mathbf j^{31}/|\bx-\by|$, for example,
+\begin{equation}
+S_{\rm N}=-G\mu^2\,\psi_1\Phi,\qquad
+S_{h_{0i}}=-4iG\,\mathbf A\!\cdot\!\nabla\psi_1+2G\mu k_0\,\psi_1\Phi .
+\end{equation}
+These sources go on the right-hand side of \eqref{eq:master} exactly like the Newtonian one, and
+\begin{equation}
+A_{\rm SG}=A_{\rm N}\Big(1+\sum_X\delta_X\Big),\qquad\delta_X=\frac{A_X}{A_{\rm N}}\propto\alpha^2,\qquad
+\Gamma_{\rm SG}\to\Gamma_{\rm SG}\,\Big|1+\sum_X\delta_X\Big|^2 .
+\end{equation}
+
+\paragraph{Size.} Coefficients $\delta_X/\alpha^2$ at small $\alpha$ ($\tilde a=0.95$; the $h_{ij}$ column counts twice in the sum, once for
+$h_{ij}$ and once for $h_{00}[T_{kk}]$):
+\begin{center}
+\begin{tabular}{@{}lcccccc@{}}
+\toprule
+channel & $h_{0i}$ & $h_{ij}$ & $T_{00}$ & ret. & $G^2$ & sum\\
+\midrule
+$211\times211\to322+{\rm BH}$ & $-1.14$ & $+0.25$ & $+0.13$ & $+0.10$ & $-0.46$ & $-0.87$ \\
+$322\times322\to211+\infty$ & $-1.10$ & $+0.21$ & $+0.15$ & $+0.12$ & $-0.30$ & $-0.72$ \\
+$322\times322\to544+{\rm BH}$ & $-0.32$ & $+0.09$ & $+0.05$ & $+0.03$ & $-0.19$ & $-0.24$ \\
+$544\times544\to322+\infty$ & $-0.33$ & $+0.08$ & $+0.06$ & $+0.05$ & $-0.11$ & $-0.17$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+Gravitomagnetism is the largest term and reduces the attraction (co-moving mass currents repel). Two caveats apply to these numbers.
+The individual terms depend on the gauge; only their sum, with the wavefunctions written in matching (harmonic) coordinates, is
+physical. And this calculation holds the hole fixed, so it does not contain the recoil of Section~3.4. The fully relativistic
+calculation of Section~3.1 has neither limitation and replaces it.
+
+\subsection{Newtonian}
+Keep only the leading term. With $\partial_t\phi\simeq-i\mu\phi$, $T^{(b3)}_{00}\simeq2\mu^2\phi_b\phi_3^*\equiv\rho^{(b3)}$ and
+$-\delta\Box[h]\phi\simeq h^{00}\partial_t^2\phi=2\mu^2\Phi\,\phi$, so
+\begin{equation}
+S_{\rm SG}^{\rm N}=2\mu^2\sigma_{12}\big\{\Phi^{(23)}\phi_1+\Phi^{(13)}\phi_2\big\},\qquad
+\nabla^2\Phi^{(b3)}=4\pi G\rho^{(b3)}\;\Rightarrow\;
+\Phi^{(b3)}(\bx)=-2G\mu^2\!\int\!\dd^3y\,\frac{\phi_b(\by)\,\phi_3^*(\by)}{|\bx-\by|}. \label{eq:newton}
+\end{equation}
+This is the $\mu\Phi\psi$ term of the Schr\"odinger--Poisson system. The Poisson equation is solved in flat space and instantaneously
+($\omega_g\to0$), by multipoles: with $\phi_b\phi_3^*\to R_bR_3^*\sum_Lc_LY_{LM}$, $M=m_b-m_3$,
+\begin{equation}
+\Phi^{(b3)}\propto\sum_L\frac{4\pi}{2L+1}\,c_L\,Q_L(r)\,Y_{LM},\qquad
+Q_L(r)=r^{-L-1}\!\!\int_0^r\!\dd r'\,r'^{L+2}R_bR_3^*+r^{L}\!\!\int_r^\infty\!\dd r'\,r'^{1-L}R_bR_3^* .
+\end{equation}
+Comparing with the first term of \eqref{eq:S}, in units of $GM$ for lengths,
+\begin{equation}
+\frac{A_{\rm SG}}{A_{\rm SI}}=8\,\alpha^2\Big(\frac{f_a}{\Mpl}\Big)^{\!2}\frac{J_{\rm SG}}{J_{\rm SI}},\qquad
+J_{\rm SI}\leftrightarrow\phi_1\phi_2\phi_3^*,\quad
+J_{\rm SG}\leftrightarrow\tfrac12\Big[\phi_1\!\int\!\frac{\phi_2\phi_3^*}{|\bx-\by|}+\phi_2\!\int\!\frac{\phi_1\phi_3^*}{|\bx-\by|}\Big],
+\end{equation}
+where $J$ denotes the amplitude obtained by pushing the indicated source through the Green's function of Section~1.
+
+Only the right-hand side is Newtonian. The operator on the left of \eqref{eq:master} is still the Kerr one, and the levels
+$\phi_{1,2,3}$ are Kerr bound states for $n\le8$ (hydrogenic above), exactly as for the self-interaction rates.
+
+\subsection{Newtonian with black-hole recoil}
+Equation \eqref{eq:newton} treats the hole as a fixed centre. It is not: a transition density with a dipole moment
+($|m_b-m_3|=1$) pulls the hole back and forth with acceleration $\mathbf{a}_{\rm BH}=G\!\int\!\dd^3y\,\rho^{(b3)}(\by)\,\by/|\by|^3$.
+The levels are defined in the hole's rest frame, which is therefore not inertial, and the field feels the fictitious potential
+$\mathbf{a}_{\rm BH}\!\cdot\bx$:
+\begin{equation}
+\Phi^{(b3)}(\bx)=-G\!\int\!\dd^3y\,\rho^{(b3)}(\by)\Big[\frac{1}{|\bx-\by|}-\frac{\bx\cdot\by}{|\by|^3}\Big].
+\end{equation}
+This is the ``indirect term'' of celestial mechanics (equivalently the mass-polarisation term $\mathbf p_i\!\cdot\!\mathbf p_j/M$ of the
+three-body problem). It is \emph{not} suppressed by the mass ratio: the force on the hole is $\propto M$, so its acceleration is
+independent of $M$. Only the dipole changes,
+\begin{equation}
+Q_1(r)\;\to\;Q_1(r)-r\!\int_0^\infty\!\dd r'\,R_bR_3^*=r^{-2}\!\!\int_0^r\!\dd r'\,r'^3R_bR_3^*-r\!\int_0^r\!\dd r'\,R_bR_3^* ,
+\end{equation}
+i.e.\ the uniform field of the cloud outside $r$ drops out. For $211\times211\to322$ and $322\times322\to211$ the recoil reverses the sign
+of the amplitude and reduces it to about $0.6$ of the fixed-hole value ($A_{\rm NR}/A_{\rm N}=-0.64$ and $-0.58$ at $\alpha=0.1$),
+so the rate drops to $\sim0.35$--$0.4$ and the interference with the self-interaction becomes destructive.
+The exact equation \eqref{eq:lin} contains the recoil as well; how it is extracted is the subject of the next subsection.
+
+\subsection{Recoil in the relativistic calculation: pinning the hole}\label{sec:pin}
+
+\paragraph{Why a special procedure.} Equation \eqref{eq:lin} does not single out a frame, and its solution for $|m_b-m_3|=1$ includes
+the motion of the hole, a displacement $\mathbf d(t)\propto e^{-i\omega_gt}$. Two things make a direct solve unusable.
+(i) A displaced hole is the same hole in shifted coordinates, so a static displacement is a pure-gauge $l=1$ perturbation
+and an exact zero mode of the linearised operator. At frequency $\omega_g$, with the boundary conditions of Section~3.1, it is a
+\emph{near}-zero mode with eigenvalue $\propto\omega_g^2$; for a spinning hole the tilt of the spin axis is a second one, with
+eigenvalue $\propto\omega_g$. Since $GM\omega_g\simeq\tfrac12\alpha^3|n_3^{-2}-n_b^{-2}|$ is $10^{-3}$ to $10^{-6}$, the amplitude of these modes, which
+\emph{is} the recoil, is fixed only by terms of relative size $(GM\omega_g)^2$, and discretisation errors are amplified by $1/(GM\omega_g)^2$, i.e.\ $10^{6}$ to $10^{11}$.
+(ii) The levels $\phi_{1,2,3}$ and mode 4 are Kerr modes centred on the hole. The source \eqref{eq:S} must therefore be evaluated in
+coordinates in which the hole stays at the origin, not in an asymptotically inertial frame in which it oscillates.
+
+\paragraph{The frame.} We solve in coordinates attached to the hole: the horizon stays at $r=r_+$ with no $l=1$ displacement and no
+tilt. This frame is accelerated, so far from the hole $h$ does not vanish but contains the field of a uniformly accelerated frame,
+$h_{tt}=2\,\mathbf a_{\rm BH}\!\cdot\bx$, which in the Newtonian limit is the fictitious potential $\mathbf a_{\rm BH}\!\cdot\bx$ of Section~3.4.
+The acceleration $\mathbf a_{\rm BH}$ is not put in by hand; it is an unknown of the calculation, fixed by the condition that nothing but
+gravity acts on the hole. Write the Lorenz-gauge-fixed operator of \eqref{eq:lin} as $\mathcal A$, so that the equation is $\mathcal A\,h=8\pi G\,T^{(b3)}$.
+
+\paragraph{Step 1: pin the hole and hold it with a strut.} Impose two conditions at the horizon,
+\begin{equation}
+p_d[h]\equiv\oint_{r_+}\!\!h^{rr}\,Y^*_{1M}=0,\qquad p_t[h]\equiv\big(\text{odd-parity }l=1\text{ part of }h_{vA}\big)_{r_+}=0,\qquad M=m_b-m_3=\pm1,
+\end{equation}
+the first removing the displacement of the horizon, the second its rotation ($v$ is the ingoing time, $A=\theta,\varphi$). A solution
+of $\mathcal A h=8\pi GT$ with decaying boundary conditions is unique and will not satisfy them, so two unknowns are added: a force $F_d$ and a
+torque $F_t$ acting on the hole, represented by fixed $l=1$ sources $z_d$ (in the $vv$ equation) and $z_t$ (in the odd $vA$ equation)
+localised at the horizon. This gives the bordered linear system
+\begin{equation}
+\begin{pmatrix}\mathcal A & z_d\;\;z_t\\[2pt] p_d & 0\\ p_t & 0\end{pmatrix}
+\begin{pmatrix}h_0\\ F^0_d\\ F^0_t\end{pmatrix}=\begin{pmatrix}8\pi G\,T^{(b3)}\\ 0\\ 0\end{pmatrix}, \label{eq:bordered}
+\end{equation}
+which is well conditioned: the pins remove the two near-zero modes. Its solution $h_0$ is the field of the cloud around a hole that is
+\emph{held in place by an external agent} (a ``strut''), and $F^0$ is the force and torque the strut has to supply, i.e.\ minus those
+exerted by the cloud. This is the relativistic version of the fixed-centre calculation of Section~3.3; it is not yet the physical solution.
+
+\paragraph{Step 2: the field of an accelerated hole.} Next, the same system without matter, for a hole that the strut forces to
+accelerate (or to rotate). Take the analytic fields of a uniformly accelerated and of a uniformly rotating frame,
+\begin{equation}
+U_d:\;\;h_{tt}=2\,r\sin\theta\,e^{iM\varphi}\quad(\text{i.e. }2\,\mathbf a\!\cdot\!\bx,\ \mathbf a\propto\hat{\mathbf x}\pm i\hat{\mathbf y}),\qquad
+U_t:\;\;h_{ti}=(\boldsymbol\Omega\times\bx)_i,\quad\boldsymbol\Omega\propto\hat{\mathbf x}\pm i\hat{\mathbf y},
+\end{equation}
+multiply them by a smooth window $W(r)$, equal to 1 for $r<R_1$ (the whole cloud) and 0 for $r>R_2$, and solve for the remainder $q'_k$:
+\begin{equation}
+q_k=W\,U_k+q'_k,\qquad
+\mathcal A\,q'_k+F^k_d z_d+F^k_t z_t=-\delta G\big[W U_k\big],\qquad p_{d,t}[q'_k]=-p_{d,t}[W U_k],\qquad k=d,t,
+\end{equation}
+with the same bordered matrix as in \eqref{eq:bordered} (one factorisation serves all three solves). Each $q_k$ satisfies the pin
+conditions and the vacuum equations up to the strut, $\delta G[q_k]+F^kz=0$: it is the field of a hole dragged along by a strut force
+$F^k$, described in its own accelerated frame.
+
+\paragraph{Step 3: release the hole.} The physical hole is free. Superpose and require the total strut force and torque to vanish,
+\begin{equation}
+\boxed{\;h=h_0+a_d\,q_d+a_t\,q_t,\qquad F^0+a_d\,F^d+a_t\,F^t=0\;} \label{eq:release}
+\end{equation}
+a $2\times2$ linear system for $a_d$ and $a_t$. Then $\delta G[h]=8\pi G\,T^{(b3)}$ holds with no external force, the horizon is pinned,
+and $h$ decays outside the window: this is the solution of \eqref{eq:lin} in the frame of the freely recoiling hole. The coefficient
+$a_d$ is the acceleration of the hole, determined by force balance. For Schwarzschild only the displacement is treated this way.
+
+\paragraph{Step 4: the source.} $S_{\rm SG}$ is \eqref{eq:dbox} evaluated with the full $h$ of \eqref{eq:release}, the numerical part and the
+analytic part $a_dWU_d+a_tWU_t$ together (the latter is not in Lorenz gauge, so the bracket of \eqref{eq:dbox} is kept for it).
+In the Newtonian limit $h_0$ gives the fixed-centre potential of \eqref{eq:newton} and $a_d\,U_d$ gives $\mathbf a_{\rm BH}\!\cdot\bx$,
+so $A\to A_{\rm NR}$, the Newtonian amplitude with recoil. If the hole is \emph{not} released ($a_d=a_t=0$) one gets $A_{\rm N}$ instead.
+
+\paragraph{Remarks.} The result does not depend on the choice of $U_k$, of the window or of the strut sources (any choice with a
+nonzero strut force gives the same $h$ inside the window; checked, changes $\lesssim0.2\%$). The solution differs from the one in an
+asymptotically inertial frame by the gauge transformation generated by the displacement, $\xi^\mu=d^\mu(t)$. Under a gauge
+transformation the source changes by $(\BoxK-\mu^2)(\xi^\mu\partial_\mu\phi_a)$, i.e.\ $\phi_4\to\phi_4+\xi^\mu\partial_\mu\phi_a$, which leaves the
+fluxes unchanged only if $\xi$ vanishes at the horizon and at infinity. A translation of the hole does not, which is why the frame has
+to be specified, and why it has to be the one in which the levels are defined.
+Channels without a dipole ($|m_b-m_3|\neq1$) need none of this: the hole does not move, and the direct solve of Section~3.1 is used.
+
+\paragraph{Test.} Both statements of Step~4 were checked with the production code (18 November, $\tilde a=0.95$; amplitude ratios of the
+leading multipole). In the first column the hole is held by the strut, in the second it is released:
+
+\begin{center}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+channel & $\alpha$ & held: $A/A_{\rm N}$ & released: $A/A_{\rm NR}$ & $A_{\rm NR}/A_{\rm N}$ \\
+\midrule
+$211\times211\to322+{\rm BH}$ & 0.05 & 0.9997 & 1.0041 & $-0.640$ \\
+                              & 0.10 & 0.9989 & 1.0165 & $-0.639$ \\
+$322\times322\to211+\infty$   & 0.05 & 0.9996 & 1.0063 & $-0.587$ \\
+                              & 0.10 & 0.9985 & 1.0252 & $-0.580$ \\
+$322\times544\to211+\infty$   & 0.05 & 1.0001 & 0.9769 & $+0.104$ \\
+                              & 0.10 & 1.0005 & 0.9123 & $+0.107$ \\
+$422\times844\to211+\infty$   & 0.075 & 1.0009 & 0.9722 & $-11.09$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+Held, the relativistic amplitude equals the Newtonian one without recoil to $0.1\%$; released, it equals the Newtonian one with
+recoil up to a correction that vanishes as $\alpha^2$ ($322\times544\to211$: $0.991$, $0.977$, $0.949$ at $\alpha=0.03$, $0.05$, $0.075$),
+also where the recoil removes $90\%$ of the amplitude or exceeds the direct term tenfold. Over all 743 computed channel points with
+a dipole exchange, in the 574 where the recoil changes the Newtonian rate by more than a factor of two the relativistic rate lies
+within $30\%$ of the recoil-included value in $95.6\%$ and within $30\%$ of the fixed-hole value in none.
+
+\section{What is used where}
+
+\begin{center}
+\begin{tabular}{@{}lll@{}}
+\toprule
+ & source $S$ & bound states $\phi_{1,2,3}$ \\
+\midrule
+Self-interaction tables & first term of \eqref{eq:S} & Kerr \\
+Self-gravity tables (all runs so far) & Newtonian with recoil & Kerr for $n\le8$, hydrogenic above \\
+Exact (overlay tables, 2{,}488 channel points) & \eqref{eq:lin}, Lorenz gauge & Kerr \\
+1PN & test only, four channels & hydrogenic \\
+\bottomrule
+\end{tabular}
+\end{center}
+In all rows mode 4 is propagated with the Kerr Green's function, for the leading multipole $l_4$ (Inf channels) or $l_4=0,2$ (BH channels).
+The hydrogenic approximation above $n=8$ is the main approximation on the wavefunction side. Against the paper's fully relativistic
+self-interaction tables (17,065 common channels), the rates agree within $30\%$ for $93$--$94\%$ of the channels whose highest level has
+$9\le n\le20$ ($98\%$ when all levels are relativistic in both), and differ by more than a factor of two for $2\%$; above $n=20$ the
+agreement is worse ($82$--$86\%$ within $30\%$). The outliers are channels whose radial overlap integrals cancel strongly, so that
+the $O(\alpha^2)$ difference between hydrogenic and Kerr wavefunctions is amplified.
+
+\paragraph{When the Newtonian limit holds.} Two conditions: (i) $v^2\sim\alpha^2/n^2\ll1$; (ii) the cloud lies in the near zone of the
+exchanged graviton, $\omega_gr\ll1$, with $\omega_g\sim\mu\alpha^2\,|n_3^{-2}-n_b^{-2}|/2$ and $r\sim n^2/(\mu\alpha)$. Both give corrections of
+relative order $\alpha^2$. Measured ratios of the exact to the Newtonian-with-recoil amplitude at $\tilde a=0.95$:
+
+\begin{center}
+\begin{tabular}{@{}lccc@{}}
+\toprule
+channel & $\alpha=0.05$ & $\alpha=0.1$ & $\alpha=0.2$ \\
+\midrule
+$211\times211\to322+{\rm BH}$ (dipole) & 1.004 & 1.017 & 1.069 \\
+$322\times322\to211+\infty$ (dipole) & 1.006 & 1.025 & 1.108 \\
+$322\times322\to544+{\rm BH}$ & 1.0001 & 1.0004 & 1.002 \\
+$844\times844\to544+\infty$ & 1.0006 & 1.0023 & 1.0093 \\
+$10{,}4{,}4\times10{,}4{,}4\to322+\infty$ & 1.0004 & 1.0015 & -- \\
+\bottomrule
+\end{tabular}
+\end{center}
+The rate changes by the square. Corrections are at the per-cent level or below except for the dipole channels, where the recoil has
+already removed most of the leading term and the $O(\alpha^2)$ remainder is relatively larger: $+3$ to $+5\%$ in the rate at
+$\alpha=0.1$, $+14$ to $+23\%$ at $\alpha=0.2$.
+
+\end{document}
