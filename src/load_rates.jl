@@ -48,6 +48,17 @@ end
 # quartic (axion cosine potential), -1 for a repulsive one. Only available with non_rel = false.
 # NL_SI_FROM_SG=1 takes Gamma_SI from the SG table inside that table's alpha range; with self_grav = false this gives
 # a self-interaction-only run with exactly the Gamma_SI of the corresponding self_grav = true run.
+# self_grav = true also includes the s-channel graviton exchange ("pair term"; ongoing_tests/sg_relativistic/
+# note_source, Section 3.6): the two incoming quanta source a metric perturbation at frequency ~ 2 mu (the oscillating
+# pressure of a real field), which acts on the outgoing bound quantum. It is local and has the form and sign of an
+# attractive quartic, mu^2/f_a^2 -> mu^2/f_a^2 + 12 pi G mu^2 (relative order alpha^2 to the Newtonian exchange, i.e.
+# a 1PN term; it is in neither the Newton + recoil tables nor the relativistic t/u-channel exchange tables). With the
+# tabulated quantities it needs no new computation:
+#     Gamma = Gamma_SI c^2 + 2 kappa c sqrt(Gamma_SI Gamma_SG) + Gamma_SG,   c = si_sign (M_pl/f_a)^2 + 12 pi G M_pl^2,
+# and it is applied wherever the self-interaction rate of the channel is (also where the channel has no SG table).
+# The coefficient holds at leading order in alpha (corrections are 2PN) and for a real scalar only.
+# On by default since 2026-11-19; NL_S_CHANNEL=0 switches it off (the formula two paragraphs up, as in all runs made
+# before that date).
 #
 # rate_input: custom channel list (file name in rate_sve/ or absolute path, same format as
 # load_rate_input_Nmax_X.txt, e.g. written by rate_sve/gen_custom_input.py) used instead of the default
@@ -64,6 +75,10 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
     faFac = (M_pl ./ f_a)^4
     si_from_sg = get(ENV, "NL_SI_FROM_SG", "0") == "1"
     sg_overlay = get(ENV, "NL_SG_OVERLAY", "")
+    # s-channel graviton exchange (see above): amplitude factor of the contact term, c = si_sign (M_pl/f_a)^2 + 12 pi G M_pl^2
+    s_chan = self_grav && !non_rel && get(ENV, "NL_S_CHANNEL", "1") != "0"
+    c_contact = si_sign * sqrt(faFac) + 12pi * (GNew / M_to_eV) * (M_pl * 1e9)^2
+    si_fac = s_chan ? c_contact^2 : faFac          # Gamma_SI is multiplied by this
 
     rate_file = rate_input_path(Nmax; lm_only=lm_only, rate_input=rate_input)
     rate_list = readdlm(rate_file)
@@ -277,12 +292,12 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
                             itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
                             g_si = 10 .^itp(log10.(alph))
                         end
-                        rate_out = g_si .* faFac
+                        rate_out = g_si .* si_fac
                     end
                 elseif data !== nothing && alph .<= maximum(data[:,1])
                     itp = LinearInterpolation(log10.(data[:, 1]), log10.(data[:, 2]), extrapolation_bc=Line())
                     g_si = 10 .^itp(log10.(alph))
-                    rate_out = g_si .* faFac
+                    rate_out = g_si .* si_fac
                 end
                 # A regime-split channel has the same SG table under both labels (each row is computed in the regime
                 # the energies give at that alpha), so the SG part follows the same mask as the SI part.
@@ -300,10 +315,14 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
                         if count(pos) >= 2
                             itp_si2 = LinearInterpolation(log10.(sg[pos, 1]), log10.(sg[pos, 2]), extrapolation_bc=Line())
                             g_si = 10 .^itp_si2(log10.(alph))
-                            rate_out = g_si .* faFac
+                            rate_out = g_si .* si_fac
                         end
                     end
-                    self_grav && (rate_out += si_sign * 2 * itp_ka(log10.(alph)) * sqrt(g_si * g_sg) * sqrt(faFac) + g_sg)
+                    if s_chan
+                        rate_out += 2 * itp_ka(log10.(alph)) * sqrt(g_si * g_sg) * c_contact + g_sg
+                    else
+                        self_grav && (rate_out += si_sign * 2 * itp_ka(log10.(alph)) * sqrt(g_si * g_sg) * sqrt(faFac) + g_sg)
+                    end
                 end
                 if s4 == "BH"
                     rate_out *= rP_ratio

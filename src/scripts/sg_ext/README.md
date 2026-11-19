@@ -62,6 +62,9 @@ spins by at most 1e-4.
 channel grows by superradiance unchecked (311 and 522 did so in the first 21-level campaign at f_a = 1e16).
 `NL_SI_FROM_SG=1` makes `load_rates.jl` take Gamma_SI from the SG table (same computation, alpha grid and step as
 Gamma_SG and kappa) inside that table's alpha range; without it the separate `*_LvrHc_.dat` table is used.
+Since 19 November 2026 `--self_grav true` also includes the s-channel graviton term (`1/f_a^2 -> 1/f_a^2 + 12 pi G`,
+computed in the loader from Gamma_SI and kappa); the runs of this campaign were made without it, which
+`NL_S_CHANNEL=0` reproduces. It changes their final spins by at most 2e-4.
 The GW table for these levels is not tracked: `julia build_gw_nr_custom.jl ../../rate_sve/sgx_levels.txt sgx`.
 
 ## Scripts

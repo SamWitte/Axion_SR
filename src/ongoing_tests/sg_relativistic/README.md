@@ -122,6 +122,17 @@ hole by cancelling the strut) is written out in Section 3.5 of `note_source/sg_s
 the Newtonian one WITHOUT recoil (0.1 % at alpha = 0.05-0.1), while the normal solution tends to Newton + recoil as
 alpha^2 (`src/scripts/sg_exact/frame_check`).
 
+Two additions of 19 November 2026 (note, Sections 3.6 and 3.7):
+- The pair (s-channel) term. The exchange solved here is the t/u-channel one (transition stress tensor of an incoming
+  and the outgoing level). The third pairing, the stress tensor of the two incoming levels (frequency 2 mu) acting on
+  the outgoing one, is local and equivalent to `1/f_a^2 -> 1/f_a^2 + 12 pi G`. It is not in any table; `load_rates.jl`
+  adds it from Gamma_SI and kappa whenever `self_grav = true` (`NL_S_CHANNEL=0` leaves it out).
+- The order-alpha^2 coefficients of the exchange are confirmed by an analytic 1PN calculation in the same variables
+  (`src/scripts/sg_1pn`): +0.040 against +0.039 and +0.042 against +0.041 in two channels without recoil, -1.09
+  against -1.06 and -1.50 against -1.48 in two with recoil (coefficients of alpha^2 of (A - A_NR)/A_N). Test switches
+  for it in `exchange_gen.jl`: `SGX_NEWTON_SHIFT`, `SGX_NEWTON_WX`, `SGX_NEWTON_WY`, `SGX_NEWTON_WRX`,
+  `SGX_NEWTON_RECRET` (Newtonian term in the harmonic radius and with the 1PN weights); `SGX_SPIN` in `scan_gen.jl`.
+
 Products (archives in `src/rate_sve`, scripts in `src/scripts/sg_exact`):
 - `sg_relativistic_points_20261117.zip`: the computed points (2,488 relativistic, 24,887 with Newtonian amplitudes and
   Kerr bound states), their job lists and level energies.
