@@ -54,3 +54,6 @@ src/ongoing_tests/**/note_source/
 src/ongoing_tests/**/note_1pn/
 src/ongoing_tests/**/*.png
 src/ongoing_tests/**/*.pdf
+# run logs are not kept in the repository
+src/ongoing_tests/**/logs/
+src/ongoing_tests/**/*.log
