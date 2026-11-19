@@ -502,7 +502,35 @@ $\alpha=0.075$ is $0.025$, $0.038$, $0.051$ for $\tilde a=0.3$, $0.6$, $0.95$ in
 $322^2\to211$ (at $\alpha=0.25$: $0.12$, $0.18$, $0.25$ and $0.23$, $0.29$, $0.35$). Extrapolated to zero spin about $0.01$--$0.03$ is left
 at $\alpha=0.075$, growing more slowly than $\alpha^4$; these points do not decide whether that is a term of order $\alpha^3$ of the
 recoil or a very small one of order $\alpha^2$. With the hole held fixed there is no such term.
-This is the independent confirmation of the order-$\alpha^2$ coefficients of the relativistic calculation that the 1PN test was meant to give.
+For these four channels this is the independent confirmation of the order-$\alpha^2$ coefficients of the relativistic calculation that the
+1PN test was meant to give.
+
+\paragraph{More channels, and three that disagree.} With the frequency factors applied to each exchange separately (Kerr frequencies;
+\texttt{SGX\_NEWTON\_EFAC}) the same calculation covers different incoming levels. Change of the rate relative to the tables at
+$\alpha=0.1$, in per cent, complete 1PN against relativistic exchange, both with the pair term:
+\begin{center}
+\begin{tabular}{@{}lcc@{\qquad\quad}lcc@{}}
+\toprule
+channel & 1PN & relativistic & channel & 1PN & relativistic \\
+\midrule
+$211\times211\to322+{\rm BH}$ & $+3.33$ & $+3.12$ & $322\times422\to211+\infty$ & $+6.22$ & $+5.84$ \\
+$322\times322\to211+\infty$ & $+5.26$ & $+4.99$ & $322\times544\to211+\infty$ & $-17.6$ & $-16.5$ \\
+$322\times322\to544+{\rm BH}$ & $+0.12$ & $+0.12$ & $422\times544\to211+\infty$ & $+4.5$ & $-10.7$ \\
+$544\times544\to322+\infty$ & $+0.11$ & $+0.10$ & $422\times844\to211+\infty$ & $+1.6$ & $-9.4$ \\
+$211\times211\to422+{\rm BH}$ & $+3.52$ & $+3.28$ & $322\times844\to211+\infty$ & $+1.2$ & $-4.2$ \\
+$422\times422\to211+\infty$ & $+9.57$ & $+8.87$ & & & \\
+\bottomrule
+\end{tabular}
+\end{center}
+Eight channels agree up to the higher-order remainder described above, four of them not used in setting up the calculation. Three do not:
+there the two results differ at order $\alpha^2$ and in sign. They are the channels in which the level acted on by the dipole exchange
+($544$ or $844$) lies far outside the transition density ($422\to211$ or $322\to211$). For $422\times544\to211$ at $\alpha=0.1$: with the
+hole held fixed the relativistic amplitude is $1.00125\,A_{\rm N}$ and the 1PN one $1.0012\,A_{\rm N}$, so the difference is in the recoil
+part; the real part of the relativistic amplitude does not depend on the window of the hole-frame solver ($A/A_{\rm NR}=0.9452$, $0.9467$,
+$0.9468$ for three windows) but its imaginary part does ($-0.0034$, $-0.0012$, $-0.0010$); and its correction is not proportional to
+$\alpha^2$ ($-7.1\,\alpha^2$ at $\alpha=0.05$, $-5.5\,\alpha^2$ at $0.1$, $-5.0\,\alpha^2$ at $0.25$), whereas the 1PN one is ($+2.2\,\alpha^2$).
+This points to the release step of the relativistic calculation when the acted-on level is far out, but it is not established:
+for these three channels, and presumably for others of the same kind, neither result is confirmed.
 
 \section{What is used where}
 

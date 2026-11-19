@@ -451,12 +451,16 @@ function newtonian_sources_gen(md1, md2, md3, l4, m4, w4, r, Rs; nth=96, Lextra=
     # computed with ongoing_tests/sg_vs_si/sg_1pn_recoil.jl.)
     wrf = haskey(ENV, "SGX_NEWTON_WRX") ? 1 .+ parse(Float64, ENV["SGX_NEWTON_WRX"]) ./ xs : wxf
     recret = get(ENV, "SGX_NEWTON_RECRET", "0") == "1"
-    function piece(mdb, Sb, Rb, Sa, Ra)                      # potential of b -> 3 acting on a
+    # SGX_NEWTON_EFAC = 1: the frequency factors of the 1PN source, per exchange (b -> 3 acting on a), with the Kerr
+    # frequencies: (2 w_a w_4/mu^2 - 1)(2 w_b w_3/mu^2 - 1) for the direct term and (w_a w_4/mu^2)(2 w_b w_3/mu^2 - 1)
+    # for the recoil term.
+    efac = get(ENV, "SGX_NEWTON_EFAC", "0") == "1"
+    function piece(mdb, Sb, Rb, Sa, Ra, wa)                  # potential of b -> 3 acting on a (frequency wa)
         M_ = mdb.m - md3.m
         Lmax = mdb.l + md3.l + Lextra
         TL = SWSHTable(M_, Lmax, nth; smax=0)
         rho = Rb .* conj.(R3) .* wyf
-        TN = zeros(ComplexF64, length(r)); TNR = zeros(ComplexF64, length(r))
+        TN = zeros(ComplexF64, length(r)); TNR = zeros(ComplexF64, length(r)); TR = zeros(ComplexF64, length(r))
         for L in abs(M_):Lmax
             cL = ang(Sb .* conj.(S3) .* TL.Y[(0, L)])
             abs(cL) < 1e-14 && continue
@@ -471,11 +475,17 @@ function newtonian_sources_gen(md1, md2, md3, l4, m4, w4, r, Rs; nth=96, Lextra=
             BL0 = ang(Sa .* TL.Y[(0, L)] .* conj.(S4)); BL2 = ang(Sa .* TL.Y[(0, L)] .* conj.(S4) .* x .^ 2)
             TN .+= (4pi / (2L + 1)) * cL .* Q .* (BL0 .* r .^ 2 .+ BL2 * a^2)
             TNR .+= (4pi / (2L + 1)) * cL .* QR .* (BL0 .* r .^ 2 .+ BL2 * a^2)
+            TR .+= (4pi / (2L + 1)) * cL .* (Q .- QR) .* (BL0 .* r .^ 2 .+ BL2 * a^2)          # recoil part (L = 1 only)
+        end
+        if efac
+            fsrc = 2 * real(mdb.w) * real(md3.w) / alph^2 - 1
+            fdir = (2 * wa * w4 / alph^2 - 1) * fsrc; frec = (wa * w4 / alph^2) * fsrc
+            return Ra .* TN .* fdir, Ra .* (TN .* fdir .- TR .* frec)
         end
         return Ra .* TN, Ra .* TNR
     end
-    N23, NR23 = piece(md2, S2, R2, S1, R1)
-    N13, NR13 = md1 === md2 ? (N23, NR23) : piece(md1, S1, R1, S2, R2)
+    N23, NR23 = piece(md2, S2, R2, S1, R1, real(md1.w))
+    N13, NR13 = md1 === md2 ? (N23, NR23) : piece(md1, S1, R1, S2, R2, real(md2.w))
     return T_SI, 0.5 .* (N23 .+ N13), 0.5 .* (NR23 .+ NR13), sph4
 end
 
