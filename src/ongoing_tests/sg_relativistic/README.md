@@ -131,7 +131,11 @@ Two additions of 19 November 2026 (note, Sections 3.6 and 3.7):
   (`src/scripts/sg_1pn`): +0.040 against +0.039 and +0.042 against +0.041 in two channels without recoil, -1.09
   against -1.06 and -1.50 against -1.48 in two with recoil (coefficients of alpha^2 of (A - A_NR)/A_N). Test switches
   for it in `exchange_gen.jl`: `SGX_NEWTON_SHIFT`, `SGX_NEWTON_WX`, `SGX_NEWTON_WY`, `SGX_NEWTON_WRX`,
-  `SGX_NEWTON_RECRET` (Newtonian term in the harmonic radius and with the 1PN weights); `SGX_SPIN` in `scan_gen.jl`.
+  `SGX_NEWTON_RECRET`, `SGX_NEWTON_EFAC` (Newtonian term in the harmonic radius, with the 1PN weights and frequency
+  factors); `SGX_SPIN` in `scan_gen.jl`. Over eleven channels the complete 1PN and the relativistic rates agree in
+  eight; in three (422 x 544, 422 x 844, 322 x 844 -> 211: the level acted on by the dipole exchange lies far outside
+  the transition density) they disagree at order alpha^2 in the recoil part, and which of the two is wrong is open
+  (note, Section 3.7; `src/scripts/sg_1pn/README.md`).
 
 Products (archives in `src/rate_sve`, scripts in `src/scripts/sg_exact`):
 - `sg_relativistic_points_20261117.zip`: the computed points (2,488 relativistic, 24,887 with Newtonian amplitudes and
