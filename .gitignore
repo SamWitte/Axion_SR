@@ -48,3 +48,9 @@ src/rate_sve/gw_kerr/
 src/scripts/gw_kerr_logs/
 src/scripts/gw_kerr_jobs/Script_gwk_*.sh
 src/scripts/gw_kerr_jobs/ids_*.txt
+
+# notes and figures of the self-gravity work are not kept in the repository (code and zipped inputs only)
+src/ongoing_tests/**/note_source/
+src/ongoing_tests/**/note_1pn/
+src/ongoing_tests/**/*.png
+src/ongoing_tests/**/*.pdf

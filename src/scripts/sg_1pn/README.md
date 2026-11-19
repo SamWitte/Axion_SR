@@ -1,6 +1,7 @@
 # Complete 1PN correction of the self-gravity amplitude
 
-Derivation and numbers: `ongoing_tests/sg_relativistic/note_source/sg_source_note.pdf`, Sections 3.6 and 3.7.
+Derivation and numbers: the note on the sourced Klein-Gordon equation (`sg_source_note`, Sections 3.6 and 3.7; notes are
+not kept in the repository).
 
 The rate tables contain the Newtonian exchange with black-hole recoil; the overlay tables of
 `ongoing_tests/sg_relativistic` contain the relativistic t/u-channel exchange. This directory computes the first
