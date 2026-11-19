@@ -11,6 +11,7 @@ function main()
     out = ARGS[2]; newton_only = length(ARGS) >= 3 && ARGS[3] == "newton_only"
     mkpath(joinpath(out, "locks")); mkpath(joinpath(out, "res")); mkpath(joinpath(out, "fail"))
     tstop = time() + parse(Float64, get(ENV, "SGX_WALL_SEC", "1e9"))
+    spin_s = get(ENV, "SGX_SPIN", "0.95"); spin = parse(Float64, spin_s)       # test option: spin of the hole (production: 0.95)
     for j in jobs
         time() > tstop && break
         id = join(j, "_")
@@ -23,13 +24,13 @@ function main()
         rf = length(j) >= 7 ? parse(Float64, j[7]) : 1.0
         println("=== ", join(j, " ")); flush(stdout)
         try
-            r = run_channel_gen(parse_state(S1), parse_state(S2), parse_state(S3), parse(Float64, al); drho=dr, Lextra=Lx,
+            r = run_channel_gen(parse_state(S1), parse_state(S2), parse_state(S3), parse(Float64, al); a=spin, drho=dr, Lextra=Lx,
                                 rmax_fac=rf, newton_only=newton_only, Lfull=get(ENV, "SGX_LFULL", "0") == "1")
             tmp = joinpath(out, "res", id * ".tmp." * string(getpid()))
             open(tmp, "w") do io
                 for o in r.out
                     c(z) = string(real(z), " ", imag(z))
-                    println(io, join([S1, S2, S3, al, "0.95", dr, Lx, rf, r.to_inf ? "Inf" : "BH", r.m4, o.l4, c(o.aSI), c(o.aN), c(o.aNR),
+                    println(io, join([S1, S2, S3, al, spin_s, dr, Lx, rf, r.to_inf ? "Inf" : "BH", r.m4, o.l4, c(o.aSI), c(o.aN), c(o.aNR),
                                       c(o.aGR), r.zmax, r.mode_res, r.mismatch, r.shift, round(r.time, digits=1), r.Lextra_dip, r.version], " "))
                 end
             end

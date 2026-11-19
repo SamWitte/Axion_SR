@@ -431,18 +431,43 @@ function newtonian_sources_gen(md1, md2, md3, l4, m4, w4, r, Rs; nth=96, Lextra=
     ang(v) = 2pi * sum(w .* v)
     A0 = ang(S1 .* S2 .* conj.(S3) .* conj.(S4)); A2 = ang(S1 .* S2 .* conj.(S3) .* conj.(S4) .* x .^ 2)
     T_SI = R1 .* R2 .* conj.(R3) .* (A0 .* r .^ 2 .+ A2 * a^2)
+    # Test switch SGX_NEWTON_SHIFT = d (units of GM; off = 0): solve the Poisson equation of the Newtonian term in the
+    # radial coordinate x = r_BL - d instead of r_BL (kernel and volume element), everything else unchanged.  d = 1 is
+    # the harmonic (also, to this order, the isotropic) radial coordinate of the hole, in which the post-Newtonian
+    # expansion is written; the difference to d = 0 is of relative order GM/r ~ alpha^2, i.e. a 1PN-order statement
+    # about WHICH Newtonian term the 1PN corrections of ongoing_tests/sg_vs_si/sg_1pn*.jl are corrections to.
+    xs = r .- parse(Float64, get(ENV, "SGX_NEWTON_SHIFT", "0"))
+    # Test switches SGX_NEWTON_WX = wx, SGX_NEWTON_WY = wy (off = 0): weight the Newtonian term (fixed hole) with the
+    # potential of the hole, (1 + wx GM/x) at the point where the potential acts and (1 + wy GM/x) in the transition
+    # density that sources it.  The complete 1PN source of the t/u-channel exchange without recoil, derived from the
+    # Klein-Gordon equation in the 1PN harmonic metric (note, Section 3.7), is the Newtonian one in the harmonic radius
+    # with wx = 4, wy = 6, times 1 + 2 (w_a w_4 + w_b w_3 - 2 mu^2)/mu^2, plus retardation and gravitomagnetism.
+    wxf = 1 .+ parse(Float64, get(ENV, "SGX_NEWTON_WX", "0")) ./ xs
+    wyf = 1 .+ parse(Float64, get(ENV, "SGX_NEWTON_WY", "0")) ./ xs
+    # Recoil term at 1PN (same derivation, in the frame of the hole): the fictitious potential a_BH . x couples with
+    # the weight (1 + 5/2 GM/x) instead of (1 + 4 GM/x) -> SGX_NEWTON_WRX = 2.5 (default: the same weight as the direct
+    # term), and the acceleration of the hole gets the retardation term of the potential,
+    # a_BH ~ int rho (1 + w_g^2 x^2 / 2) dx -> SGX_NEWTON_RECRET = 1.  (The gravitomagnetic induction term of a_BH is
+    # computed with ongoing_tests/sg_vs_si/sg_1pn_recoil.jl.)
+    wrf = haskey(ENV, "SGX_NEWTON_WRX") ? 1 .+ parse(Float64, ENV["SGX_NEWTON_WRX"]) ./ xs : wxf
+    recret = get(ENV, "SGX_NEWTON_RECRET", "0") == "1"
     function piece(mdb, Sb, Rb, Sa, Ra)                      # potential of b -> 3 acting on a
         M_ = mdb.m - md3.m
         Lmax = mdb.l + md3.l + Lextra
         TL = SWSHTable(M_, Lmax, nth; smax=0)
-        rho = Rb .* conj.(R3)
+        rho = Rb .* conj.(R3) .* wyf
         TN = zeros(ComplexF64, length(r)); TNR = zeros(ComplexF64, length(r))
         for L in abs(M_):Lmax
             cL = ang(Sb .* conj.(S3) .* TL.Y[(0, L)])
             abs(cL) < 1e-14 && continue
-            ci = cumtrap(rho .* r .^ (L + 2), r); co = revtrap(rho .* r .^ (1 - L), r)
-            Q = r .^ (-(L + 1)) .* ci .+ r .^ L .* co
-            QR = L == 1 ? Q .- r .* co[1] : Q
+            ci = cumtrap(rho .* xs .^ (L + 2), r); co = revtrap(rho .* xs .^ (1 - L), r)
+            Q = (xs .^ (-(L + 1)) .* ci .+ xs .^ L .* co) .* wxf
+            QR = Q
+            if L == 1
+                co1 = co[1]
+                recret && (co1 += 0.5 * (real(mdb.w) - real(md3.w))^2 * revtrap(rho .* xs .^ 2, r)[1])
+                QR = Q .- xs .* co1 .* wrf
+            end
             BL0 = ang(Sa .* TL.Y[(0, L)] .* conj.(S4)); BL2 = ang(Sa .* TL.Y[(0, L)] .* conj.(S4) .* x .^ 2)
             TN .+= (4pi / (2L + 1)) * cL .* Q .* (BL0 .* r .^ 2 .+ BL2 * a^2)
             TNR .+= (4pi / (2L + 1)) * cL .* QR .* (BL0 .* r .^ 2 .+ BL2 * a^2)

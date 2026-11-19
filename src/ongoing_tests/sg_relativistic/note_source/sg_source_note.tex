@@ -16,7 +16,7 @@
 \title{\textbf{The sourced Klein--Gordon equation behind the $2\to2$ rates}\\[3pt]
 \large self-interactions, self-gravity, black-hole recoil, and the limits we compute}
 \author{}
-\date{16 November 2026 (Section~\ref{sec:pin} added 18 November)}
+\date{16 November 2026 (Section~\ref{sec:pin} added 18 November, Sections~\ref{sec:pair} and~\ref{sec:kg1pn} 19 November)}
 
 \begin{document}
 \maketitle
@@ -70,10 +70,10 @@ This part, the left-hand side of \eqref{eq:master}, is treated identically for a
 Collecting the terms of order $c_1c_2c_3^*$ in \eqref{eq:full}, with $g=g_{\rm Kerr}+h$ and $h$ the metric perturbation produced by the cloud,
 \begin{equation}
 \boxed{\;S=\sigma_{12}\Big\{-\frac{\mu^2}{f_a^2}\,\phi_1\phi_2\phi_3^*
-\;-\;\delta\Box\big[h^{(23)}\big]\phi_1\;-\;\delta\Box\big[h^{(13)}\big]\phi_2\Big\}\;} \label{eq:S}
+\;-\;\delta\Box\big[h^{(23)}\big]\phi_1\;-\;\delta\Box\big[h^{(13)}\big]\phi_2\;-\;\delta\Box\big[h^{(12)}\big]\phi_3^*\Big\}\;} \label{eq:S}
 \end{equation}
 where $\sigma_{12}=1$ for different incoming levels and $\tfrac12$ for identical ones. The first term is the self-interaction.
-In the other two, $\delta\Box[h]$ is the first-order change of the wave operator,
+In the other three, $\delta\Box[h]$ is the first-order change of the wave operator,
 \begin{equation}
 -\delta\Box[h]\phi=h^{\mu\nu}\nabla_\mu\nabla_\nu\phi+\big(\nabla_\mu h^{\mu\nu}-\tfrac12\nabla^\nu h\big)\nabla_\nu\phi , \label{eq:dbox}
 \end{equation}
@@ -85,10 +85,24 @@ T^{(b3)}_{\mu\nu}=\nabla_\mu\phi_b\nabla_\nu\phi_3^*+\nabla_\nu\phi_b\nabla_\mu\
 \end{equation}
 $T^{(b3)}$ oscillates at $\omega_g=\omega_b-\omega_3$ with azimuthal number $m_b-m_3$. Physically: the interference of levels $b$ and 3
 is an oscillating mass distribution; its gravitational field acts on the quanta of level $a$ and scatters them into mode 4.
-There are two terms because either incoming level can play the role of $b$.
+There are two such terms because either incoming level can play the role of $b$.
 
-Equations \eqref{eq:S}--\eqref{eq:lin} are exact to first order in the cloud mass. Nothing has been assumed about velocities, and the hole is
+The last term of \eqref{eq:S} is the third way of pairing the three factors: $h^{(12)}$ is sourced by the stress tensor of the two
+\emph{incoming} levels,
+\begin{equation}
+\delta G_{\mu\nu}\big[h^{(12)}\big]=8\pi G\,T^{(12)}_{\mu\nu},\qquad
+T^{(12)}_{\mu\nu}=\nabla_\mu\phi_1\nabla_\nu\phi_2+\nabla_\nu\phi_1\nabla_\mu\phi_2
+-g_{\mu\nu}\big(\nabla\phi_1\!\cdot\!\nabla\phi_2+\mu^2\phi_1\phi_2\big), \label{eq:pair}
+\end{equation}
+which oscillates at $\omega_1+\omega_2\simeq2\mu$, and it acts on $\phi_3^*$. In the language of diagrams the first two are the $t$- and
+$u$-channel exchange of a graviton and this one is the $s$-channel. It exists because the field is real (for a complex field with a
+conserved charge there is no $\phi\phi$ term in $T_{\mu\nu}$). It is local and small, but of the same order as the first relativistic
+corrections to the other two; see Section~\ref{sec:pair}.
+
+Equations \eqref{eq:S}--\eqref{eq:pair} are exact to first order in the cloud mass. Nothing has been assumed about velocities, and the hole is
 dynamical: the solution of \eqref{eq:lin} contains its tidal response and its recoil.
+(Until 18 November the pair term was missing from this equation and from every computation: the Newtonian tables, the 1PN test and the
+relativistic tables contain the first two gravitational terms only. Since 19 November the rate loader adds it.)
 Since all three terms multiply $c_1c_2c_3^*$, the amplitudes add coherently,
 \begin{equation}
 A=A_{\rm SI}\Big(\frac{\Mpl}{f_a}\Big)^{\!2}+A_{\rm SG}\quad\Longrightarrow\quad
@@ -107,6 +121,8 @@ as a boundary-value problem in $(r,\theta)$ at frequency $\omega_g$: all ten com
 This contains retardation, the gravitomagnetic and spatial components, frame dragging and the response of the hole.
 For transitions with $|m_b-m_3|=1$ the hole is displaced by the dipole of the cloud. Obtaining that part of the solution needs a
 separate procedure, in which the equations are solved in the frame of the hole; it is written out in Section~\ref{sec:pin}.
+This is done for the two exchange terms $h^{(23)}$, $h^{(13)}$. The pair term is not solved on Kerr; it is added in the local form of
+Section~\ref{sec:pair}.
 
 \subsection{Post-Newtonian expansion}
 For a bound state $v^2\sim GM/r\sim\alpha^2/n^2$, so \eqref{eq:lin} can be expanded in $v$. The first correction (1PN) is of relative
@@ -114,7 +130,8 @@ order $\alpha^2$. We have computed it for four channels with identical incoming 
 The ingredients are the following.
 
 \paragraph{Non-relativistic field and its stress tensor.} Write $\phi=(2\mu)^{-1/2}\big(\psi\,e^{-i\mu t}+{\rm c.c.}\big)$, with
-$|\dot\psi|\sim\mu\alpha^2|\psi|$ and $|\nabla\psi|\sim\mu\alpha|\psi|$. Dropping the terms that oscillate at $2\mu$,
+$|\dot\psi|\sim\mu\alpha^2|\psi|$ and $|\nabla\psi|\sim\mu\alpha|\psi|$. Dropping the terms that oscillate at $2\mu$
+(they are the pair term of Section~\ref{sec:pair}, which is of the same order and has to be added to what follows),
 \begin{equation}
 \begin{aligned}
 T_{00}&=\mu|\psi|^2+\tfrac{i}{2}\big(\bar\psi\dot\psi-\psi\dot{\bar\psi}\big)+\tfrac{1}{2\mu}|\nabla\psi|^2, &\qquad
@@ -186,10 +203,16 @@ $544\times544\to322+\infty$ & $-0.33$ & $+0.08$ & $+0.06$ & $+0.05$ & $-0.11$ & 
 \bottomrule
 \end{tabular}
 \end{center}
-Gravitomagnetism is the largest term and reduces the attraction (co-moving mass currents repel). Two caveats apply to these numbers.
-The individual terms depend on the gauge; only their sum, with the wavefunctions written in matching (harmonic) coordinates, is
-physical. And this calculation holds the hole fixed, so it does not contain the recoil of Section~3.4. The fully relativistic
-calculation of Section~3.1 has neither limitation and replaces it.
+Gravitomagnetism is the largest term and reduces the attraction (co-moving mass currents repel).
+
+\emph{These numbers are not the correction of the tabulated rates.} They are corrections to a Newtonian amplitude written with the
+canonical Schr\"odinger wavefunctions $\psi$ in harmonic coordinates. The Newtonian amplitude of the tables and of the relativistic
+code is written with the Klein--Gordon mode functions $\phi$ in the Boyer--Lindquist radius. The two Newtonian amplitudes differ at
+relative order $\alpha^2$, by as much as the corrections themselves, so adding the sum above to the tabulated rate gives the wrong
+coefficient: for the rate, $(\Gamma/\Gamma_{\rm NR}-1)/\alpha^2=-0.49$ instead of the relativistic $+0.08$ for $322\times322\to544$,
+and $-0.34$ instead of $+0.08$ for $544\times544\to322$. In addition the test holds the hole fixed (no 1PN correction of the recoil
+term of Section~3.4) and has no pair term. Section~\ref{sec:kg1pn} gives the complete 1PN source in the variables of the tables;
+with it the 1PN and the relativistic results agree.
 
 \subsection{Newtonian}
 Keep only the leading term. With $\partial_t\phi\simeq-i\mu\phi$, $T^{(b3)}_{00}\simeq2\mu^2\phi_b\phi_3^*\equiv\rho^{(b3)}$ and
@@ -329,6 +352,158 @@ also where the recoil removes $90\%$ of the amplitude or exceeds the direct term
 a dipole exchange, in the 574 where the recoil changes the Newtonian rate by more than a factor of two the relativistic rate lies
 within $30\%$ of the recoil-included value in $95.6\%$ and within $30\%$ of the fixed-hole value in none.
 
+\subsection{The pair ($s$-channel) term}\label{sec:pair}
+\paragraph{Why it is local.} The source \eqref{eq:pair} oscillates at $2\mu$ but varies in space only on the scale of the cloud,
+$r\sim n^2/(\mu\alpha)\gg1/\mu$. In Lorenz gauge $\Box\bar h_{\mu\nu}=-16\pi G\,T_{\mu\nu}$ with
+$\Box=-\partial_t^2+\nabla^2\simeq4\mu^2$, so the metric follows the source point by point,
+\begin{equation}
+\bar h^{(12)}_{\mu\nu}=-\frac{4\pi G}{\mu^2}\,T^{(12)}_{\mu\nu}\,\big[1+O(\alpha^2)\big].
+\end{equation}
+There is no $1/|\bx-\by|$: the exchanged graviton is far off shell.
+\paragraph{The stress tensor at $2\mu$.} With $\partial_t\phi_{1,2}\simeq-i\mu\phi_{1,2}$, $\nabla\phi_1\!\cdot\!\nabla\phi_2\simeq+\mu^2\phi_1\phi_2$, hence
+\begin{equation}
+T^{(12)}_{00}\simeq0,\qquad T^{(12)}_{0i}=O(\alpha),\qquad T^{(12)}_{ij}\simeq-2\mu^2\,\phi_1\phi_2\,\delta_{ij}.
+\end{equation}
+The energy density of a real field does not oscillate at leading order, its pressure does (this is the oscillating pressure that
+sources the oscillating potentials of Khmelnitsky and Rubakov). Therefore $\bar h_{ij}=8\pi G\,\phi_1\phi_2\,\delta_{ij}$ and
+$h^{00}=\tfrac12\bar h_{kk}=12\pi G\,\phi_1\phi_2$.
+\paragraph{The source.} With $-\delta\Box[h]\phi_3^*\simeq h^{00}\partial_t^2\phi_3^*=-\mu^2h^{00}\phi_3^*$,
+\begin{equation}
+\boxed{\;S_{\rm pair}=-12\pi G\mu^2\,\sigma_{12}\,\phi_1\phi_2\phi_3^*\;}
+\qquad\Longleftrightarrow\qquad \frac{1}{f_a^2}\;\to\;\frac{1}{f_a^2}+\frac{12\pi}{\Mpl^2}. \label{eq:Spair}
+\end{equation}
+It has the form and the sign of the attractive axion quartic, with an effective decay constant
+$\Mpl/\sqrt{12\pi}=2.0\times10^{18}$~GeV. In terms of amplitudes,
+\begin{equation}
+A=A_{\rm SI}\Big[\Big(\frac{\Mpl}{f_a}\Big)^{\!2}+12\pi\Big]+A_{\rm SG},
+\end{equation}
+so it needs no new computation: $A_{\rm SI}$ is tabulated for every channel.
+\paragraph{Order.} Relative to the Newtonian exchange it is $q^2/\mu^2\sim\alpha^2$ ($q\sim\mu\alpha$ the momentum transfer, against
+$s=4\mu^2$ in the $s$-channel propagator): a 1PN term. The corrections to \eqref{eq:Spair} (gradients of the levels, the field of the
+hole) are of relative order $\alpha^2$, i.e.\ 2PN.
+\paragraph{Check.} The same number follows from the tree-level scattering amplitude of identical scalars: with the normalisation in
+which the $t$-channel gives Newton's law, $\mathcal M_t=16\pi G\mu^4/q^2$, the $s$-channel at threshold is $\mathcal M_s=+12\pi G\mu^2$,
+against $\mathcal M_{\rm SI}=+\mu^2/f_a^2$ (evaluated numerically with explicit tensors, de Donder propagator).
+\paragraph{Size.} $A_{\rm pair}/A_{\rm NR}$ in units of $\alpha^2$ (it scales as $\alpha^2$ to the accuracy of the table for $\alpha\le0.1$; $\tilde a=0.95$):
+\begin{center}
+\begin{tabular}{@{}lc@{\qquad}lc@{}}
+\toprule
+channel & $A_{\rm pair}/(\alpha^2A_{\rm NR})$ & channel & $A_{\rm pair}/(\alpha^2A_{\rm NR})$ \\
+\midrule
+$211\times211\to322+{\rm BH}$ & $-0.094$ & $211\times211\to422+{\rm BH}$ & $-0.109$ \\
+$322\times322\to211+\infty$ & $-0.054$ & $422\times422\to211+\infty$ & $-0.165$ \\
+$322\times322\to544+{\rm BH}$ & $+0.023$ & $322\times422\to211+\infty$ & $-0.077$ \\
+$544\times544\to322+\infty$ & $+0.011$ & $322\times544\to211+\infty$ & $+0.138$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+The rate changes by twice this. For runs with self-interactions and $f_a\le10^{17}$~GeV the term is irrelevant in another sense too:
+it shifts the contact amplitude by $12\pi(f_a/\Mpl)^2\le0.25\%$. It matters for self-gravity alone and for $f_a\gtrsim10^{18}$~GeV.
+\paragraph{In the code.} With self-gravity switched on the rate loader (\texttt{load\_rates.jl}) uses
+\begin{equation}
+\Gamma=\Gamma_{\rm SI}\,c^2+2\kappa\,c\sqrt{\Gamma_{\rm SI}\Gamma_{\rm SG}}+\Gamma_{\rm SG},\qquad c=\Big(\frac{\Mpl}{f_a}\Big)^{\!2}+12\pi G\Mpl^2,
+\end{equation}
+for whatever self-gravity tables are in use. This is the default since 19 November 2026; all runs made before that date are
+without the pair term, which is what \texttt{NL\_S\_CHANNEL=0} in the environment reproduces. In 48 runs repeated with and
+without it (relativistic tables; self-gravity alone and with $f_a=10^{17}$~GeV; $M=10$ and $10^4\,M_\odot$, $\alpha=0.05$--$0.25$) the
+final spin changes by at most $2\times10^{-4}$ and the extent of the $(n,4,4)$ tower is the same (in two runs the number of
+levels above $10^{-10}$ differs by one).
+
+
+\subsection{The complete 1PN source, and the check of the order-$\alpha^2$ coefficients}\label{sec:kg1pn}
+The relativistic calculation can be checked against an analytic expansion only if both are written in the same variables. This
+subsection derives the 1PN source directly from the Klein--Gordon equation, with no effective Lagrangian in between.
+
+\paragraph{Metric and wave operator.} In harmonic gauge the 1PN metric is
+$g_{00}=-1+2V-2V^2$, $g_{0i}=-4V_i$, $g_{ij}=(1+2V)\delta_{ij}$, with $\Box V=-4\pi G(T^{00}+T^{kk})$ and $\nabla^2V_i=-4\pi G\,T^{0i}$.
+To this order
+\begin{equation}
+(\Box_g-\mu^2)\phi=-(1+2V+2V^2)\ddot\phi-4\dot V\dot\phi+(1-2V)\nabla^2\phi-4\partial_t(V_i\partial_i\phi)-4\partial_i(V_i\dot\phi)-\mu^2\phi .
+\end{equation}
+Put $V=V_B+v$ and $V_i=v_i$, with $V_B=GM/|\bx|$ the potential of the hole and $v$, $v_i$ those of the transition $b\to3$
+(frequency $\omega_g$), and linearise in the cloud.
+
+\paragraph{Source without recoil.} Using the mode equation of level $a$ for $\nabla^2\phi_a$, and the stress tensor of the field in
+the metric of the hole for the source of $v$ (the gradient terms cancel in $T^{00}+T^{kk}$),
+\begin{equation}
+\begin{aligned}
+S&=-2\mu^2\Big[1+\frac{2(\omega_a\omega_4-\mu^2)}{\mu^2}+4V_B(\bx)\Big]\,v\,\phi_a-4i(\omega_4+\omega_a)\,v_i\partial_i\phi_a-4i\omega_a(\partial_iv_i)\phi_a,\\
+v(\bx)&=G\!\int\!\dd^3y\;2\mu^2\Big[1+\frac{2(\omega_b\omega_3-\mu^2)}{\mu^2}+6V_B(\by)\Big]\phi_b\phi_3^*(\by)\,\Big[\frac{1}{|\bx-\by|}-\frac{\omega_g^2}{2}|\bx-\by|\Big],\\
+v_i(\bx)&=G\!\int\!\dd^3y\,\frac{T^{0i}(\by)}{|\bx-\by|}. \label{eq:kg1pn}
+\end{aligned}
+\end{equation}
+Here $\bx$ are harmonic coordinates, $|\bx|=r_{\rm BL}-GM$, and $S$ is the scalar source of \eqref{eq:master}. Relative to the
+Newtonian source of Section~3.3 (Poisson equation solved in $r_{\rm BL}$, no weights) there are six corrections of order $\alpha^2$:
+the change of radial coordinate, the potential of the hole at the point where the field acts ($4V_B$) and at the source ($6V_B$),
+the two frequency factors (together $E=2(\omega_a\omega_4+\omega_b\omega_3-2\mu^2)/\mu^2$, $=-4\alpha^2/n_1^2$ for $N_1\times N_1\to N_3$),
+gravitomagnetism and retardation. (For a monopole transition density there is one more, the change of the potential of the hole by
+the cloud potential at its position; it does not occur in our channels.)
+
+\paragraph{Recoil.} Go to the frame of the hole, $\bx\to\bx-\mathbf Z(t)$, $t\to t+\dot{\mathbf Z}\!\cdot\!\bx$. The fictitious potential
+$-\mathbf a\!\cdot\!\bx$ ($\mathbf a=\ddot{\mathbf Z}$) enters $g_{00}$ but not $g_{ij}$, the potential of the accelerated hole is
+$V_B=GM/|\bx|-\tfrac12GM\,\mathbf a\!\cdot\!\hat{\bx}$, and its gravitomagnetic potential is removed by the change of time. The result is
+\begin{equation}
+S_{\rm rec}=2\mu^2\Big[1+\frac{\epsilon_a+\epsilon_4}{\mu}+\frac52V_B(\bx)\Big](\mathbf a\!\cdot\!\bx)\,\phi_a,\qquad
+\mathbf a=\nabla v(0)+4\,\partial_t\mathbf v(0),\qquad\epsilon=\omega-\mu,
+\end{equation}
+with $v$ of \eqref{eq:kg1pn} (so the acceleration of the hole carries the weight $6V_B$, the frequency factor and retardation) and a
+gravitomagnetic induction term $-4i\omega_gG\!\int\!T^{0i}/|\by|$.
+
+\paragraph{Relation to the 1PN test of Section~3.2.} The canonical wavefunction is
+$\psi=\sqrt{2\mu}\,(1+2V_B+\epsilon/2\mu)\,\phi$. In terms of $\psi$ the weights of \eqref{eq:kg1pn} become
+$1+\tfrac32(\epsilon+\epsilon')/\mu+2V_B$ at each end, which is the Einstein--Infeld--Hoffmann result
+($\tfrac32v^2-V_B$) and is what the test computes: its stress, kinetic and $G^2$ pieces add up to
+$\tfrac32\sum\epsilon/\mu+2V_B(\bx)+2V_B(\by)$ to three or four digits in all four channels
+($+0.0423$ against $+0.0424$, $+0.1078$ against $+0.1078$, $+0.171$ against $+0.172$, $+0.268$ against $+0.268$, in units of $\alpha^2$).
+The test is therefore correct, in its own variables. To apply it to the tables one has to add the conversion of the Newtonian
+amplitude: the change of radial coordinate, $2V_B(\bx)+4V_B(\by)$ and $\tfrac12\sum\epsilon/\mu$.
+
+\paragraph{Comparison with the relativistic calculation.} Coefficients of $\alpha^2$ of $(A-A_{\rm NR})/A_{\rm N}$, leading multipole,
+$\tilde a=0.95$, at $\alpha=0.05$ (they change by less than $1\%$ below $\alpha=0.1$). Weights and coordinate change are computed with the Kerr
+states (\texttt{SGX\_NEWTON\_SHIFT}, \texttt{\_WX}, \texttt{\_WY}, \texttt{\_WRX}, \texttt{\_RECRET} in \texttt{exchange\_gen.jl}),
+gravitomagnetism, retardation and induction with hydrogenic ones (\texttt{sg\_1pn\_gen.jl}, \texttt{sg\_1pn\_recoil.jl}); the batch
+job and the script that assembles the table are in \texttt{scripts/sg\_1pn}.
+\begin{center}
+\begin{tabular}{@{}lcccc@{}}
+\toprule
+ & $322^2\to544$ & $544^2\to322$ & $211^2\to322$ & $322^2\to211$ \\
+\midrule
+radial coordinate & $-0.148$ & $-0.098$ & $-0.314$ & $-0.243$ \\
+$4V_B$ where the field acts & $+0.422$ & $+0.212$ & $+1.039$ & $+0.558$ \\
+$6V_B$ at the source & $+0.495$ & $+0.366$ & $+1.213$ & $+0.970$ \\
+frequency factors & $-0.444$ & $-0.160$ & $-1.000$ & $-0.444$ \\
+gravitomagnetism & $-0.319$ & $-0.331$ & $-1.141$ & $-1.104$ \\
+retardation & $+0.035$ & $+0.054$ & $+0.095$ & $+0.117$ \\
+\midrule
+1PN, hole held fixed & $+0.040$ & $+0.042$ & $-0.108$ & $-0.148$ \\
+relativistic, hole held fixed & $+0.039$ & $+0.041$ & $-0.110$ & $-0.151$ \\
+\midrule
+recoil: radial coordinate & & & $+0.373$ & $+0.332$ \\
+recoil: $\tfrac52V_B$ where the field acts & & & $-0.933$ & $-0.829$ \\
+recoil: $6V_B$ at the source & & & $-2.748$ & $-2.658$ \\
+recoil: retardation & & & $-0.112$ & $-0.109$ \\
+recoil: frequency factors & & & $+1.116$ & $+0.639$ \\
+recoil: induction & & & $+1.320$ & $+1.268$ \\
+\midrule
+1PN, hole free & $+0.040$ & $+0.042$ & $-1.09$ & $-1.50$ \\
+relativistic, hole free & $+0.039$ & $+0.041$ & $-1.06$ & $-1.48$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+(Relativistic values: at the node $\alpha=0.07$ for the free hole; the first two channels have no recoil. The pair term of
+Section~\ref{sec:pair} is in neither row; in these units it adds $+0.022$, $+0.011$, $+0.061$, $+0.031$.)
+In the two channels without recoil the difference between the relativistic and the 1PN amplitude is $-0.17\,\alpha^4$ and
+$-0.10\,\alpha^4$ over the whole range $0.07\le\alpha\le0.27$, with no remainder at order $\alpha^2$ ($|c_2|<0.002$): each of the six
+terms is confirmed to better than half a per cent of its size. With the hole held fixed the dipole channels agree in the same way.
+With the hole free they agree to $0.03$--$0.05$ at $\alpha\simeq0.07$, i.e.\ to $1$--$2\%$ of the largest terms; the remainder is fitted
+by $c_3\alpha^3+c_4\alpha^4$ with $c_3\simeq0.6$ and no $\alpha^2$ term ($|c_2|\le0.04$, i.e.\ below $3\%$ of the coefficient).
+Part of this remainder is the spin of the hole: repeating the two channels at $\tilde a=0.3$ and $0.6$, the remainder at
+$\alpha=0.075$ is $0.025$, $0.038$, $0.051$ for $\tilde a=0.3$, $0.6$, $0.95$ in $211^2\to322$ and $0.035$, $0.048$, $0.052$ in
+$322^2\to211$ (at $\alpha=0.25$: $0.12$, $0.18$, $0.25$ and $0.23$, $0.29$, $0.35$). Extrapolated to zero spin about $0.01$--$0.03$ is left
+at $\alpha=0.075$, growing more slowly than $\alpha^4$; these points do not decide whether that is a term of order $\alpha^3$ of the
+recoil or a very small one of order $\alpha^2$. With the hole held fixed there is no such term.
+This is the independent confirmation of the order-$\alpha^2$ coefficients of the relativistic calculation that the 1PN test was meant to give.
+
 \section{What is used where}
 
 \begin{center}
@@ -338,7 +513,8 @@ within $30\%$ of the recoil-included value in $95.6\%$ and within $30\%$ of the 
 \midrule
 Self-interaction tables & first term of \eqref{eq:S} & Kerr \\
 Self-gravity tables (all runs so far) & Newtonian with recoil & Kerr for $n\le8$, hydrogenic above \\
-Exact (overlay tables, 2{,}488 channel points) & \eqref{eq:lin}, Lorenz gauge & Kerr \\
+Relativistic exchange (2{,}488 points) & \eqref{eq:lin}, Lorenz gauge & Kerr \\
+Pair term (runs from 19 November) & \eqref{eq:Spair}, from $\Gamma_{\rm SI}$, $\kappa$ & as the tables in use \\
 1PN & test only, four channels & hydrogenic \\
 \bottomrule
 \end{tabular}

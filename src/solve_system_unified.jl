@@ -255,6 +255,8 @@ Handles both standard multi-level mode and spinone single-level mode via the spi
 - `non_rel::Bool`: Use non-relativistic approximation (default true)
 - `self_grav::Bool`: add the Newtonian self-gravity contribution (and its interference with self-interactions)
   to the scattering rates, from rate_sve/*_LvrHc_SG.dat (Compute_all_rates.jl --self_grav true); requires non_rel=false
+  (also adds the s-channel graviton term, a contact term equivalent to 1/f_a^2 -> 1/f_a^2 + 12 pi G; NL_S_CHANNEL=0 in
+  the environment switches that off, see load_rates.jl)
 - `si_sign::Float64`: sign of the quartic self-interaction for the SI-SG interference (+1 attractive/axion, -1 repulsive)
 - `rate_input`: custom scattering-channel list (file in rate_sve/ or absolute path) instead of
   load_rate_input_Nmax_X.txt, e.g. from rate_sve/gen_custom_input.py; its states must be Nmax modes
