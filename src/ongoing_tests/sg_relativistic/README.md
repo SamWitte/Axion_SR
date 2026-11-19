@@ -117,7 +117,7 @@ one result file per point, claims by lock directories so that many workers share
 
 Dipole exchanges (`|m_b - m3| = 1`) use the hole-frame solver of `pinned.jl` and need the larger angular basis
 `Lextra_dip = 10`. The procedure (pin the horizon, hold it with a strut, add the accelerated-frame field, release the
-hole by cancelling the strut) is written out in Section 3.5 of `note_source/sg_source_note.pdf`. Test switch
+hole by cancelling the strut) is written out in Section 3.5 of the note `sg_source_note` (notes are not kept in the repository). Test switch
 `SGX_HOLD_FIXED=1`: the struts are left in, i.e. the hole is held at rest; the relativistic amplitude then reproduces
 the Newtonian one WITHOUT recoil (0.1 % at alpha = 0.05-0.1), while the normal solution tends to Newton + recoil as
 alpha^2 (`src/scripts/sg_exact/frame_check`).
