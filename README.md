@@ -147,6 +147,14 @@ julia Compute_all_rates.jl --S1 211 --S2 211 --S3 322 --S4 BH --ftag _LvrHc_ --s
 
 writes `rate_sve/211_211_322_BH_LvrHc_SG.dat` (columns α, Γ_SI, Γ_SG, Γ_×, κ = Γ_×/2√(Γ_SI Γ_SG)) next to the SI table; an existing SI table is not overwritten. Evolve with `solve_system(...; non_rel=false, self_grav=true)` (`si_sign=-1` for a repulsive quartic); channels without an SG table fall back to SI only (one warning per session). `--ang_method gl` replaces the Monte Carlo angular overlaps (±1% seed scatter in amplitude) by exact Gauss–Legendre quadrature. Background and validation: `src/ongoing_tests/sg_vs_si/`.
 
+Since November 2026 `gf_radial` has three corrections, all on by default (`false` reproduces earlier tables):
+- `inf_all_l`: channels to infinity sum every allowed outgoing multipole, not just one.
+- `inf_wkb`: their outgoing wave starts as a WKB solution, and the outer radius contains the levels.
+- `kg_norm`: the cloud modes have the Klein-Gordon normalisation.
+
+The corrected tables of the self-gravity campaign are in `rate_sve/rates_sg_v1120_20261122.zip`; see
+`src/scripts/sg_ext/README.md`.
+
 **Switching it on in an evolution.** SI-only remains the default. With self-gravity:
 
 ```bash

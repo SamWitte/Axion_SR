@@ -1082,9 +1082,17 @@ spheroidicity c^2 = a^2 (omega^2 - mu^2), i.e. c = a*sqrt(erg^2 - alph^2): imagi
 bound states, real for unbound ones. (SpinWeightedSpheroidalHarmonics uses c = a*omega,
 the massless convention, so c must be built here rather than passing a*erg.)
 """
-function spheroidals(l, m, a, erg, alph)
+function spheroidals(l, m, a, erg, alph; spherical_above=typemax(Int))
     if abs.(m) > l
         return 0.0
+    end
+
+    # spherical_above = L: spherical harmonic for l >= L.  Used for the outgoing wave of channels to infinity (inf_wkb
+    # path of gf_radial, L = 10): with all multipoles summed l reaches l1 + l2 + l3, the spheroidal solver then takes
+    # minutes to hours per harmonic when l - |m| is large (final states such as 11-10-10 with m4 ~ 0), and the
+    # spheroidicity c^2 = a^2 k^2 <= 2e-3 changes the harmonic by less than 1e-4 there.
+    if l >= spherical_above
+        return (theta, phi) -> sphericalY(l, m, theta, phi)
     end
 
     # Protection: spin-weighted spheroidal harmonics break down for |m| >= 14
@@ -1687,7 +1695,21 @@ function gf_cached(f, kind::String, key)
     return val
 end
 
-function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, debug=false, Ntot_safe=10000,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=500000, eps_fac=1e-10, NON_REL=false, h_mve=1, to_inf=false, rmaxT=100, prec=200, cvg_acc=1e-4, NptsCh=60, iterC=40, Lcheb=4, run_leaver=false, der_acc=1e-20, use_heunc=false, pre_erg1=nothing, pre_erg2=nothing, pre_erg3=nothing, BHlmax=0, self_grav=false, sg_test_contact=false, sg_recoil=false, ang_method=:mc, NR_states=nothing)
+# Klein-Gordon charge of a bound mode whose radial function is normalised with int |R|^2 r^2 dr = 1 (the convention of
+# the radial functions in gf_radial), in units of 2 mu:
+#     Q = int dr |R|^2 < (w/mu) [(r^2 + a^2)^2 - Delta a^2 sin^2(theta)] / Delta - 2 a m r / (mu Delta) > / int dr |R|^2 r^2
+# with r in units of GM, w the real part of the frequency, and sin^2(theta) averaged with |Y_lm|^2.  For a hydrogenic
+# level Q = 1 + 3 alpha^2 / (2 n^2) + O(alpha^4).  An occupation number N means a mode of charge N, so every rate that is
+# cubic in the mode functions has to be divided by Q_1 Q_2 Q_3.
+function kg_norm_ratio(rf, rlist, l, m, a, alph, wre)
+    r = Float64.(real.(rlist)); f2 = Float64.(abs2.(rf)); aF = Float64(a); alpF = Float64(alph); wF = Float64(wre)
+    s2 = 1 - (2 * l^2 + 2 * l - 1 - 2 * m^2) / ((2 * l - 1) * (2 * l + 3))
+    Dl = r .^ 2 .- 2 .* r .+ aF^2
+    wgt = (wF / alpF) .* ((r .^ 2 .+ aF^2) .^ 2 .- Dl .* aF^2 .* s2) ./ Dl .- 2 * aF * m .* r ./ (alpF .* Dl)
+    return trapz(f2 .* wgt, r) / trapz(f2 .* r .^ 2, r)
+end
+
+function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, debug=false, Ntot_safe=10000,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=500000, eps_fac=1e-10, NON_REL=false, h_mve=1, to_inf=false, rmaxT=100, prec=200, cvg_acc=1e-4, NptsCh=60, iterC=40, Lcheb=4, run_leaver=false, der_acc=1e-20, use_heunc=false, pre_erg1=nothing, pre_erg2=nothing, pre_erg3=nothing, BHlmax=0, self_grav=false, sg_test_contact=false, sg_recoil=false, ang_method=:mc, NR_states=nothing, inf_all_l=true, inf_wkb=true, kg_norm=true)
 
     # NR_states = (b1, b2, b3): hydrogenic (true) or relativistic (false) bound state per level; default NON_REL for all
     nr_st = NR_states === nothing ? (NON_REL, NON_REL, NON_REL) : NR_states
@@ -1755,7 +1777,18 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         
         kk_pxy = real(sqrt.(erg_pxy.^2 .- alph.^2))
         rmax = 1/kk_pxy .* 30.0 # Need prefactor here i think...
-        
+        if inf_wkb
+            # Outer radius with the WKB start of the outgoing solution (see mode_amplitude):
+            #  - near threshold 30 / k is very large, while the WKB start is already accurate (|q'| / q^2 < 0.005) once the
+            #    Coulomb tail dominates the local wavenumber, at 5000 Bohr radii;
+            #  - it must contain the bound states: the self-gravity source of a far level (dipole exchange and recoil)
+            #    extends over the whole level, and 30 / k alone cuts levels with n >~ 5 (same extent as the BH channels).
+            rmax = min(rmax, 5000.0 / Float64(alph)^2)
+            rbnd_inf = maxN < 10 ? 2.0^(2.0 * maxN - 2 * (1 + maxN)) * gamma(2 + 2 * maxN) / alph^2 / factorial(2 * maxN - 1) * 10.0 :
+                                   2.0^(2.0 * maxN - 2 * (1 + maxN)) * 4 * maxN^2 / alph^2 * 10.0
+            rmax = max(rmax, rbnd_inf)
+        end
+
         val, iszero = integral4(l1, m1, l2, m2, l3, -m3, l, -m)
         tcnt = 0
         while iszero
@@ -1907,6 +1940,15 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     # writedlm("test_store/test2.dat", hcat(real(rlist), real(rf_2 .* conj.(rf_2))))
     # writedlm("test_store/322.dat", hcat(real(rlist), real(rf_3 .* conj.(rf_3))))
     erg = (erg_1 + erg_2 - erg_3) + 0 * im # leave the 0 im for NR case
+
+    # Klein-Gordon normalisation of the three cloud modes (kg_norm, since 2026-11-19; see kg_norm_ratio).  Until then the
+    # rates were computed with modes normalised to int |R|^2 r^2 dr = 1, which overestimates them by Q_1 Q_2 Q_3
+    # (0.9 % / 3.8 % / 9 % at alpha = 0.1 / 0.2 / 0.3 for 211 x 211 -> 322).
+    kg_fac = 1.0
+    if kg_norm
+        kg_fac = 1.0 / (kg_norm_ratio(rf_1, rlist, l1, m1, a, alph, real(erg_1)) * kg_norm_ratio(rf_2, rlist, l2, m2, a, alph, real(erg_2)) *
+                        kg_norm_ratio(rf_3, rlist, l3, m3, a, alph, real(erg_3)))
+    end
     if (m < 0)&&debug
         println("erg final \t", erg)
     end
@@ -1940,7 +1982,20 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     # max(BHlmax, l) keeps at least the leading multipole, so BHlmax=0
     # reproduces the single-mode result exactly.
     if to_inf
-        l_list = [l]
+        if inf_all_l
+            # Emission to infinity: the outgoing quantum leaves in every partial wave |m| <= l <= l1 + l2 + l3 with the
+            # parity of l1 + l2 + l3, and their fluxes add (sum_l |R_l|^2, as for the horizon).  The higher ones are not
+            # suppressed, because k r is not small over the cloud: keeping only l1 + l2 - l3, as was done until
+            # 2026-11-19 (inf_all_l = false), loses more than 10 % of the rate in about a third of the channels among
+            # the levels with n <= 6 and forces the SI-SG interference coefficient kappa to +-1.  The multipole used
+            # before stays first in the list.
+            lsum = l1 + l2 + l3
+            lmin = max(abs(m), 1)
+            isodd(lmin + lsum) && (lmin += 1)
+            l_list = vcat([l], [ll for ll in lmin:2:lsum if ll != l])
+        else
+            l_list = [l]
+        end
     else
         l = max(abs(l1 + l2 - l3), abs(m))
         l_list = collect(l:2:max(BHlmax, l))
@@ -1993,12 +2048,16 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     
     itp_rrstar = LinearInterpolation(rout_star, r_list_map, extrapolation_bc=Line())
     itp_rrstar_inv = LinearInterpolation(r_list_map, rout_star, extrapolation_bc=Line())
+    # the same map in double precision, for the inf_wkb path (rp is a BigFloat, so itp_rrstar interpolates in BigFloat)
+    itp_rrstar_F = LinearInterpolation(Float64.(rout_star), Float64.(r_list_map), extrapolation_bc=Line())
     
     h_step = Float64.(rp ./ h_mve)
 
     function mode_amplitude(l)
+        # r(r*) map: double precision on the inf_wkb path (see itp_rrstar_F), the original one otherwise
+        itp_rr = (to_inf && inf_wkb) ? itp_rrstar_F : itp_rrstar
 
-        Z4 = spheroidals(l, m, a, erg, alph)
+        Z4 = spheroidals(l, m, a, erg, alph; spherical_above=(to_inf && inf_wkb) ? 10 : typemax(Int))
 
         function compute_angular_integral_adaptive(Z1, Z2, Z3, Z4, use_spherical_fallback=false, timeout_seconds=180.0, nang_max=Nang)
             """
@@ -2178,83 +2237,131 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         rvals = []
         # set D to 1
      
-        testhold =  exp.(-sqrt.(alph.^2 .- erg.^2) .* rr) .* sqrt.(itp_rrstar.(rr).^2 .+ a.^2) ./ itp_rrstar.(rr)
+        testhold =  exp.(-sqrt.(alph.^2 .- erg.^2) .* rr) .* sqrt.(itp_rr.(rr).^2 .+ a.^2) ./ itp_rr.(rr)
         if abs.(testhold) .> 1e-200
             append!(outWF, testhold)
         else
             while abs.(testhold) .<= 1e-200
                 rr /= 2.0
-                testhold =  exp.(-sqrt.(alph.^2 .- erg.^2) .* rr) .* sqrt.(itp_rrstar.(rr).^2 .+ a.^2) ./ itp_rrstar.(rr)
+                testhold =  exp.(-sqrt.(alph.^2 .- erg.^2) .* rr) .* sqrt.(itp_rr.(rr).^2 .+ a.^2) ./ itp_rr.(rr)
             end
             append!(outWF, testhold)
         end
         append!(rvals, rr)
         rr -= h_step
-        append!(outWF,  exp.(-sqrt.(alph.^2 .- erg.^2) .* rr) .* sqrt.(itp_rrstar.(rr).^2 .+ a.^2) ./ itp_rrstar.(rr))
+        append!(outWF,  exp.(-sqrt.(alph.^2 .- erg.^2) .* rr) .* sqrt.(itp_rr.(rr).^2 .+ a.^2) ./ itp_rr.(rr))
         append!(rvals, rr)
         rr -= h_step
 
-    
-        stop_running = false
-        run_it = true
-        idx = 2
-        while run_it
-            r_input = itp_rrstar(rvals[idx])
-    
-            delt = (r_input.^2 .- 2 .* r_input .+ a.^2)
-            ff = (r_input.^2 .+ a.^2)
-            
-            net_rescale = h_step.^2
-            Vv = delt .* alph.^2 ./ ff .+ delt .* (LLM .+ a.^2 .* (erg.^2 .- alph.^2)) ./ ff.^2 .+ delt .* (3 .* r_input.^2 .- 4 .* r_input .+ a.^2) ./ ff.^3 .- 3 .* delt.^2 .* r_input.^2 ./ ff.^4 .+ 2 .* a .* m .* erg ./ ff .- 2 .* a .* m .* erg .* delt ./ ff.^2 .- a.^2 .* m.^2 ./ ff.^2
-            newV = 2 * outWF[idx] .- outWF[idx - 1] .+ net_rescale .* (Vv .- erg.^2) .* outWF[idx]
-        
-            newV_r = Float64.(real(newV))
-            newV_i = Float64.(imag(newV))
-            append!(outWF, newV_r + im * newV_i)
-            
-            append!(rvals, rr)
-        
-            rr -= h_step
-            idx += 1
-        
-            if (itp_rrstar(rr) < rp .*  (1.0 .+ eps_fac))
-                run_it = false
+        # Outgoing condition for channels to infinity (inf_wkb, since 2026-11-19).  At r_max the Coulomb tail of the
+        # mass term, 2 alpha mu / r, is not small against k^2 (at r_max = 30 / k it is 1 / (15 k_B) of it, k_B = k / (mu
+        # alpha)), so the pure exp(i k r*) start above is not an outgoing wave: it reflects part of it, and the rate
+        # then oscillates with r_max (-11 % for 322 x 322 -> 211, +21 % for 422 x 544 -> 322 at 30 / k; the multipole
+        # shares are wrong as well).  Start instead from the WKB solution u = exp(i int q dr*) / sqrt(q) with the local
+        # wavenumber q^2 = w^2 - V(r); its flux is q |u|^2, so the amplitude is returned times sqrt(q / k) and the rate
+        # formula below (written with k) stays as it is.  The result is independent of r_max to ~1e-5.
+        wkb_fac = 1.0
+        if to_inf && inf_wkb
+            q_loc = rs -> begin
+                r_in = itp_rr(rs); dl = r_in^2 - 2 * r_in + a^2; f2 = r_in^2 + a^2
+                Vq = dl * alph^2 / f2 + dl * (LLM + a^2 * (erg^2 - alph^2)) / f2^2 + dl * (3 * r_in^2 - 4 * r_in + a^2) / f2^3 - 3 * dl^2 * r_in^2 / f2^4 + 2 * a * m * erg / f2 - 2 * a * m * erg * dl / f2^2 - a^2 * m^2 / f2^2
+                sqrt(Float64(real(erg^2 - Vq)))
             end
+            q0 = q_loc(rvals[1]); q1 = q_loc(rvals[2])
+            # phase advance per step of the three-point recurrence used below: 2 asin(q h / 2)  (= q h for small steps)
+            th_step = 2 * asin(min(0.25 * (q0 + q1) * Float64(h_step), 1.0))
+            outWF[2] = outWF[1] * exp(-im * th_step) * sqrt(q0 / q1)
+            wkb_fac = sqrt(q0 / Float64(real(sqrt(erg^2 - alph^2 + 0im))))
         end
-        rvals = reverse(rvals)
-        outWF = reverse(outWF)
-    
-        # Get solution #2
-        rr += h_step
-        outWF_fw = []
-        omega_H = Float64.(a) ./ Float64.(rp.^2 .+ a.^2)
-        append!(outWF_fw, exp.(- im .* (erg .- m .* omega_H) .* rr) .* sqrt.(itp_rrstar.(rr).^2 .+ a.^2)) ##
-        rr += h_step
-        append!(outWF_fw, exp.(- im .* (erg .- m .* omega_H) .* rr) .* sqrt.(itp_rrstar.(rr).^2 .+ a.^2))
-        rr += h_step
-    
-        stop_running = false
-        run_it = true
-        idx = 2
-        while run_it
-            r_input = itp_rrstar(rvals[idx])
-    
-            delt = (r_input.^2 .- 2 .* r_input .+ a.^2)
-            ff = (r_input.^2 .+ a.^2)
-            
-            net_rescale = h_step.^2
-            Vv = delt .* alph.^2 ./ ff .+ delt .* (LLM .+ a.^2 .* (erg.^2 .- alph.^2)) ./ ff.^2 .+ delt .* (3 .* r_input.^2 .- 4 .* r_input .+ a.^2) ./ ff.^3 .- 3 .* delt.^2 .* r_input.^2 ./ ff.^4 .+ 2 .* a .* m .* erg ./ ff .- 2 .* a .* m .* erg .* delt ./ ff.^2 .- a.^2 .* m.^2 ./ ff.^2
-            newV = 2 * outWF_fw[idx] .- outWF_fw[idx - 1] .+ net_rescale .* (Vv .- erg.^2) .* outWF_fw[idx]
-        
-            newV_r = Float64.(real(newV))
-            newV_i = Float64.(imag(newV))
-            append!(outWF_fw, newV_r + im * newV_i)
-            
-            rr += h_step
-            idx += 1
 
-            if length(outWF_fw) >= length(rvals)
-                run_it = false
+
+        if to_inf && inf_wkb
+            # Double-precision recurrences (the two solutions are oscillatory: no dynamic range to protect).  Same
+            # three-point scheme, grid and start values as the general loops in the else branch, which do their
+            # arithmetic in BigFloat and take minutes once r_max contains a level with n ~ 20.
+            ergF = ComplexF64(erg); alpF = Float64(alph); aF = Float64(a); LLMF = ComplexF64(LLM); hF = Float64(h_step); rpF = Float64(rp)
+            Vf = r_in -> begin
+                dl = r_in^2 - 2 * r_in + aF^2; f2 = r_in^2 + aF^2
+                dl * alpF^2 / f2 + dl * (LLMF + aF^2 * (ergF^2 - alpF^2)) / f2^2 + dl * (3 * r_in^2 - 4 * r_in + aF^2) / f2^3 - 3 * dl^2 * r_in^2 / f2^4 + 2 * aF * m * ergF / f2 - 2 * aF * m * ergF * dl / f2^2 - aF^2 * m^2 / f2^2
+            end
+            rsv = Float64[Float64(rvals[1]), Float64(rvals[2])]; uo = ComplexF64[ComplexF64(outWF[1]), ComplexF64(outWF[2])]
+            rin_min = rpF * (1.0 + Float64(eps_fac)); rrF = rsv[2] - hF; kk_i = 2
+            while true
+                push!(uo, 2 * uo[kk_i] - uo[kk_i-1] + hF^2 * (Vf(itp_rr(rsv[kk_i])) - ergF^2) * uo[kk_i]); push!(rsv, rrF)
+                rrF -= hF; kk_i += 1
+                itp_rr(rrF) < rin_min && break
+            end
+            rvals = reverse(rsv); outWF = reverse(uo)
+            rrF += hF
+            om_HF = aF / (rpF^2 + aF^2)
+            outWF_fw = Vector{ComplexF64}(undef, length(rvals))
+            outWF_fw[1] = exp(-im * (ergF - m * om_HF) * rrF) * sqrt(itp_rr(rrF)^2 + aF^2); rrF += hF
+            outWF_fw[2] = exp(-im * (ergF - m * om_HF) * rrF) * sqrt(itp_rr(rrF)^2 + aF^2)
+            for kk_j in 2:length(rvals)-1
+                outWF_fw[kk_j+1] = 2 * outWF_fw[kk_j] - outWF_fw[kk_j-1] + hF^2 * (Vf(itp_rr(rvals[kk_j])) - ergF^2) * outWF_fw[kk_j]
+            end
+        else
+            stop_running = false
+            run_it = true
+            idx = 2
+            while run_it
+                r_input = itp_rr(rvals[idx])
+
+                delt = (r_input.^2 .- 2 .* r_input .+ a.^2)
+                ff = (r_input.^2 .+ a.^2)
+
+                net_rescale = h_step.^2
+                Vv = delt .* alph.^2 ./ ff .+ delt .* (LLM .+ a.^2 .* (erg.^2 .- alph.^2)) ./ ff.^2 .+ delt .* (3 .* r_input.^2 .- 4 .* r_input .+ a.^2) ./ ff.^3 .- 3 .* delt.^2 .* r_input.^2 ./ ff.^4 .+ 2 .* a .* m .* erg ./ ff .- 2 .* a .* m .* erg .* delt ./ ff.^2 .- a.^2 .* m.^2 ./ ff.^2
+                newV = 2 * outWF[idx] .- outWF[idx - 1] .+ net_rescale .* (Vv .- erg.^2) .* outWF[idx]
+        
+                newV_r = Float64.(real(newV))
+                newV_i = Float64.(imag(newV))
+                append!(outWF, newV_r + im * newV_i)
+            
+                append!(rvals, rr)
+        
+                rr -= h_step
+                idx += 1
+        
+                if (itp_rr(rr) < rp .*  (1.0 .+ eps_fac))
+                    run_it = false
+                end
+            end
+            rvals = reverse(rvals)
+            outWF = reverse(outWF)
+    
+            # Get solution #2
+            rr += h_step
+            outWF_fw = []
+            omega_H = Float64.(a) ./ Float64.(rp.^2 .+ a.^2)
+            append!(outWF_fw, exp.(- im .* (erg .- m .* omega_H) .* rr) .* sqrt.(itp_rr.(rr).^2 .+ a.^2)) ##
+            rr += h_step
+            append!(outWF_fw, exp.(- im .* (erg .- m .* omega_H) .* rr) .* sqrt.(itp_rr.(rr).^2 .+ a.^2))
+            rr += h_step
+    
+            stop_running = false
+            run_it = true
+            idx = 2
+            while run_it
+                r_input = itp_rr(rvals[idx])
+    
+                delt = (r_input.^2 .- 2 .* r_input .+ a.^2)
+                ff = (r_input.^2 .+ a.^2)
+            
+                net_rescale = h_step.^2
+                Vv = delt .* alph.^2 ./ ff .+ delt .* (LLM .+ a.^2 .* (erg.^2 .- alph.^2)) ./ ff.^2 .+ delt .* (3 .* r_input.^2 .- 4 .* r_input .+ a.^2) ./ ff.^3 .- 3 .* delt.^2 .* r_input.^2 ./ ff.^4 .+ 2 .* a .* m .* erg ./ ff .- 2 .* a .* m .* erg .* delt ./ ff.^2 .- a.^2 .* m.^2 ./ ff.^2
+                newV = 2 * outWF_fw[idx] .- outWF_fw[idx - 1] .+ net_rescale .* (Vv .- erg.^2) .* outWF_fw[idx]
+        
+                newV_r = Float64.(real(newV))
+                newV_i = Float64.(imag(newV))
+                append!(outWF_fw, newV_r + im * newV_i)
+            
+                rr += h_step
+                idx += 1
+
+                if length(outWF_fw) >= length(rvals)
+                    run_it = false
+                end
             end
         end
 
@@ -2268,12 +2375,12 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             error("WF/rvals length mismatch before rrstar rescaling")
         end
 
-        outWF .*= 1.0 ./ sqrt.(itp_rrstar.(rvals).^2 .+ a.^2)
-        outWF_fw .*= 1.0 ./ sqrt.(itp_rrstar.(rvals).^2 .+ a.^2)
+        outWF .*= 1.0 ./ sqrt.(itp_rr.(rvals).^2 .+ a.^2)
+        outWF_fw .*= 1.0 ./ sqrt.(itp_rr.(rvals).^2 .+ a.^2)
     
         ## TESTING
-        # writedlm("test_store/hom1.dat", cat(itp_rrstar.(rvals), real.(abs.(outWF .* conj(outWF))), dims=2))
-        # writedlm("test_store/hom2.dat", cat(itp_rrstar.(rvals), real.(abs.(outWF_fw .* conj(outWF_fw))), dims=2))
+        # writedlm("test_store/hom1.dat", cat(itp_rr.(rvals), real.(abs.(outWF .* conj(outWF))), dims=2))
+        # writedlm("test_store/hom2.dat", cat(itp_rr.(rvals), real.(abs.(outWF_fw .* conj(outWF_fw))), dims=2))
 
         if length(outWF_fw) > 15
             if to_inf
@@ -2297,8 +2404,8 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         #     ncheck = 12
         #     step = max(1, div(length(rvals) - 4, ncheck))
         #     for pp in 3:step:(length(rvals)-3)
-        #         r_pp   = itp_rrstar.(rvals[pp])
-        #         dr_pp  = itp_rrstar.(rvals[pp+1]) .- itp_rrstar.(rvals[pp-1])
+        #         r_pp   = itp_rr.(rvals[pp])
+        #         dr_pp  = itp_rr.(rvals[pp+1]) .- itp_rr.(rvals[pp-1])
         #         delt_pp = (r_pp.^2 .- 2 .* r_pp .+ a.^2) .* (GNew .* M)
         #         raw_wronk = (outWF_fw[pp] .* (outWF[pp+1] .- outWF[pp-1]) .-
         #                      outWF[pp] .* (outWF_fw[pp+1] .- outWF_fw[pp-1])) ./ dr_pp
@@ -2311,14 +2418,14 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         #     println("=== end Wronskian check ===")
         # end
     
-        wronk  = (outWF_fw[midP] .* (outWF[midP+1] .- outWF[midP-1]) .-  outWF[midP] .* (outWF_fw[midP+1] .- outWF_fw[midP-1]) )./ (itp_rrstar.(rvals[midP+1]) .- itp_rrstar.(rvals[midP-1]))
+        wronk  = (outWF_fw[midP] .* (outWF[midP+1] .- outWF[midP-1]) .-  outWF[midP] .* (outWF_fw[midP+1] .- outWF_fw[midP-1]) )./ (itp_rr.(rvals[midP+1]) .- itp_rr.(rvals[midP-1]))
 
         
         if isnan.(wronk)
             goback = true
             while goback
                 midP -= 1
-                wronk  = (outWF_fw[midP] .* (outWF[midP+1] .- outWF[midP-1]) .-  outWF[midP] .* (outWF_fw[midP+1] .- outWF_fw[midP-1]) )./ (itp_rrstar.(rvals[midP+1]) .- itp_rrstar.(rvals[midP-1]))
+                wronk  = (outWF_fw[midP] .* (outWF[midP+1] .- outWF[midP-1]) .-  outWF[midP] .* (outWF_fw[midP+1] .- outWF_fw[midP-1]) )./ (itp_rr.(rvals[midP+1]) .- itp_rr.(rvals[midP-1]))
                 if !isnan.(wronk)&&(abs.(wronk) .> 0.0)
                     goback=false
                 end
@@ -2330,15 +2437,15 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         end
 
     
-        wronk *= (itp_rrstar.(rvals[midP]).^2 .- 2 .* itp_rrstar.(rvals[midP]) .+ a.^2) .* (GNew .* M)
-        Tmm = (itpG(log10.(itp_rrstar.(rvals))) + im * itpGI(log10.(itp_rrstar.(rvals)))) .* (CG .* itp_rrstar.(rvals).^2 .+ CG_2 .* a.^2)
+        wronk *= (itp_rr.(rvals[midP]).^2 .- 2 .* itp_rr.(rvals[midP]) .+ a.^2) .* (GNew .* M)
+        Tmm = (itpG(log10.(itp_rr.(rvals))) + im * itpGI(log10.(itp_rr.(rvals)))) .* (CG .* itp_rr.(rvals).^2 .+ CG_2 .* a.^2)
 
         #### amplitude of the mode at the horizon (bound) / at infinity (to_inf)
         if to_inf
-            amp = outWF[end] .* trapz(outWF_fw .* Tmm, itp_rrstar.(rvals)) ./ wronk
+            amp = outWF[end] .* trapz(outWF_fw .* Tmm, itp_rr.(rvals)) ./ wronk
         else
-            idx_hold = itp_rrstar.(rvals) .> 1.01 .* rp
-            amp = trapz(outWF[idx_hold] .* Tmm[idx_hold], itp_rrstar.(rvals[idx_hold])) .* outWF_fw[idx_hold][1] ./ wronk
+            idx_hold = itp_rr.(rvals) .> 1.01 .* rp
+            amp = trapz(outWF[idx_hold] .* Tmm[idx_hold], itp_rr.(rvals[idx_hold])) .* outWF_fw[idx_hold][1] ./ wronk
         end
 
         #### self-gravity amplitude: same homogeneous solutions and Wronskian, SG source
@@ -2349,17 +2456,17 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                               sg_radial_source(sg_tr_13, Z2p, m2, rf2F, Z4p, m, rlistF, Float64(a)))
             iSR = LinearInterpolation(log10.(rlistF), real.(Tsg), extrapolation_bc=Line())
             iSI = LinearInterpolation(log10.(rlistF), imag.(Tsg), extrapolation_bc=Line())
-            lrv = log10.(Float64.(itp_rrstar.(rvals)))
+            lrv = log10.(Float64.(itp_rr.(rvals)))
             TmmS = iSR.(lrv) .+ im .* iSI.(lrv)
             if to_inf
-                amp_sg = outWF[end] .* trapz(outWF_fw .* TmmS, itp_rrstar.(rvals)) ./ wronk
+                amp_sg = outWF[end] .* trapz(outWF_fw .* TmmS, itp_rr.(rvals)) ./ wronk
             else
-                idx_hold = itp_rrstar.(rvals) .> 1.01 .* rp
-                amp_sg = trapz(outWF[idx_hold] .* TmmS[idx_hold], itp_rrstar.(rvals[idx_hold])) .* outWF_fw[idx_hold][1] ./ wronk
+                idx_hold = itp_rr.(rvals) .> 1.01 .* rp
+                amp_sg = trapz(outWF[idx_hold] .* TmmS[idx_hold], itp_rr.(rvals[idx_hold])) .* outWF_fw[idx_hold][1] ./ wronk
             end
         end
 
-        return amp, rvals[end], amp_sg
+        return amp * wkb_fac, rvals[end], amp_sg * wkb_fac
     end
 
 
@@ -2369,11 +2476,13 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     maxV_x = 0.0        # sum_l 2 Re(A_SI,l conj(A_SG,l))
     rvals_end = 0.0
     for lmode in l_list
-        if !to_inf && lmode != first(l_list)
+        if (!to_inf || ang_method != :gl) && lmode != first(l_list)
             # The angular overlap vanishes identically for some multipoles; the MC
             # integrator's convergence test is relative, so it would happily settle
             # onto sampling noise there. Skip those. Only applied beyond the leading
             # multipole, so BHlmax=0 reproduces the previous result untouched.
+            # (Channels to infinity with the exact Gauss-Legendre angles are not skipped: the self-gravity
+            # amplitude of a multipole need not vanish where the contact one does.)
             _, ang_iszero = integral4(l1, m1, l2, m2, l3, -m3, lmode, -m)
             if ang_iszero
                 if debug
@@ -2401,6 +2510,8 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             println("  l = ", lmode, ": |R_l|^2 = ", contrib, "   running total = ", maxV)
         end
     end
+
+    maxV *= kg_fac; maxV_sg *= kg_fac; maxV_x *= kg_fac      # Klein-Gordon normalisation of the cloud modes (kg_norm)
 
     ####
     if to_inf

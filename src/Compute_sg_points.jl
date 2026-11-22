@@ -68,6 +68,15 @@ function parse_commandline()
         "--BHlmax"
             arg_type = Int
             default = 2
+        "--inf_all_l"   # channels to infinity: sum every outgoing multipole (false: only l1 + l2 - l3, as before 2026-11-19)
+            arg_type = Bool
+            default = true
+        "--inf_wkb"     # channels to infinity: WKB start of the outgoing solution and outer radius that contains the levels (false: exp(i k r*) at 30 / k, as before 2026-11-19)
+            arg_type = Bool
+            default = true
+        "--kg_norm"     # Klein-Gordon normalisation of the cloud modes (false: int |R|^2 r^2 dr = 1, as before 2026-11-19)
+            arg_type = Bool
+            default = true
         "--alpha_min"   # only for the NptsCh mapping of Compute_all_rates.jl
             arg_type = Float64
             default = 0.03
@@ -131,7 +140,8 @@ function run_channel(S1, S2, S3, S4, alphas, rel_nmax, alpha_h, hfac; rpts=1500,
             gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=rpts, Npts_Bnd=NPTS_BND, eps_fac=1e-3, Ntot_safe=NTOT_SAFE,
                       Nang=Nang, NON_REL=false, NR_states=nr_st, h_mve=h_mve, to_inf=to_inf, rmaxT=rmaxT, run_leaver=true, NptsCh=NptsCh,
                       cvg_acc=cvg_acc, prec=prec, iterC=iterC, debug=PA["debug"], der_acc=der_acc, Lcheb=Lcheb, use_heunc=true,
-                      BHlmax=PA["BHlmax"], self_grav=PA["self_grav"], sg_recoil=PA["sg_recoil"], ang_method=Symbol(PA["ang_method"]))
+                      BHlmax=PA["BHlmax"], self_grav=PA["self_grav"], sg_recoil=PA["sg_recoil"], ang_method=Symbol(PA["ang_method"]),
+                      inf_all_l=PA["inf_all_l"], inf_wkb=PA["inf_wkb"], kg_norm=PA["kg_norm"])
         catch e
             println("FAILED ", join((S1, S2, S3, S4), " "), " alpha ", alpp, ": ", first(sprint(showerror, e), 300))
             flush(stdout)
