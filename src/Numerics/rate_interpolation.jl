@@ -23,6 +23,13 @@ table rows, more than 0.01 from a_c: median error 0.01-0.3%, at most ~5-18% at l
 α = 1.33, from the row spacing); a few 10% at the node closest to a_c. a_c(α) matches Leaver to
 < 1e-6 (up to 3e-4 where a_c -> 0.998).
 
+Tables for 433, 533 and 644 recomputed on 2026-11-23 with scripts/build_sr_tables_leaver.jl (the mixed-precision
+Leaver solver of kerr_modes.jl, each level followed continuously in α; same grids and conventions). The tables
+they replace had 14 hand-entered threshold rows 0.0015-0.023 above a_c (which put a_c(433) above a_c(533) at
+α ~ 1) and broken rates at large α. The same script reproduces the 544 table above to 7 digits where both are
+Leaver values; it differs where a_c > 0.992 (α > 1.99: 0.99697 against 0.99789 at α = 2.14, the nodeless level
+checked to change sign there).
+
 :factorised (default on 2026-11-09 and 10): Γ = m [Ω_H(a) - Ω_H(a_c(α))] A(α, a), ln A linear in
 (ln α, a), the two rows blended at fixed a. Same zero crossing, but kinks at the spin nodes, and an
 overshoot near a_c when a bracketing row is already past its threshold.

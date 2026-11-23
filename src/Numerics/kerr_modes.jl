@@ -95,20 +95,34 @@ end
     km_spheroidal(l, m, c2; nextra=8, nq=64) -> (Λ, Dict l' => b_l')
 
 Eigenfunction of (L² - c² cos²θ) S = Λ S continuously connected to Y_lm,
-S = Σ b_l' Y_l'm with Σ b² = 1 (so ∫ S² dΩ = 1).
+S = Σ b_l' Y_l'm with Σ b² = 1 (so ∫ S² dΩ = 1). For nearly real c² (|Im c²| ≤ 1e-6 |c²|) Λ is the
+real eigenvalue at Re c² plus its first-order imaginary part, which keeps a tiny Im Λ accurate.
 """
 function km_spheroidal(l::Int, m::Int, c2; nextra::Int=8, nq::Int=64)
     ls = [lp for lp in abs(m):(l + 2nextra) if iseven(lp - l)]
     x, w = gauss(nq)                       # x = cosθ
     Y = [km_theta_lm(lp, m, acos(xi)) for xi in x, lp in ls]
     n = length(ls)
+    C = [2π * sum(w .* Y[:, i] .* Y[:, j] .* x .^ 2) for i in 1:n, j in 1:n]       # <Y_i|cos²θ|Y_j>
+    i0 = findfirst(==(l), ls)
+    c2c = ComplexF64(c2)
+    if abs(imag(c2c)) <= 1e-6 * abs(c2c) || c2c == 0
+        # Nearly real c² (every quasi-bound level that is not a broad resonance): the real symmetric problem at
+        # Re c², and the imaginary part to first order, Λ = Λ(Re c²) - i Im(c²) <S|cos²θ|S> (error O((Im c²)²)).
+        # A complex eigensolver has an absolute error ~ eps ||A|| ~ 1e-14 in Im Λ, which swamps the imaginary part
+        # that a growth rate Im ω ~ 1e-30 puts there (superradiance tables at small α).
+        E = eigen(Symmetric(Matrix(Diagonal(Float64.(ls .* (ls .+ 1)))) .- real(c2c) .* C))
+        k = argmax(abs.(E.vectors[i0, :]))
+        v = E.vectors[:, k] ./ sqrt(sum(abs2, E.vectors[:, k]))
+        v .*= sign(v[i0])
+        Λ = complex(E.values[k], -imag(c2c) * dot(v, C * v))
+        return Λ, Dict(ls[i] => ComplexF64(v[i]) for i in 1:n)
+    end
     A = zeros(ComplexF64, n, n)
     for i in 1:n, j in 1:n
-        cc = 2π * sum(w .* Y[:, i] .* Y[:, j] .* x .^ 2)
-        A[i, j] = (i == j ? ls[i] * (ls[i] + 1) : 0.0) - c2 * cc
+        A[i, j] = (i == j ? ls[i] * (ls[i] + 1) : 0.0) - c2c * C[i, j]
     end
     E = eigen(A)
-    i0 = findfirst(==(l), ls)
     k = argmax(abs.(E.vectors[i0, :]))
     v = E.vectors[:, k]
     v ./= sqrt(sum(v .^ 2))
