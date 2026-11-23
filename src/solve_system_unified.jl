@@ -689,7 +689,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     elseif spin_tab_on
         build_spin_factor(spin_tab_file, rate_keys, [spin_parts0, spin_parts0], zeros(length(rate_keys), 2), Float64(alph), Float64(alph))
     else
-        debug && !spinone && !non_rel && println("NL_SPIN_TABLE not set: scattering rates into the hole scale with r+ only")
+        debug && !spinone && !non_rel && println("no spin table (NL_SPIN_TABLE=0 or table not found): scattering rates into the hole scale with r+ only")
         SpinFactor()
     end
     # NL_BH_M4_SPIN=1: scattering channels into the hole with m4 != 0 also change its angular momentum (see

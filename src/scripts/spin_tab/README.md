@@ -17,7 +17,8 @@ for the self-interaction and the self-gravity amplitude separately, at the spins
 0.65-0.77 at alpha = 0.1-0.25 (the r+ scaling alone is up to ~50 % too high, e.g. 322 x 322 -> 844 x BH at alpha = 0.25,
 a = 0.46: R = 0.67). Channels to infinity keep R = 1. For horizon channels with m4 != 0 the tabulated quantity excludes kH = w4 - m4 Omega_H, as in the rate tables.
 
-File format (`NL_SPIN_TABLE`, read by `src/spin_table.jl`):
+File format (`rate_sve/spin_table_v1.txt` from `spin_table_v1_20261123.zip`, or the file named by `NL_SPIN_TABLE`;
+read by `src/spin_table.jl`):
 
     # spins 0 0.3 0.5 0.7 0.8 0.9 0.95 0.99 0.998
     S1 S2 S3 S4 alpha flag  lnR_SI[9]  lnR_SG[9]          (natural logarithms)
@@ -67,7 +68,7 @@ the corrected flat tables. In the evolution runs these channels carry < 2e-8 of 
 
 | Environment variable | Default | Effect |
 |---|---|---|
-| `NL_SPIN_TABLE=<file>` | unset | spin factors of the table; unset reproduces earlier runs to the bit |
+| `NL_SPIN_TABLE=<file>` | `rate_sve/spin_table_v1.txt` | spin factors of the table (default on since 2026-11-23); `NL_SPIN_TABLE=0` reproduces earlier runs to the bit |
 | `NL_BH_M4_SPIN=1` | off | spin row of horizon channels with m4 != 0 |
 | `NL_DT_EFOLD=c` | 1 | a step stays below ~c e-folds of any growing level; 0: no such limit (before 2026-11-23) |
 | `NL_RHS_TRACE=t0,t1` | unset | prints the mass and spin rows by term for every RHS call in the window |
