@@ -161,7 +161,8 @@ applied by default from `rate_sve/spin_table_v1.txt`: unzip `rate_sve/spin_table
 (a run without the file says so and uses the r+ scaling alone). At spin 0.5 the factor is 0.91 at alpha = 0.05 and
 0.65-0.77 at alpha = 0.1-0.25 for the populated channels. `NL_SPIN_TABLE=<file>` selects another table,
 `NL_SPIN_TABLE=0` switches it off. `rate_sve/rates_m4fix_20261123.zip` holds corrected tables of the 57 horizon
-channels with m4 != 0 (unzip after the v1120 archive). See `src/scripts/spin_tab/README.md`.
+channels with m4 != 0 (unzip after the v1120 archive); these channels also change the spin of the hole
+(`NL_BH_M4_SPIN=0` switches that off). See `src/scripts/spin_tab/README.md`.
 
 **Step limit of the N-level solver.** Since 2026-11-23 a step stays below about one e-fold of any growing level
 (`NL_DT_EFOLD`, default 1; `NL_DT_EFOLD=0` reproduces earlier runs). Without it a level in a near-balanced race between
