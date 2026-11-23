@@ -55,6 +55,77 @@ evalR(R, r) = sum(c * r^p for (p, c) in zip(R.pows, R.coefs)) * exp(-R.beta * r)
         @test kerr_radial_f(md20, 3r_end)[1] != 0 && abs(kerr_radial_f(md20, 3r_end)[1]) < abs(kerr_radial_f(md20, r_end)[1])
     end
 
+    @testset "eigenfrequency of high levels at high spin" begin
+        # Offsets of Re ω from the hydrogenic expansion in level spacings, from two independent solvers
+        # (double-double and 384-bit continued fractions written for the diagnosis of 20 Nov 2026). The Float64
+        # root search this replaces was off by 1e-4 to 1.5 spacings at these points and passed its residual test.
+        # (the last number is the accuracy of the reference: the double-double one is good to 5e-11 spacings for (45,8,8))
+        ref = (((20, 6, 6), 0.0914752971830124, 0.8206666666666667, -2.941943e-06, 2e-6),
+               ((20, 6, 6), 0.0914752971830124, 0.95, -2.956039e-06, 2e-6),
+               ((24, 10, 10), 0.08126680004606676, 0.922, -4.246698e-07, 2e-6),
+               ((24, 10, 10), 0.08126680004606676, 0.95, -4.253809e-07, 2e-6),
+               ((45, 8, 8), 0.09370021217313501, 0.95, -1.373954e-06, 1e-4))
+        for ((n, l, m), α, a, x, rt) in ref
+            e = km_eigenfrequency(n, l, m, α, a)
+            @test e.converged && e.err < 1e-12
+            @test Float64((real(e.ωbig) - real(km_omega_guess(n, l, m, α, a))) / e.gap) ≈ x rtol = rt
+            @test abs(imag(e.ω)) < 1e-12 * e.gap                     # the true value is far below 1e-40
+            @test km_level_gap(n, l, α) == e.gap
+        end
+        # a = 0.998: 256-bit reference for (24,10,10); and the offset stays smooth in spin
+        e = km_eigenfrequency(24, 10, 10, 0.0813, 0.998)
+        @test e.err < 1e-12
+        @test Float64((real(e.ωbig) - real(km_omega_guess(24, 10, 10, 0.0813, 0.998))) / e.gap) ≈ -4.272903e-07 rtol = 1e-5
+        xs = [Float64((real(km_eigenfrequency(20, 6, 6, 0.0915, a).ωbig) - real(km_omega_guess(20, 6, 6, 0.0915, a))) / km_level_gap(20, 6, 0.0915))
+              for a in (0.8207, 0.95, 0.998)]
+        @test maximum(xs) - minimum(xs) < 3e-8 && all(-3.0e-6 .< xs .< -2.9e-6)
+        # the pole-free and the normalised form of the condition vanish together, and the mixed-precision value
+        # equals the all-BigFloat one
+        setprecision(BigFloat, 256) do
+            Λ, _ = km_spheroidal(6, 6, 0.95^2 * (e20 = km_eigenfrequency(20, 6, 6, 0.0915, 0.95); e20.ω^2 - 0.0915^2))
+            D, R, _, L = km_cf_eval(e20.ωbig, 0.0915, 0.95, 6, Λ, 8000, 300)
+            D2, R2, _, _ = km_cf_eval(e20.ωbig + 1e-3 * e20.gap, 0.0915, 0.95, 6, Λ, 8000, 300)
+            @test abs(R) < 1e-9 * abs(R2) && abs(D) < 1e-9 * abs(D2)
+            Rall = km_cf_eval(e20.ωbig + 1e-3 * e20.gap, 0.0915, 0.95, 6, Λ, 8000, 8000)[2]      # head = everything
+            @test abs(Rall - R2) < 1e-20 * abs(R2)
+            # in Float64 the same condition is noise at this point: its value at the root is not small
+            _, RF = leaver_cf(km_round(L), 8000)
+            @test abs(RF) > 1e3 * abs(R)
+        end
+        # a real seed far above the old imaginary one: the level is found at large α (failed before for α ≳ 1.4)
+        md, err = kerr_mode(20, 6, 6, 1.7072, 0.8207; normalize=false)
+        @test err < 1e-10 && abs((real(md.ω) - real(km_omega_guess(20, 6, 6, 1.7072, 0.8207))) / km_level_gap(20, 6, 1.7072) + 0.3546) < 2e-3
+    end
+
+    @testset "radial overtones: ODE in h = f e^{-iωr}, norm on the ODE steps" begin
+        md, err = kerr_mode(39, 6, 6, 0.0692, 0.7193)
+        sol, r0, r_end = md.ode
+        @test err < 1e-12 && length(sol.t) < 5000                 # no far-field phase to resolve (was ~1e5 steps)
+        # f', f'', f''' of the jet against finite differences (f ~ r^l e^{iωr}: step well below r/l and 1/ω)
+        for r in (3r0, 39^2 / 0.0692^2, 1.5 * 39^2 / 0.0692^2)
+            δ = min(1e-3 * r, 1e-2 / 0.0692)
+            fp = kerr_radial_ode_jet(md, r + δ); fm = kerr_radial_ode_jet(md, r - δ); f = kerr_radial_ode_jet(md, r)
+            @test (fp[1] - fm[1]) / 2δ ≈ f[2] rtol = 1e-4
+            @test (fp[2] - fm[2]) / 2δ ≈ f[3] rtol = 1e-4
+            @test (fp[3] - fm[3]) / 2δ ≈ f[4] rtol = 1e-4
+        end
+        # the norm against a brute-force quadrature (80,000 nodes); the former 400 fixed nodes miss it by ~20 %
+        rp = 1 + sqrt(1 - 0.7193^2); rmax = rp + 80 * 39^2 / 0.0692^2
+        @test kerr_mode_norm(md; nodes=km_log_panels(rp, rmax, 80_000)) ≈ 1 rtol = 2e-4
+        @test abs(kerr_mode_norm(md; nodes=km_log_panels(rp, rmax, 400)) - 1) > 0.02
+        # the series handed over at u = 0.2 and the ODE agree there in value and slope
+        fs = kerr_radial_f_series(md, r0); fo = kerr_radial_ode_jet(md, r0 * (1 + 1e-13))
+        @test fs[1] ≈ fo[1] rtol = 1e-7
+        @test fs[2] ≈ fo[2] rtol = 1e-7
+        # weakly bound, a = 0.998, n = 45: finite, normalisable, small memory
+        md45, err45 = kerr_mode(45, 8, 8, 0.03, 0.998)
+        @test err45 < 1e-10 && isfinite(md45.norm) && md45.norm > 0 && length(md45.b) < 1000
+        # the asymptotic tail of a weakly bound level did overflow (Inf/Inf) at low spin: NaN norm
+        md10, _ = kerr_mode(45, 10, 10, 0.03, 0.01)
+        @test isfinite(md10.norm) && md10.norm > 0
+        @test isfinite(kerr_radial_f(md10, 1.2 * md10.ode[3])[1]) && kerr_radial_f(md10, 1.2 * md10.ode[3])[1] != 0
+    end
+
     cases = ((2, 1, 1, 0.1, 0.9), (2, 1, 1, 0.3, 0.9), (3, 2, 2, 0.2, 0.5), (4, 3, 3, 0.4, 0.95), (3, 1, 1, 0.1, 0.7), (2, 1, 1, 0.05, 0.0))
     for (n, l, m, alph, a) in cases
         md, res = kerr_mode(n, l, m, alph, a)

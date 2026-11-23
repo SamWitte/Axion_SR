@@ -183,11 +183,32 @@ function gw_kerr_source_hat(ma::KerrMode, mb::KerrMode, kind::Symbol, rn, θn; w
     return Shat, Ph, ω̃, m̃
 end
 
+"""Outer turning point of the hydrogenic orbit of a mode's level, n²/α² (1 + sqrt(1 - l(l+1)/n²)) (M = 1)."""
+gw_kerr_turning(md::KerrMode) = md.n^2 / md.alph^2 * (1 + sqrt(max(0.0, 1 - md.l * (md.l + 1) / md.n^2)))
+
+"""
+    gw_kerr_rmax(ma, mb, decay) -> x_max (= r_max - r_+)
+
+Where the product of the two radial functions has decayed by e^{-decay}. Each function decays as e^{-|q| r} only
+beyond its outer turning point (gw_kerr_turning): between the two turning points the product decays at the rate of
+the more compact mode alone, beyond both at the sum. (Until 2026-11-22 the grid ended at the larger of decay/(q_a+q_b)
+and the end of the more compact mode's ODE range, 6/|q| beyond its turning point: for two extended levels, e.g.
+(21,10,10) -> (16,8,8), the product had decayed by only e^-6 there and the ratio came out 0.53 instead of 0.95.)
+"""
+function gw_kerr_rmax(ma::KerrMode, mb::KerrMode, decay::Real)
+    qa, qb = abs(real(ma.L.q)), abs(real(mb.L.q))
+    ra, rb = gw_kerr_turning(ma), gw_kerr_turning(mb)
+    (r1, q1), (r2, q2) = ra <= rb ? ((ra, qa), (rb, qb)) : ((rb, qb), (ra, qa))
+    D1 = q1 * (r2 - r1)
+    x = D1 >= decay ? r1 + decay / q1 : r2 + (decay - D1) / (q1 + q2)
+    return max(x, decay / (qa + qb))
+end
+
 """
     gw_kerr_grid(ma, mb, ω̃; eps=1e-6, ppr=8, ppw=8, decay=40, nθ=48, per_panel=8)
 
 Quadrature grid for the pair: Gauss-Legendre panels in r from r_+ + eps out to where
-R_a R_b has decayed to e^{-decay} (R^in grows as r^3 in the wave zone and annihilation
+R_a R_b has decayed to e^{-decay} (gw_kerr_rmax; R^in grows as r^3 in the wave zone and annihilation
 amplitudes are ~1e-9 of their bulk partial sums, so the tail must be below ~1e-12 of the
 peak: decay = 45 is the minimum there, 60 the default), each panel of width
 min((r - r_+)/ppr, (2π/ω̃)/ppw), so
@@ -201,10 +222,7 @@ Gauss-Legendre in θ.
 function gw_kerr_grid(ma::KerrMode, mb::KerrMode, ω̃; eps=1e-6, ppr::Real=8.0, ppw::Real=8.0, decay::Real=60.0,
                       nθ::Int=48, per_panel::Int=8)
     rp = 1 + sqrt(1 - ma.a^2)
-    qsum = abs(real(ma.L.q)) + abs(real(mb.L.q))
-    # out to where the product has decayed: decay/qsum, or, for radial overtones (whose decay only starts at the
-    # outer turning point ~2n²/α²), the end of the more compact mode's ODE range (km_ode_range)
-    xmax = max(decay / qsum, min(km_ode_range(ma.alph, ma.a, ma.n, ma.L.q)[2], km_ode_range(mb.alph, mb.a, mb.n, mb.L.q)[2]))
+    xmax = gw_kerr_rmax(ma, mb, decay)
     hosc = 2π / ω̃ / ppw
     x, w = gauss(per_panel)
     rn = Float64[]; rw = Float64[]
@@ -223,12 +241,13 @@ gw_kerr_grid(ma::KerrMode, mb::KerrMode; kwargs...) = gw_kerr_grid(ma, mb, abs(r
 
 """
     gw_kerr_rate(ma, mb, kind; lmax=12, ltol=1e-8, nθ=48, eps=1e-6, ppr=8, ppw=8, decay=60,
-                 T=Float64, verbose=false, horizon=false, teuk_kwargs...)
+                 T=Float64, verbose=false, horizon=false, ltrunc=1e-6, teuk_kwargs...)
         -> (Γ, P_∞, Dict ℓ => P_∞ℓ, ω̃, m̃, Γ_H, Dict ℓ => P_Hℓ, chk)
 
 Rate of the annihilation (kind = :ann) or transition a -> b (kind = :tr,
 needs Re ω_a > Re ω_b) in the solver's convention, summing ℓ from max(2, |m̃|)
-until two consecutive ℓ contribute less than ltol of the total. Γ and P_∞ are the
+until two consecutive ℓ contribute less than ltol of the total (or until the Teukolsky
+integration fails at an ℓ whose predecessor contributed less than ltrunc). Γ and P_∞ are the
 flux to infinity (kernel form, teuk_Z_grid).
 
 With horizon = true the flux into the horizon is computed too, from the direct
@@ -243,7 +262,7 @@ jets and the quadrature. Γ_H and chk are NaN without horizon.
 """
 function gw_kerr_rate(ma::KerrMode, mb::KerrMode, kind::Symbol; lmax::Int=12, ltol=1e-8, nθ::Int=48, eps=1e-6,
                       ppr::Real=8.0, ppw::Real=8.0, decay::Real=60.0, T=Float64, verbose::Bool=false,
-                      horizon::Bool=false, teuk_kwargs...)
+                      horizon::Bool=false, ltrunc=1e-6, teuk_kwargs...)
     ω̃0 = kind == :tr ? real(ma.ω) - real(mb.ω) : real(ma.ω) + real(mb.ω)
     ω̃0 > 0 || error("gw_kerr_rate: ω̃ = $ω̃0 ≤ 0 (order a transition as a -> b with Re ω_a > Re ω_b)")
     rn, rw, θn, θw = gw_kerr_grid(ma, mb, ω̃0; eps=eps, ppr=ppr, ppw=ppw, decay=decay, nθ=nθ)
@@ -258,8 +277,20 @@ function gw_kerr_rate(ma::KerrMode, mb::KerrMode, kind::Symbol; lmax::Int=12, lt
     # horizon flux R^up is carried in to the first node as well
     kw = merge((r_in_max=1.05 * rn[end], tstops_in=rn, T=T), values(teuk_kwargs))
     horizon && (kw = merge(kw, (r_up_min=rn[1], tstops_up=rn)))
-    for l in max(2, abs(m̃)):lmax
-        tr = teuk_radial(-2, l, m̃, T(ω̃), T(ma.a); kw...)
+    l0 = max(2, abs(m̃))
+    for l in l0:lmax
+        tr = try
+            teuk_radial(-2, l, m̃, T(ω̃), T(ma.a); kw...)
+        catch
+            # the Teukolsky integration can fail at a high ℓ (R^up near the horizon at a → 1) after the sum has
+            # converged in all but the formal sense: if the previous ℓ added less than ltrunc of the total, the sum
+            # ends there (truncation error below ltrunc); otherwise the failure stands
+            if l > l0 && modes[l - 1] < ltrunc * P && (!horizon || abs(modesH[l - 1]) < ltrunc * (P + abs(PH)))
+                verbose && println("  ℓ = $l: Teukolsky solution failed; sum ended at ℓ = $(l - 1), whose term is $(modes[l - 1] / P) of the total")
+                break
+            end
+            rethrow()
+        end
         Z = teuk_Z_grid(tr, Tnn, Tnm, Tmm, rn, rw, θn, θw)
         modes[l] = Float64(abs2(Z) / (2π * ω̃^2))
         P += modes[l]

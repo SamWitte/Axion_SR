@@ -26,8 +26,9 @@ ratio = Gamma_kerr/Gamma_nr. omega_tilde = Re ω_a ∓ Re ω_b and the Re/Im ω_
 the Leaver eigenfrequencies, all in units of μ (M = 1, μ = α; so Re ω/μ is the
 quantity gw_omega approximates). Gamma_H is the horizon part of the rate
 (P_H/(α ω̃), signed: negative for superradiant gravitons; NaN when not computed).
-nl = number of ℓ̃ summed, secs = wall time of the point, status = ok or
-fail:<reason>, chk = P_∞(direct source form)/P_∞(kernel form) - 1 (gw_kerr_rate; a
+nl = number of ℓ̃ summed, secs = wall time of the point, status = ok, noisy (the two
+forms of the source disagree), broad (a level wider than half its level spacing: computed
+but not used) or fail:<reason>; only ok rows enter the interpolants. chk = P_∞(direct source form)/P_∞(kernel form) - 1 (gw_kerr_rate; a
 check of the source jets and the quadrature, NaN without the horizon flux), lfrac =
 the fractions of the power to infinity per ℓ̃ ("2:0.98;3:0.02"; the angular pattern of the
 line is Σ_ℓ̃ frac_ℓ̃ |_{-2}S_{ℓ̃m̃}|², for the inclination of the line observables).
@@ -87,6 +88,144 @@ end
 end
 
 gw_interp_alpha_range(it::GWInterp2D) = (exp(it.x[1]), exp(it.x[end]))
+
+"""Noisy rows (direct and kernel forms of the source disagree, gw_kerr_table_point) whose disagreement |chk| is at
+most this are used: the rate is then good to about that fraction."""
+const GW_KERR_NOISY_ACCEPT = 0.05
+"""Interior gaps along α of at most this many grid nodes are interpolated (gw_kerr_fill_grid!)."""
+const GW_KERR_MAX_GAP = 2
+"""At the top of a table's α range at most this many nodes are extrapolated."""
+const GW_KERR_MAX_EXTRAP = 1
+"""Largest change of ln(ratio) an extrapolation over one node may make (0.3 dex)."""
+const GW_KERR_MAX_EXTRAP_STEP = 0.3 * log(10)
+
+"""How a grid value of a ratio interpolant was obtained (gw_kerr_fill_grid!)."""
+const GW_FILL_NAMES = Dict(Int8(0) => "computed", Int8(1) => "interpolated", Int8(2) => "limit", Int8(3) => "extrapolated",
+                           Int8(4) => "spin-interpolated", Int8(5) => "held")
+
+"""Does a table row carry a ratio the interpolants use? ok; broad (computed, with a level wider than half its
+spacing: such a level is emptied by the hole within a few beat periods, so its rates matter little, and the
+computed value is the best estimate there is); noisy with |chk| <= GW_KERR_NOISY_ACCEPT."""
+gw_kerr_usable(r) = isfinite(r.ratio) && r.ratio > 0 &&
+    (r.status == "ok" || r.status == "broad" || (r.status == "noisy" && isfinite(r.chk) && abs(r.chk) <= GW_KERR_NOISY_ACCEPT))
+
+"""+1 if level s = (n, l, m) is superradiant at (α, a) (m Ω_H > ω, hydrogenic ω), -1 otherwise."""
+function gw_kerr_sr_sign(s::NTuple{3,Int}, α, a)
+    ΩH = a / (2 * (1 + sqrt(1 - a^2)))
+    return s[3] * ΩH > α * gw_omega(s..., α, a) ? 1 : -1
+end
+
+"""
+    gw_kerr_fill_grid!(z, αs, as, kind, sa, sb) -> how::Matrix{Int8}
+
+Fill the missing entries (NaN) of z = ln(ratio) on a table's full grid (rows α, columns a), by rules that only
+interpolate, approach a known limit, or extrapolate a little, and never across a superradiance threshold of
+either level (gw_kerr_sr_sign changes there: the profile and the horizon flux change character). In order:
+
+1. interpolated (1): an interior run of at most GW_KERR_MAX_GAP missing nodes along α, linearly in ln α between
+   the computed nodes around it, when no threshold lies in between;
+2. limit (2): below the lowest computed α of a spin. A transition's ratio tends to 1 as α -> 0 at every spin, so
+   ln ratio = z_0 (α/α_0)^p with the power p fitted to the two lowest computed nodes, clamped to [1, 2] (the
+   spin-orbit correction is linear in α); if the fit gives p < 0.5 and the two nodes agree to 0.05 per e-fold of
+   α, the ratio has levelled off and is held instead; if they disagree with p < 0.5 the p = 1 law is used but
+   counted as held (5). An annihilation's ratio tends to a constant: the lowest value is held, counted as limit
+   when the two lowest computed nodes agree to 0.05 per e-fold of α, else as held (5);
+3. extrapolated (3): at most GW_KERR_MAX_EXTRAP nodes above the highest computed α, linearly in ln α from the two
+   highest, when no threshold lies in between and the step stays below GW_KERR_MAX_EXTRAP_STEP;
+4. spin-interpolated (4): what is still missing, linearly in a between the nearest computed (or 1-3) values at the
+   same α on both sides, when no threshold lies in between;
+5. held (5): anything else takes the nearest value (gw_fill_nan!): outside the rules, reported so it can be
+   computed.
+0 = computed. Returns all -1 (and leaves z) if nothing is finite.
+"""
+function gw_kerr_fill_grid!(z::Matrix{Float64}, αs::AbstractVector, as::AbstractVector, kind::Symbol, sa, sb)
+    nα, na = size(z)
+    how = fill(Int8(-1), nα, na)
+    any(isfinite, z) || return how
+    how[isfinite.(z)] .= 0
+    lα = log.(αs)
+    sr = [(gw_kerr_sr_sign(sa, αs[i], as[j]), gw_kerr_sr_sign(sb, αs[i], as[j])) for i in 1:nα, j in 1:na]
+    for j in 1:na
+        v = findall(i -> how[i, j] == 0, 1:nα)
+        isempty(v) && continue
+        for (k1, k2) in zip(v[1:end-1], v[2:end])                   # 1. interior gaps
+            L = k2 - k1 - 1
+            (L == 0 || L > GW_KERR_MAX_GAP) && continue
+            all(i -> sr[i, j] == sr[k1, j], k1:k2) || continue
+            for i in (k1 + 1):(k2 - 1)
+                t = (lα[i] - lα[k1]) / (lα[k2] - lα[k1])
+                z[i, j] = (1 - t) * z[k1, j] + t * z[k2, j]; how[i, j] = 1
+            end
+        end
+        k = v[1]                                                     # 2. below the lowest computed α
+        if k > 1
+            flat = length(v) >= 2 && abs(z[v[2], j] - z[k, j]) <= 0.05 * (lα[v[2]] - lα[k])
+            pfit = length(v) >= 2 && z[k, j] * z[v[2], j] > 0 ? log(z[v[2], j] / z[k, j]) / (lα[v[2]] - lα[k]) : 1.0
+            if kind == :tr && (pfit >= 0.5 || !flat)
+                # approaching ratio 1 (or too little information to say otherwise): ln ratio ∝ α^p
+                p = clamp(pfit, 1.0, 2.0)
+                for i in 1:(k - 1)
+                    z[i, j] = z[k, j] * exp(p * (lα[i] - lα[k])); how[i, j] = pfit >= 0.5 ? 2 : 5
+                end
+            elseif kind == :tr
+                # a transition whose computed ratio has levelled off away from 1 (a table built before the grid fix of
+                # 22 Nov 2026, or a channel whose flat-space reference has another limit): hold it, as for annihilations
+                for i in 1:(k - 1)
+                    z[i, j] = z[k, j]; how[i, j] = 2
+                end
+            else
+                for i in 1:(k - 1)
+                    z[i, j] = z[k, j]; how[i, j] = flat ? 2 : 5
+                end
+            end
+        end
+        k = v[end]                                                   # 3. above the highest computed α
+        if k < nα && length(v) >= 2
+            k0 = v[end - 1]
+            slope = (z[k, j] - z[k0, j]) / (lα[k] - lα[k0])
+            for i in (k + 1):min(nα, k + GW_KERR_MAX_EXTRAP)
+                step = slope * (lα[i] - lα[k])
+                (abs(step) <= GW_KERR_MAX_EXTRAP_STEP && all(q -> sr[q, j] == sr[k, j], (k0, i))) || break
+                z[i, j] = z[k, j] + step; how[i, j] = 3
+            end
+        end
+    end
+    for i in 1:nα, j in 1:na                                         # 4. along spin
+        how[i, j] == -1 || continue
+        jl = findlast(q -> 0 <= how[i, q] <= 3, 1:(j - 1))
+        jr = findfirst(q -> 0 <= how[i, q] <= 3, (j + 1):na)
+        (jl === nothing || jr === nothing) && continue
+        jr += j
+        all(q -> sr[i, q] == sr[i, j], (jl, jr)) || continue
+        t = (as[j] - as[jl]) / (as[jr] - as[jl])
+        z[i, j] = (1 - t) * z[i, jl] + t * z[i, jr]; how[i, j] = 4
+    end
+    if any(==(Int8(-1)), how)                                        # 5. held
+        miss = how .== -1
+        gw_fill_nan!(z)
+        how[miss] .= 5
+    end
+    return how
+end
+
+"""
+    gw_kerr_ratio_interp(kind, sa, sb, rows) -> (GWInterp2D or nothing, αs, as, how)
+
+Interpolant of ln(ratio) on the full grid of a table's rows (repeated rows of a point: the usable one wins), the
+missing values filled by gw_kerr_fill_grid!; `how` says how each grid value was obtained (GW_FILL_NAMES).
+"""
+function gw_kerr_ratio_interp(kind::Symbol, sa, sb, rows)
+    αs = sort(unique(round.([r.alpha for r in rows], sigdigits=10)))
+    as = sort(unique(round.([r.a for r in rows], sigdigits=10)))
+    z = fill(NaN, length(αs), length(as))
+    for r in rows
+        gw_kerr_usable(r) || continue
+        z[searchsortedfirst(αs, round(r.alpha, sigdigits=10)), searchsortedfirst(as, round(r.a, sigdigits=10))] = log(r.ratio)
+    end
+    how = gw_kerr_fill_grid!(z, αs, as, kind, sa, sb)
+    any(isfinite, z) || return nothing, αs, as, how
+    return GWInterp2D(log.(αs), as, z), αs, as, how
+end
 
 """
 Fill the NaN entries of z (rows = α, columns = a) by the nearest finite value: first along α
@@ -176,7 +315,9 @@ filling gaps and clamping outside the grid are harmless; the expansion carries t
 hfrac: pair -> asinh(Γ_H/Γ_kerr / GW_HFRAC_SCALE)
 (only where computed). lfrac: (kind, pair) -> ℓ̃ -> interpolant of the fraction of the power
 to infinity in that ℓ̃ (0 where the table row lacks it), for the angular patterns of the lines
-(gw_rel_pattern). files: the table files read.
+(gw_rel_pattern). files: the table files read. fill: (kind, pair) -> (αs, as, how): how each grid value of
+the ratio interpolant was obtained (computed, interpolated, limit, extrapolated, spin-interpolated, held;
+gw_kerr_fill_grid!).
 """
 struct GWKerrTables
     ratio_ann::Dict{Tuple{NTuple{3,Int},NTuple{3,Int}}, GWInterp2D}
@@ -185,6 +326,7 @@ struct GWKerrTables
     hfrac::Dict{Tuple{Symbol,NTuple{3,Int},NTuple{3,Int}}, GWInterp2D}
     lfrac::Dict{Tuple{Symbol,NTuple{3,Int},NTuple{3,Int}}, Dict{Int,GWInterp2D}}
     files::Vector{String}
+    fill::Dict{Tuple{Symbol,NTuple{3,Int},NTuple{3,Int}}, Tuple{Vector{Float64},Vector{Float64},Matrix{Int8}}}
 end
 
 """Parse an lfrac column entry ("2:0.98;3:0.02", or "-") into ℓ̃ => fraction."""
@@ -226,14 +368,16 @@ function gw_kerr_load_tables(dir=gw_kerr_table_dir(); verbose::Bool=false)
     hfr = Dict{Tuple{Symbol,NTuple{3,Int},NTuple{3,Int}}, GWInterp2D}()
     lfr = Dict{Tuple{Symbol,NTuple{3,Int},NTuple{3,Int}}, Dict{Int,GWInterp2D}}()
     ωpts = Dict{NTuple{3,Int}, Dict{Tuple{Float64,Float64}, Float64}}()
+    fil = Dict{Tuple{Symbol,NTuple{3,Int},NTuple{3,Int}}, Tuple{Vector{Float64},Vector{Float64},Matrix{Int8}}}()
     used = String[]
     for f in files
         kind, sa, sb, rows = gw_kerr_read_table(joinpath(dir, f))
-        ok = [r for r in rows if r.status == "ok" && isfinite(r.ratio) && r.ratio > 0]
+        ok = [r for r in rows if gw_kerr_usable(r)]
         isempty(ok) && (verbose && println("  gw_kerr: $(f) has no valid row; skipped"); continue)
-        it = gw_interp_from_points([(r.alpha, r.a, log(r.ratio)) for r in ok])
+        it, αg, ag, how = gw_kerr_ratio_interp(kind, sa, sb, rows)
         it === nothing && continue
         (kind == :ann ? rann : rtr)[gw_pair_key(sa, sb)] = it
+        fil[(kind, gw_pair_key(sa, sb)...)] = (αg, ag, how)
         push!(used, f)
         # per-ℓ̃ power fractions (angular pattern of the line); a row without an ℓ̃ has 0 there
         fr = [gw_kerr_parse_lfrac(r.lfrac) for r in ok]
@@ -267,8 +411,16 @@ function gw_kerr_load_tables(dir=gw_kerr_table_dir(); verbose::Bool=false)
         it = gw_interp_from_points([(k[1], k[2], v) for (k, v) in d])
         it === nothing || (ω[lv] = it)
     end
-    tabs = GWKerrTables(rann, rtr, ω, hfr, lfr, used)
-    verbose && println("gw_kerr: $(length(used)) tables from $(dir): $(length(rann)) annihilation, $(length(rtr)) transition channels, $(length(ω)) levels with Leaver frequencies")
+    tabs = GWKerrTables(rann, rtr, ω, hfr, lfr, used, fil)
+    if verbose
+        println("gw_kerr: $(length(used)) tables from $(dir): $(length(rann)) annihilation, $(length(rtr)) transition channels, $(length(ω)) levels with Leaver frequencies")
+        cnt = Dict{Int8,Int}()
+        for (_, _, h) in values(fil), c in h
+            cnt[c] = get(cnt, c, 0) + 1
+        end
+        tot = sum(values(cnt))
+        println("  ratio grid values: " * join(["$(GW_FILL_NAMES[c]) $(round(100 * cnt[c] / tot, digits=2)) %" for c in sort(collect(keys(cnt)))], ", "))
+    end
     GW_TABLE_CACHE[key] = tabs
     return tabs
 end

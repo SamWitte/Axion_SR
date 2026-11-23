@@ -35,6 +35,139 @@ include(joinpath(@__DIR__, "..", "src", "Numerics", "gw_kerr_build.jl"))
         @test αg[1] ≈ 0.03 && αg[end] ≈ gw_sr_alpha_max(1) && length(αg) == 31 && length(ag) == 12 && ag[end] == 0.998 && 0.95 in ag
     end
 
+    @testset "filling missing points: interpolate, approach the limit, extrapolate a little, never across a threshold" begin
+        sa, sb = (3, 2, 2), (2, 1, 1)
+        αs = exp.(range(log(0.03), log(0.3), length=8)); as = [0.9, 0.95, 0.998]  # both levels superradiant everywhere
+        @test all(gw_kerr_sr_sign(sa, α, a) == 1 && gw_kerr_sr_sign(sb, α, a) == 1 for α in αs, a in as)
+        lin(α, a) = 0.2 + 0.1 * log(α) - 0.05a
+        # 1. interior gaps of 1-2 nodes: exact for ln ratio linear in ln α
+        z = [lin(α, a) for α in αs, a in as]; zt = copy(z)
+        z[3:4, 1] .= NaN; z[5, 2] = NaN
+        h = gw_kerr_fill_grid!(z, αs, as, :tr, sa, sb)
+        @test h[3, 1] == h[4, 1] == h[5, 2] == 1 && z ≈ zt && count(==(0), h) == 21
+        # a gap of 3 is not interpolated along α (spin interpolation, exact here, takes it)
+        z = copy(zt); z[3:5, 2] .= NaN
+        h = gw_kerr_fill_grid!(z, αs, as, :tr, sa, sb)
+        @test all(h[3:5, 2] .== 4) && z ≈ zt
+        # 2. below the lowest computed α a transition tends to ratio 1: ln ratio ∝ α^p, p from the two lowest nodes
+        for p in (1.0, 2.0)
+            z = [-3.0 * α^p * (1 + a) for α in αs, a in as]; zt = copy(z); z[1:3, :] .= NaN
+            h = gw_kerr_fill_grid!(z, αs, as, :tr, sa, sb)
+            @test all(h[1:3, :] .== 2) && z ≈ zt
+        end
+        z = [-3.0 * α^3 for α in αs, a in as]; z[1:2, :] .= NaN                  # p is clamped to [1, 2]
+        gw_kerr_fill_grid!(z, αs, as, :tr, sa, sb)
+        @test z[2, 1] ≈ -3.0 * αs[3]^3 * (αs[2] / αs[3])^2
+        # a transition ratio that has levelled off away from 1 is held, not pulled towards 1
+        z = fill(log(0.54), 8, 3); z[1:3, :] .= NaN
+        h = gw_kerr_fill_grid!(z, αs, as, :tr, sa, sb)
+        @test all(h[1:3, :] .== 2) && all(z[1:3, :] .≈ log(0.54))
+        # an annihilation holds its lowest value: "limit" when flat, "held" otherwise
+        z = fill(0.3, 8, 3); z[1:2, 1] .= NaN; z[3, 2] = NaN; z[1:2, 2] .= NaN; z[4, 2] = 0.6
+        h = gw_kerr_fill_grid!(z, αs, as, :ann, sa, sb)
+        @test all(h[1:2, 1] .== 2) && all(z[1:2, 1] .== 0.3)
+        @test all(h[1:3, 2] .== 5)
+        # 3. one node above the highest computed α is extrapolated; further nodes are not
+        z = [lin(α, a) for α in αs, a in as]; zt = copy(z); z[7:8, :] .= NaN
+        h = gw_kerr_fill_grid!(z, αs, as, :tr, sa, sb)
+        @test all(h[7, :] .== 3) && z[7, :] ≈ zt[7, :] && all(h[8, :] .== 5) && z[8, :] == z[7, :]
+        # ... and not when the step is large (a resolved dip or a steep rise)
+        z = [lin(α, a) for α in αs, a in as]; z[6, :] .+= 2.0; z[7:8, :] .= NaN
+        h = gw_kerr_fill_grid!(z, αs, as, :tr, sa, sb)
+        @test all(h[7, :] .== 5)
+        # 4./5. never across a superradiance threshold: (2,1,1) at a = 0.3 stops growing at α ≈ 0.075
+        as2 = [0.3]
+        sg = [gw_kerr_sr_sign(sb, α, 0.3) for α in αs]
+        k = findfirst(==(-1), sg)
+        @test k !== nothing && k > 2 && all(sg[1:k-1] .== 1)
+        z = [lin(α, 0.3) for α in αs, _ in as2]; z[k-1:k, 1] .= NaN
+        h = gw_kerr_fill_grid!(z, αs, as2, :tr, sa, sb)
+        @test all(h[k-1:k, 1] .== 5)
+        # nothing finite: nothing filled
+        @test all(gw_kerr_fill_grid!(fill(NaN, 3, 2), αs[1:3], as[1:2], :tr, sa, sb) .== -1)
+        # row selection: noisy rows within GW_KERR_NOISY_ACCEPT and broad rows are used, failures not
+        row(st, chk; ratio=0.9) = (alpha=0.1, a=0.5, ratio=ratio, status=st, chk=chk)
+        @test gw_kerr_usable(row("ok", NaN)) && gw_kerr_usable(row("broad", NaN)) && gw_kerr_usable(row("noisy", 0.02))
+        @test !gw_kerr_usable(row("noisy", 0.2)) && !gw_kerr_usable(row("fail:rate_ErrorException", NaN; ratio=NaN))
+        @test !gw_kerr_usable(row("ok", NaN; ratio=-1.0))
+    end
+
+    @testset "levels: seeds, tracking between grid nodes, acceptance" begin
+        s = (20, 6, 6); a = 0.8206666666666667
+        # the seed is the hydrogenic expansion plus the previous offset scaled as α⁴ (one point) or as the power
+        # measured from two points; the hydrogenic expansion itself is real
+        @test imag(km_omega_guess(s..., 1.7, a)) == 0 && isfinite(real(km_omega_guess(3, 0, 0, 0.1, 0.5)))
+        ω1 = km_omega_guess(s..., 0.5, a) - 0.01 * gw_kerr_overtone_gap(s, 0.5)
+        @test real(gw_kerr_offset(gw_kerr_seed(ω1, 0.5, 0.6, s, a), 0.6, s, a)) ≈ -0.01 * 1.2^4 rtol = 1e-9
+        ω0 = km_omega_guess(s..., 0.4, a) - 0.01 / 1.25^6 * gw_kerr_overtone_gap(s, 0.4)
+        @test real(gw_kerr_offset(gw_kerr_seed(ω1, 0.5, 0.6, s, a; ωprev2=ω0, αprev2=0.4), 0.6, s, a)) ≈ -0.01 * 1.2^6 rtol = 1e-9
+        @test gw_kerr_seed(nothing, 0.5, 0.6, s, a) === nothing
+        @test gw_kerr_overtone_gap(s, 0.3) == km_level_gap(20, 6, 0.3)
+        @test gw_kerr_alpha_free(6) ≈ 1.6 atol = 0.01
+        @test gw_kerr_alpha_free(3) ≈ 0.95 atol = 0.01
+        @test gw_kerr_alpha_free(0) == 0
+        # (20,6,6) from α = 1.12 to the top of its grid: the offset grows to half a spacing and is followed
+        e0 = km_eigenfrequency(s..., 1.1239, a)
+        h = gw_kerr_track(s, a, gw_kerr_push(nothing, 1.1239, e0.ω), 1.8304)
+        @test h !== nothing && h[1] == 1.8304
+        @test real(gw_kerr_offset(h[2], 1.8304, s, a)) ≈ -0.4905 atol = 2e-3
+        # the acceptance of a mode: located and the right overtone
+        md, st = gw_kerr_mode_checked(s, 1.8304, a; seed=h[2])
+        @test st == "ok" && abs(md.ω - h[2]) < 1e-6 * gw_kerr_overtone_gap(s, 1.8304)
+        # without a seed above gw_kerr_alpha_free the overtone cannot be named: not accepted
+        @test gw_kerr_mode_checked(s, 1.8304, a)[2] == "root"
+        @test gw_kerr_mode_checked(s, 0.3, a)[2] == "ok"
+        @test km_radial_nodes(md) == 13
+        # a seed one spacing off converges to the neighbouring overtone, which lies within the seed tolerance and
+        # is refused by its number of radial nodes (14 for (21,6,6))
+        bad = h[2] + gw_kerr_overtone_gap(s, 1.8304)
+        @test km_radial_nodes(kerr_mode(s..., 1.8304, a; ω0=bad)[1]) == 14
+        @test gw_kerr_mode_checked(s, 1.8304, a; seed=bad)[2] != "ok"
+        @test km_radial_nodes(kerr_mode(39, 6, 6, 0.0692, 0.7193)[1]) == 32
+        @test km_radial_nodes(kerr_mode(24, 10, 10, 0.0813, 0.998)[1]) == 13
+        @test km_radial_nodes(kerr_mode(7, 6, 6, 0.3, 0.9)[1]) == -1                 # pure series: not counted
+        # (5,3,3) is not superradiant at this spin above α ~ 0.8 and broadens fast: it is followed while it is
+        # a level (width a quarter of the spacing at α = 1.29) with the imaginary part of the seed extrapolated
+        sb = (5, 3, 3)
+        eb = km_eigenfrequency(sb..., 0.9777, a)
+        hb = gw_kerr_track(sb, a, gw_kerr_push(nothing, 0.9777, eb.ω), 1.2919)
+        @test hb !== nothing
+        zb = gw_kerr_offset(hb[2], 1.2919, sb, a)
+        @test real(zb) ≈ -1.0673 atol = 5e-3
+        @test imag(zb) ≈ -0.2604 atol = 5e-3
+    end
+
+    @testset "radial range of the rate integral: two extended levels" begin
+        # (21,10,10) -> (16,8,8) at α = 0.3: the integral was cut where the product of the two radial functions had
+        # decayed by e^-6 (ratio 0.531); converged in the range (decay 120 and 200 agree): 0.9465
+        α, a = 0.3, 0.01
+        ma, _ = gw_kerr_mode_checked((21, 10, 10), α, a); mb, _ = gw_kerr_mode_checked((16, 8, 8), α, a)
+        nr = gw_transition_channels((21, 10, 10), (16, 8, 8))
+        Γnr = gw_transition_rate(nr, α, (real(ma.ω) - real(mb.ω)) / α)
+        r60 = gw_kerr_rate(ma, mb, :tr; lmax=12, horizon=true)
+        r120 = gw_kerr_rate(ma, mb, :tr; lmax=12, horizon=true, decay=120.0)
+        @test r60[1] / Γnr ≈ 0.9465 atol = 2e-3
+        @test r60[1] ≈ r120[1] rtol = 2e-3
+        @test abs(r60[8]) < 1e-3                                  # direct and kernel forms of the source agree
+        # the range: beyond the more compact level's turning point by decay/q of that level while the other is
+        # still extended, then at the sum of the rates
+        x = gw_kerr_rmax(ma, mb, 60.0)
+        @test x > gw_kerr_turning(ma) > gw_kerr_turning(mb)
+        @test gw_kerr_rmax(ma, ma, 60.0) ≈ gw_kerr_turning(ma) + 60 / (2abs(real(ma.L.q))) rtol = 1e-12
+    end
+
+    @testset "flat-space limit at the top spin nodes" begin
+        # tr (20,6,6) -> (5,3,3) at α = 0.0915: the ratio is the same at every spin to 4e-4. (The stored table of
+        # 10 Nov had 0.96194 at a = 0.82, 0.96171 at 0.95 and 4e-13 at 0.998: wrong eigenfrequencies at the top
+        # spins, and at every spin a norm of (20,6,6) that the 400-node quadrature had 0.12 % too large.)
+        sa, sb = (20, 6, 6), (5, 3, 3); nr = gw_transition_channels(sa, sb)
+        rs = [gw_kerr_table_point(:tr, sa, sb, 0.0915, a; nr=nr, lmax=13) for a in (0.8207, 0.998)]
+        @test all(r -> r.status == "ok", rs)
+        @test rs[1].ratio ≈ 0.96306 atol = 2e-4
+        @test rs[2].ratio ≈ rs[1].ratio atol = 4e-4
+        @test all(r -> abs(r.Im_omega_a) < 1e-15, rs)
+    end
+
     dir = mktempdir()
     ptr = joinpath(dir, gw_kerr_table_name(:tr, (3, 2, 2), (2, 1, 1)))
     pann = joinpath(dir, gw_kerr_table_name(:ann, (2, 1, 1), (2, 1, 1)))
