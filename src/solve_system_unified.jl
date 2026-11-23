@@ -23,9 +23,22 @@ end
 #
 # xfl: occupation at or below which a level counts as at the seed floor; a
 # channel with >= 2 floor participants is skipped (-Inf: never skip).
+# sp: per-channel spin factors (NL_SPIN_TABLE, spin_table.jl); sp.on = false leaves the rates as they are.
+# spin_m4: row of the BH spin if the angular momentum of the absorbed quantum is to be counted (NL_BH_M4_SPIN=1), else 0.
+# A quantum that goes into the hole carries energy mu (mass row, +rate) and angular momentum m4 = m_drag, so the spin
+# row gets m_drag times the mass-row term, in the same raw units as the superradiance terms of _sr_terms! (-m SR X/mu
+# next to -SR X/mu). For kH < 0 the rate is negative and the hole gives up the quantum: the same expression holds.
 
+# NL_RHS_TRACE=t0,t1 (diagnostics, 2026-11-22): RHS_ax! prints the mass and spin rows split into superradiance,
+# scattering and GW parts, and the largest single terms, for every call with t0 <= t <= t1 (the stage states inside a
+# step, which the saved rows do not show: those are interpolated). A pure side effect; off unless set.
+# SCATTER_TRACE_BUF collects (channel, mass-row term).
+if !@isdefined(SCATTER_TRACE_ON)
+    const SCATTER_TRACE_ON = Ref(false)
+    const SCATTER_TRACE_BUF = Tuple{Int, Float64}[]
+end
 function _scatter_terms!(du, X, rate_cache, sc_rates, track_alpha::Bool, idx_lvl::Int, massI::Int,
-                         rP_ratio::Float64, alph::Float64, omH::Float64, xfl::Float64)
+                         rP_ratio::Float64, alph::Float64, omH::Float64, xfl::Float64, sp::SpinFactor, spin_m4::Int)
     for (kk, (idxV, sgn, is_bh_final, base_rate, m_drag)) in enumerate(rate_cache)
         nfl = 0
         for j in 1:length(sgn)
@@ -36,6 +49,7 @@ function _scatter_terms!(du, X, rate_cache, sc_rates, track_alpha::Bool, idx_lvl
         if track_alpha
             base_rate = sc_rates[kk]
         end
+        sp.on && (base_rate = spin_rate(sp, kk, base_rate))
         u_term_tot = 1.0
         for j in 1:length(sgn)
             if (idxV[j] <= idx_lvl) && (idxV[j] > 0)
@@ -47,7 +61,11 @@ function _scatter_terms!(du, X, rate_cache, sc_rates, track_alpha::Bool, idx_lvl
         for j in 1:length(sgn)
             idx_j = idxV[j]
             if idx_j == 0; continue; end
-            if idx_j == -1; idx_j = massI; end
+            if idx_j == -1
+                idx_j = massI
+                (spin_m4 > 0 && m_drag != 0) && (du[spin_m4] += m_drag * sgn[j] * rate_val * u_term_tot)
+                SCATTER_TRACE_ON[] && push!(SCATTER_TRACE_BUF, (kk, sgn[j] * rate_val * u_term_tot))
+            end
             du[idx_j] += sgn[j] * rate_val * u_term_tot
         end
     end
@@ -134,7 +152,7 @@ end
 # Jacobian of the scattering terms in ln N: d(prod N)/d ln N_k = prod N, once per
 # occurrence of k. D accumulates the raw terms (as _scatter_terms! does into du).
 function _scatter_jac!(J, D, X, live, rate_cache, sc_rates, track_alpha::Bool, idx_lvl::Int, massI::Int,
-                       rP_ratio::Float64, alph::Float64, omH::Float64, xfl::Float64)
+                       rP_ratio::Float64, alph::Float64, omH::Float64, xfl::Float64, sp::SpinFactor, spin_m4::Int)
     for (kk, (idxV, sgn, is_bh_final, base_rate, m_drag)) in enumerate(rate_cache)
         nfl = 0
         for j in 1:length(sgn)
@@ -145,6 +163,7 @@ function _scatter_jac!(J, D, X, live, rate_cache, sc_rates, track_alpha::Bool, i
         if track_alpha
             base_rate = sc_rates[kk]
         end
+        sp.on && (base_rate = spin_rate(sp, kk, base_rate))
         P = 1.0
         for j in 1:length(sgn)
             if (idxV[j] <= idx_lvl) && (idxV[j] > 0)
@@ -163,6 +182,16 @@ function _scatter_jac!(J, D, X, live, rate_cache, sc_rates, track_alpha::Bool, i
                 k = idxV[jj]
                 if (k <= idx_lvl) && (k > 0) && live[k]
                     J[it, k] += c
+                end
+            end
+            if idxV[jt] == -1 && spin_m4 > 0 && m_drag != 0     # angular momentum of the absorbed quantum (NL_BH_M4_SPIN)
+                cs = m_drag * c
+                D[spin_m4] += cs
+                for jj in 1:length(sgn)
+                    k = idxV[jj]
+                    if (k <= idx_lvl) && (k > 0) && live[k]
+                        J[spin_m4, k] += cs
+                    end
                 end
             end
         end
@@ -471,6 +500,12 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # ============================================================================
     # RATE SETUP
     # ============================================================================
+    # Per-channel spin tables (NL_SPIN_TABLE, spin_table.jl): the loader also returns the SI, cross and SG terms of
+    # every channel (at the initial mass and, with track_alpha, at the nodes of the scattering mass grid).
+    spin_tab_file = (spinone || non_rel) ? "" : spin_table_path()
+    spin_tab_on = !isempty(spin_tab_file)
+    spin_parts0 = spin_tab_on ? Dict{String, NTuple{3, Float64}}() : nothing
+    spin_parts_sc = Dict{String, NTuple{3, Float64}}[]
     if spinone
         # Spinone: Precomputed rates
         wR, wI = precomputed_spin1(alph, aBH, M_BH)
@@ -485,7 +520,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         # Standard: Compute interpolated rates using smooth symlog interpolation
         SR_rates, interp_funcs, interp_dict = compute_sr_rates_smooth(modes, M_BH, aBH, alph, cheby=cheby)
         rates = load_rate_coeffs(mu, M_BH, aBH, fa, Nmax, SR_rates; non_rel=non_rel, lm_only=lm_only, self_grav=self_grav, si_sign=si_sign, rate_input=rate_input,
-                                 regime_split=regime_split)
+                                 regime_split=regime_split, parts=spin_parts0)
         Mvars = [mu, fa, Emax2, aBH, M_BH, impose_low_cut]
         rP_initial = 1.0 + sqrt(1.0 - aBH^2)
     end
@@ -514,7 +549,8 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
          n_sc, d_sc,
          # regime-split halves unmasked here; refresh_sc_rates! switches them at alpha_c
          [load_rate_coeffs(mu, Mj, aBH, fa, Nmax, SR_rates; non_rel=non_rel, lm_only=lm_only, self_grav=self_grav, si_sign=si_sign, rate_input=rate_input,
-                           regime_split=regime_split, regime_mask=false) for Mj in Ms_sc])
+                           regime_split=regime_split, regime_mask=false,
+                           parts=(spin_tab_on ? (push!(spin_parts_sc, Dict{String, NTuple{3, Float64}}()); spin_parts_sc[end]) : nothing)) for Mj in Ms_sc])
     else
         (0.0, 2, 1.0, Float64[], Vector{Any}[], 2, 1.0, Dict[])
     end
@@ -643,6 +679,24 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
             end
         end
     end
+    # Spin factors of the channels (NL_SPIN_TABLE): evaluated in the RHS kernels at the current spin and mass, on top
+    # of sc_rates_now / the fixed rates. The terms carry the same occupation normalisation as lnR_sc.
+    spin_fac = if spin_tab_on && track_alpha
+        build_spin_factor(spin_tab_file, rate_keys, spin_parts_sc,
+                          Float64[sc_npow[kk] * (log(M_BH) - (lnM_lo + dlnM_sc * (j - 1))) for kk in eachindex(rate_keys), j in 1:nM_sc],
+                          GNew * mu * exp(lnM_lo), GNew * mu * exp(lnM_lo + dlnM_sc * (nM_sc - 1));
+                          lnMlo=lnM_lo, dlnM=dlnM_sc, lnGmu=log(GNew * mu), track=true)
+    elseif spin_tab_on
+        build_spin_factor(spin_tab_file, rate_keys, [spin_parts0, spin_parts0], zeros(length(rate_keys), 2), Float64(alph), Float64(alph))
+    else
+        debug && !spinone && !non_rel && println("NL_SPIN_TABLE not set: scattering rates into the hole scale with r+ only")
+        SpinFactor()
+    end
+    # NL_BH_M4_SPIN=1: scattering channels into the hole with m4 != 0 also change its angular momentum (see
+    # _scatter_terms!). Off by default: until 2026-11-20 only the mass row was written.
+    spin_m4_row = (!spinone && get(ENV, "NL_BH_M4_SPIN", "0") == "1") ? Int(spinI) : 0
+    (spin_m4_row > 0) && println("NL_BH_M4_SPIN=1: ", count(r -> r[3] && r[5] != 0, rate_cache), " channels into the hole with m4 != 0 write to the spin row")
+    rhs_trace_t = parse.(Float64, split(get(ENV, "NL_RHS_TRACE", "Inf,-Inf"), ","))
     sc_lnM = Ref(-Inf)
     function refresh_sc_rates!(M)
         lnM = log(M)
@@ -801,18 +855,38 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
                        m_vec, mu, n_lvl, spinI, massI)
         end
 
+        tr_on = rhs_trace_t[1] <= t <= rhs_trace_t[2]
+        tr_sr = tr_on ? (du[massI], du[spinI]) : (0.0, 0.0)
         # Scattering and GW terms (standard mode only)
         if !spinone
+            if tr_on
+                SCATTER_TRACE_ON[] = true; empty!(SCATTER_TRACE_BUF)
+            end
             rP_now = 1.0 + sqrt(1.0 - u_real[spinI]^2)
             rP_ratio_now = rP_now / rP_initial
             a_now = u_real[spinI]
             omH_now = a_now / (rP_now^2 + a_now^2)
             alph_now = GNew * u_real[massI] * mu
             track_alpha && refresh_sc_rates!(u_real[massI])
+            spin_prepare!(spin_fac, a_now, u_real[massI])
             _scatter_terms!(du, u_real, rate_cache, sc_rates_now, track_alpha_on, n_lvl, massI,
-                            rP_ratio_now, alph_now, omH_now, x_floor)
+                            rP_ratio_now, alph_now, omH_now, x_floor, spin_fac, spin_m4_row)
+            SCATTER_TRACE_ON[] = false
+            tr_sc = tr_on ? (du[massI], du[spinI]) : (0.0, 0.0)
             gw_nrm = track_alpha_on ? (M_BH_f / clamp(u_real[massI], M_nrm_lo, M_nrm_hi))^2 : 1.0
             _gw_terms!(du, u_real, gw_cache, alph_now, a_now, x_floor, spinI, massI, gw_nrm)
+            if tr_on
+                srm = [(-SR_rates_local[i] * u_real[i] / mu, i) for i in 1:idx_lvl]; sort!(srm, by=x -> -abs(x[1]))
+                scm = sort(SCATTER_TRACE_BUF, by=x -> -abs(x[2]))
+                lv = sort([(du[i] / u_real[i], i) for i in 1:idx_lvl], by=x -> -abs(x[1]))
+                lab(i) = join(modes[i][1:3], "-")
+                println("rhs trace: t = ", t, "  M = ", u_real[massI], "  a = ", u_real[spinI], "  alpha = ", alph_now,
+                        "  | mass row: SR ", tr_sr[1], "  scattering ", tr_sc[1] - tr_sr[1], "  GW ", du[massI] - tr_sc[1],
+                        "  | J row: SR ", tr_sr[2], "  scattering ", tr_sc[2] - tr_sr[2], "  GW ", du[spinI] - tr_sc[2])
+                println("    SR mass terms: ", join(["$(lab(x[2])) $(x[1]) (X $(u_real[x[2]]), SR $(SR_rates_local[x[2]]))" for x in srm[1:min(3, end)]], "; "))
+                println("    scattering mass terms: ", join(["$(rate_keys[x[1]]) $(x[2])" for x in scm[1:min(4, end)]], "; "))
+                println("    largest d ln X/dt (raw): ", join(["$(lab(x[2])) $(x[1]) (X $(u_real[x[2]]))" for x in lv[1:min(5, end)]], "; "))
+            end
         end
 
         # Unit corrections
@@ -878,8 +952,9 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         omH_now = a_now / (rP_now^2 + a_now^2)
         alph_now = GNew * X[massI] * mu
         track_alpha && refresh_sc_rates!(X[massI])
+        spin_prepare!(spin_fac, a_now, X[massI])
         _scatter_jac!(J, D, X, live, rate_cache, sc_rates_now, track_alpha_on, n_lvl, massI,
-                      rP_now / rP_initial, alph_now, omH_now, x_floor)
+                      rP_now / rP_initial, alph_now, omH_now, x_floor, spin_fac, spin_m4_row)
         gw_nrm = track_alpha_on ? (M_BH_f / clamp(X[massI], M_nrm_lo, M_nrm_hi))^2 : 1.0
         _gw_jac!(J, D, X, live, gw_cache, alph_now, a_now, x_floor, spinI, massI, gw_nrm)
         K = mu ./ hbar .* 3.15e7
@@ -967,6 +1042,18 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     end
 
     # Standard mode only: check_timescale and affect_timescale!
+    # Step limit for growing levels, NL_DT_EFOLD = c (default 1 since 2026-11-23; 0: none, as before): every level above
+    # the seed that is growing also enters the timescale list with c / (d ln N/dt), so that a step stays below ~c
+    # e-folds of it (the list's rule resets dt to a tenth of the shortest entry once dt exceeds it). Before, only levels
+    # at their bosenova cap and the spin limited the step, and the solver took steps of ~5e6 yr in which a level growing
+    # at ~2e-6 /yr gained 26 instead of 8 e-folds: its rate was the small difference of a scattering gain and a GW loss
+    # (322x322 -> 844 x BH against 844 -> 322, equal to 1.6 %), so the inaccurate stage values of the stiff 322 (held at
+    # its superradiance threshold) entered it amplified ~60 times. What followed was garbage (BH mass lost at fixed J in
+    # the saved rows, spin > 1, in the worst case the state destroyed): 1 of the 204 runs of the n88_*_nfix sets and 3
+    # of the 204 of the v1120 sets, all at f_a = 1e17 GeV, alpha 0.2-0.25. With c = 1 none; the other runs are
+    # unchanged (final spin to 2e-4), c = 0.3 agrees with c = 1; ~10 % more integration time.
+    dt_efold = parse(Float64, get(ENV, "NL_DT_EFOLD", "1"))
+    debug && println("NL_DT_EFOLD = ", dt_efold, dt_efold > 0 ? ": growing levels limit the step to ~$(dt_efold) e-folds" : ": no step limit for growing levels")
     function check_timescale(u, t, integrator)
         u_real = exp.(u)
         sanitize_state!(u_real)
@@ -993,6 +1080,8 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
             condBN = (abs(u[i] - log(bn_list[i])) < SOLVER_TOLERANCES.bosenova_threshold)
             if (u[i] > log(e_init)) && condBN && (du[i] != 0.0)
                 push!(tlist, abs(1.0 ./ du[i]))
+            elseif dt_efold > 0 && (u[i] > log(e_init) + 1.0) && (du[i] > 0.0) && !turn_off[i]
+                push!(tlist, dt_efold / du[i])              # NL_DT_EFOLD: growing level
             end
         end
 
@@ -1018,6 +1107,9 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
             condBN = (abs(integrator.u[i] - log(bn_list[i])) < SOLVER_TOLERANCES.bosenova_threshold)
             if (integrator.u[i] > log(e_init)) && condBN && (du[i] != 0.0)
                 push!(tlist, 1.0 ./ du[i])
+                push!(indx_list, i)
+            elseif dt_efold > 0 && (integrator.u[i] > log(e_init) + 1.0) && (du[i] > 0.0) && !turn_off[i]
+                push!(tlist, dt_efold / du[i])              # NL_DT_EFOLD: growing level
                 push!(indx_list, i)
             end
         end
@@ -1263,7 +1355,9 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
             return
         end
         println("diag step: t = ", integrator.t, "  dt = ", integrator.dt, "  EEst = ", integrator.EEst,
-                "  naccept = ", integrator.stats.naccept, "  nreject = ", integrator.stats.nreject)
+                "  naccept = ", integrator.stats.naccept, "  nreject = ", integrator.stats.nreject,
+                "  M ", exp(integrator.uprev[massI]), " -> ", exp(integrator.u[massI]),
+                "  a ", exp(integrator.uprev[spinI]), " -> ", exp(integrator.u[spinI]))
         if diag_i > 0
             t0, t1 = integrator.tprev, integrator.t
             mid = [round(integrator(t0 + (t1 - t0) * th)[diag_i], digits=3) for th in (0.155, 0.3, 0.5, 0.645, 0.8, 0.95)]

@@ -1,6 +1,7 @@
 using Glob
 include("state_utils.jl")
 include(joinpath(@__DIR__, "Numerics", "gw_rates.jl"))
+include(joinpath(@__DIR__, "spin_table.jl"))
 
 # Leaver rate files (rate_sve/*_LvrHc_.dat), read once per session: solve_system
 # with track_alpha evaluates the scattering rates on a grid of BH masses.
@@ -68,8 +69,12 @@ end
 # needs only one of them), and each half is used only on its side of alpha_c (extrapolated up to
 # alpha_c within its own points). regime_mask = false skips that last cut, giving each half's rate
 # at every alpha (solve_system applies the cut itself when tracking alpha).
+#
+# parts: a Dict to be filled with the three terms of every tabulated channel (non_rel = false),
+#     parts[key] = (Gamma_SI c^2, 2 kappa c sqrt(Gamma_SI Gamma_SG), Gamma_SG)    (sum = the returned rate),
+# for the per-channel spin tables (NL_SPIN_TABLE, spin_table.jl). The returned rates do not depend on it.
 function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=false, self_grav=false, si_sign=1.0, rate_input=nothing,
-                          regime_split=true, regime_mask=true)
+                          regime_split=true, regime_mask=true, parts=nothing)
     alph = mu * GNew * M
     rP = 1 + sqrt.(1 - a^2)
     faFac = (M_pl ./ f_a)^4
@@ -281,6 +286,7 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
 
                 rate_out = 0.0
                 g_si = 0.0
+                p_x = 0.0; p_sg = 0.0       # cross and SG terms, for `parts`
                 if data !== nothing && split_ch !== nothing
                     # LOW half: alpha < alpha_c. Other half: alpha_c <= alpha <= top of its grid.
                     a_c, low = split_ch
@@ -323,11 +329,19 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
                     else
                         self_grav && (rate_out += si_sign * 2 * itp_ka(log10.(alph)) * sqrt(g_si * g_sg) * sqrt(faFac) + g_sg)
                     end
+                    if parts !== nothing && (s_chan || self_grav)
+                        p_x = 2 * itp_ka(log10.(alph)) * sqrt(g_si * g_sg) * (s_chan ? c_contact : si_sign * sqrt(faFac))
+                        p_sg = g_sg
+                    end
                 end
                 if s4 == "BH"
                     rate_out *= rP_ratio
                 end
                 Drate[nm_tag] = rate_out
+                if parts !== nothing
+                    pf = s4 == "BH" ? rP_ratio : 1.0
+                    parts[nm_tag] = (Float64(g_si * si_fac * pf), Float64(p_x * pf), Float64(p_sg * pf))
+                end
             end
         end
         if self_grav && n_sg_missing > 0 && !SG_MISSING_WARNED[]

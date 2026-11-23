@@ -8,6 +8,8 @@ Channels with new points: table built as merge_rates.py does, from the stored po
 that has a valid new point replaced by it.  Channels without new points (absorption by the hole): the production table
 as it was before these tables were installed (rate_sve/backup_pre_v1120, i.e. still in the flat normalisation) times
 the factor.  Do not point PROD at rate_sve itself after the installation (22 Nov 2026): the factor would be applied twice.
+For the 57 horizon channels with m4 != 0 the flat table is the corrected one of spin_tab/m4fix/tables (23 Nov 2026: the
+production radial step did not resolve the near-horizon wavenumber; scripts/spin_tab/m4_tables.py, m4_install.py).
 Rows off the alpha grid (rows of a first-campaign table above the grid) are copied
 unchanged: they keep the old normalisation, single multipole and outgoing condition.
     <ch>_LvrHc_SG.dat   alpha, G_SI, G_SG, G_x, kappa   (also under the other label for regime-split channels)
@@ -21,6 +23,7 @@ import os, sys, math, collections
 HERE = os.path.dirname(os.path.abspath(__file__)); X = os.path.dirname(HERE)
 RS = "/data/dust/user/samwitte/Axion_SR_sg/src/rate_sve/"; BAK = RS + "backup_pre_sgx/"
 PROD = RS + "backup_pre_v1120/"   # production tables before the installation of 22 Nov 2026 (flat normalisation)
+M4FIX = os.path.join(X, "spin_tab", "m4fix", "tables") + "/"   # corrected flat tables of the 57 horizon channels with m4 != 0
 OLD = os.path.join(X, "rates_out"); NEW = os.path.join(HERE, "rates_out"); OUT = os.path.join(HERE, "tables")
 apply = "--apply" in sys.argv
 chans = [tuple(l.split()[:4]) for l in open(RS + "sgx_channels.txt") if l.strip()]
@@ -78,6 +81,8 @@ for c in chans:
         done = False
         for lab in labels:
             src = PROD + "_".join(c[:3] + (lab,)) + "_LvrHc_SG.dat"
+            fix = M4FIX + "_".join(c[:3] + (lab,)) + "_LvrHc_SG.dat"
+            if os.path.isfile(fix): src = fix; stat["of these: corrected m4 != 0 table (spin_tab/m4fix) instead of the production one"] += 1
             if not os.path.isfile(src): continue
             rows = [[float(x) for x in l.split()[:5]] for l in open(src) if len(l.split()) >= 5]
             out_rows = [scaled(c, r, 5) for r in rows]; done = True
