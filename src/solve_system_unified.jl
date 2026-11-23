@@ -24,7 +24,7 @@ end
 # xfl: occupation at or below which a level counts as at the seed floor; a
 # channel with >= 2 floor participants is skipped (-Inf: never skip).
 # sp: per-channel spin factors (NL_SPIN_TABLE, spin_table.jl); sp.on = false leaves the rates as they are.
-# spin_m4: row of the BH spin if the angular momentum of the absorbed quantum is to be counted (NL_BH_M4_SPIN=1), else 0.
+# spin_m4: row of the BH spin if the angular momentum of the absorbed quantum is to be counted (default; NL_BH_M4_SPIN=0: 0).
 # A quantum that goes into the hole carries energy mu (mass row, +rate) and angular momentum m4 = m_drag, so the spin
 # row gets m_drag times the mass-row term, in the same raw units as the superradiance terms of _sr_terms! (-m SR X/mu
 # next to -SR X/mu). For kH < 0 the rate is negative and the hole gives up the quantum: the same expression holds.
@@ -692,10 +692,12 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         debug && !spinone && !non_rel && println("no spin table (NL_SPIN_TABLE=0 or table not found): scattering rates into the hole scale with r+ only")
         SpinFactor()
     end
-    # NL_BH_M4_SPIN=1: scattering channels into the hole with m4 != 0 also change its angular momentum (see
-    # _scatter_terms!). Off by default: until 2026-11-20 only the mass row was written.
-    spin_m4_row = (!spinone && get(ENV, "NL_BH_M4_SPIN", "0") == "1") ? Int(spinI) : 0
-    (spin_m4_row > 0) && println("NL_BH_M4_SPIN=1: ", count(r -> r[3] && r[5] != 0, rate_cache), " channels into the hole with m4 != 0 write to the spin row")
+    # Scattering channels into the hole with m4 != 0 also change its angular momentum (see _scatter_terms!): on by
+    # default since 2026-11-23, NL_BH_M4_SPIN=0 switches it off (until then only the mass row was written). In the
+    # November run sets these channels carry < 2e-8 of the scattering flux and the term changes nothing visible.
+    spin_m4_row = (!spinone && get(ENV, "NL_BH_M4_SPIN", "1") != "0") ? Int(spinI) : 0
+    debug && !spinone && println(spin_m4_row > 0 ? "NL_BH_M4_SPIN on: $(count(r -> r[3] && r[5] != 0, rate_cache)) channels into the hole with m4 != 0 write to the spin row" :
+                                                   "NL_BH_M4_SPIN=0: channels into the hole with m4 != 0 change the mass of the hole only")
     rhs_trace_t = parse.(Float64, split(get(ENV, "NL_RHS_TRACE", "Inf,-Inf"), ","))
     sc_lnM = Ref(-Inf)
     function refresh_sc_rates!(M)

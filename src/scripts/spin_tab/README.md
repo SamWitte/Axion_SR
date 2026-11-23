@@ -62,14 +62,15 @@ wherever the production step did not resolve |w4 - m4 Omega_H|: 604 of 798 grid 
 than a factor 10. `m4_tables.py` builds corrected tables from a `spin_fast.jl kg=0` run, `m4_install.py` converts them
 to the Klein-Gordon normalisation and installs them (`rates_m4fix_20261123.zip`); `scripts/sg_ext/merge_allW.py` reads
 the corrected flat tables. In the evolution runs these channels carry < 2e-8 of the scattering flux.
-`NL_BH_M4_SPIN=1` makes them write the angular momentum of the absorbed quantum to the spin row (off by default).
+They write the angular momentum of the absorbed quantum to the spin row of the hole (default since 2026-11-23;
+`NL_BH_M4_SPIN=0` switches that off).
 
 ## Solver switches added with this work (`src/solve_system_unified.jl`)
 
 | Environment variable | Default | Effect |
 |---|---|---|
 | `NL_SPIN_TABLE=<file>` | `rate_sve/spin_table_v1.txt` | spin factors of the table (default on since 2026-11-23); `NL_SPIN_TABLE=0` reproduces earlier runs to the bit |
-| `NL_BH_M4_SPIN=1` | off | spin row of horizon channels with m4 != 0 |
+| `NL_BH_M4_SPIN` | on | horizon channels with m4 != 0 change the spin of the hole, not only its mass; `NL_BH_M4_SPIN=0` switches it off |
 | `NL_DT_EFOLD=c` | 1 | a step stays below ~c e-folds of any growing level; 0: no such limit (before 2026-11-23) |
 | `NL_RHS_TRACE=t0,t1` | unset | prints the mass and spin rows by term for every RHS call in the window |
 
