@@ -3,6 +3,10 @@
 *_LvrHc_SG.dat
 !*LvrHc*.zip
 src/rate_sve/Imag*.npz
+# spin table of the scattering rates: unzip src/rate_sve/spin_table_v1_20261123.zip
+src/rate_sve/spin_table_v1.txt
+src/rate_sve/spin_table_v1.report.txt
+src/rate_sve/README_spin_table.txt
 src/rate_sve/Imag_*.dat
 
 # large GW rate tables: rebuild with `julia src/scripts/build_gw_tables.jl 15 18`

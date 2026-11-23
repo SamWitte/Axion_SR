@@ -5,8 +5,8 @@
 # residual factor
 #     R(alpha, a) = [Gamma_tab(alpha, a) / Gamma_tab(alpha, 0.95)] / rho(a),   rho = r+(a)/r+(0.95) (BH label), 1 (Inf label)
 # (Gamma_tab: the tabulated quantity, i.e. without kH for BH channels with m4 != 0) is tabulated per channel for the
-# self-interaction and the self-gravity amplitude separately, in the file named by the environment variable
-# NL_SPIN_TABLE (unset or empty: no table, the r+ scaling only, as before):
+# self-interaction and the self-gravity amplitude separately, in rate_sve/spin_table_v1.txt or the file named by the
+# environment variable NL_SPIN_TABLE (NL_SPIN_TABLE=0: no table, the r+ scaling only, as before 2026-11-23):
 #     # spins 0 0.3 0.5 0.7 0.8 0.9 0.95 0.99 0.998
 #     S1 S2 S3 S4 alpha flag  lnRsi_1 .. lnRsi_N  lnRsg_1 .. lnRsg_N
 # (labels as in the rate tables; flag = provenance, not used here; natural logarithms). With the table
@@ -25,7 +25,28 @@ if !@isdefined(SPIN_TABLE_CACHE)
     const SPIN_TABLE_CACHE = Dict{String, Any}()
 end
 
-spin_table_path() = get(ENV, "NL_SPIN_TABLE", "")
+# The table in use. Default since 2026-11-23: rate_sve/spin_table_v1.txt (unzip rate_sve/spin_table_v1_20261123.zip there).
+# NL_SPIN_TABLE=<file> selects another table; NL_SPIN_TABLE=0 (or off / none) switches the factors off (r+ scaling only,
+# as before). If the default file is not there the run goes on without the factors and says so.
+const SPIN_TABLE_DEFAULT = joinpath(@__DIR__, "rate_sve", "spin_table_v1.txt")
+if !@isdefined(SPIN_TABLE_WARNED)
+    const SPIN_TABLE_WARNED = Ref(false)
+end
+function spin_table_path()
+    p = String(strip(get(ENV, "NL_SPIN_TABLE", "")))
+    lowercase(p) in ("0", "off", "none", "false") && return ""
+    isempty(p) || return p
+    for k in 1:3                                   # a loaded file system can report an existing file as missing
+        isfile(SPIN_TABLE_DEFAULT) && return SPIN_TABLE_DEFAULT
+        k < 3 && sleep(1.0)
+    end
+    if !SPIN_TABLE_WARNED[]
+        println("SPIN TABLE NOT FOUND: ", SPIN_TABLE_DEFAULT, " is missing (unzip rate_sve/spin_table_v1_20261123.zip into ",
+                "rate_sve); the scattering rates into the hole scale with r+ only. NL_SPIN_TABLE=0 silences this.")
+        SPIN_TABLE_WARNED[] = true
+    end
+    return ""
+end
 
 # canonical channel name, independent of the label style ("211" or "2-1-1")
 function spin_table_key(s1, s2, s3, s4)
