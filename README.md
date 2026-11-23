@@ -147,6 +147,25 @@ julia Compute_all_rates.jl --S1 211 --S2 211 --S3 322 --S4 BH --ftag _LvrHc_ --s
 
 writes `rate_sve/211_211_322_BH_LvrHc_SG.dat` (columns α, Γ_SI, Γ_SG, Γ_×, κ = Γ_×/2√(Γ_SI Γ_SG)) next to the SI table; an existing SI table is not overwritten. Evolve with `solve_system(...; non_rel=false, self_grav=true)` (`si_sign=-1` for a repulsive quartic); channels without an SG table fall back to SI only (one warning per session). `--ang_method gl` replaces the Monte Carlo angular overlaps (±1% seed scatter in amplitude) by exact Gauss–Legendre quadrature. Background and validation: `src/ongoing_tests/sg_vs_si/`.
 
+Since November 2026 `gf_radial` has three corrections, all on by default (`false` reproduces earlier tables):
+- `inf_all_l`: channels to infinity sum every allowed outgoing multipole, not just one.
+- `inf_wkb`: their outgoing wave starts as a WKB solution, and the outer radius contains the levels.
+- `kg_norm`: the cloud modes have the Klein-Gordon normalisation.
+
+The corrected tables of the self-gravity campaign are in `rate_sve/rates_sg_v1120_20261122.zip`; see
+`src/scripts/sg_ext/README.md`.
+
+**Spin dependence of the rates.** The tables are computed at spin 0.95 and the solver rescales horizon channels with
+r+(a)/r+(0.95) only. `NL_SPIN_TABLE=<path>/spin_table_v1.txt` (from `rate_sve/spin_table_v1_20261123.zip`; off when
+unset) adds the residual factor R(alpha, a) per channel: at spin 0.5 it is 0.91 at alpha = 0.05 and 0.65-0.77 at
+alpha = 0.1-0.25 for the populated channels.
+`rate_sve/rates_m4fix_20261123.zip` holds corrected tables of the 57 horizon channels with m4 != 0 (unzip after the
+v1120 archive). See `src/scripts/spin_tab/README.md`.
+
+**Step limit of the N-level solver.** Since 2026-11-23 a step stays below about one e-fold of any growing level
+(`NL_DT_EFOLD`, default 1; `NL_DT_EFOLD=0` reproduces earlier runs). Without it a level in a near-balanced race between
+a scattering gain and a GW loss could overshoot by many e-folds in one long step.
+
 **Switching it on in an evolution.** SI-only remains the default. With self-gravity:
 
 ```bash

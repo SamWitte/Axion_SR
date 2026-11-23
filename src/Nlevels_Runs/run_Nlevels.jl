@@ -90,8 +90,9 @@ function parse_commandline()
             arg_type = Bool
             default  = false
             help     = "Add the Newtonian self-gravity contribution (and its interference with self-interactions) to the " *
-                       "scattering rates, from rate_sve/*_LvrHc_SG.dat (Compute_all_rates.jl --self_grav true). " *
-                       "Output files get an _SG tag"
+                       "scattering rates, from rate_sve/*_LvrHc_SG.dat (Compute_all_rates.jl --self_grav true), and the " *
+                       "s-channel graviton term (1/f_a^2 -> 1/f_a^2 + 12 pi G; NL_S_CHANNEL=0 in the environment leaves it " *
+                       "out). Output files get an _SG tag"
         "--si_sign"
             arg_type = Float64
             default  = 1.0

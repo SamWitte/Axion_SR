@@ -15,6 +15,12 @@
 # with Delta = (omega1 - omega3) G M.  Hydrogenic eigenfunctions are used for the corrections (they are themselves
 # O(alpha^2), so the error is O(alpha^4)); mode 4 uses the Kerr Green's function as before.
 #
+# NOTE (2026-11-19): the delta_X are corrections to a Newtonian amplitude written with canonical Schroedinger
+# wavefunctions in harmonic coordinates.  The rate tables (and the relativistic exchange) use the Klein-Gordon mode
+# functions in the Boyer-Lindquist radius, and that Newtonian amplitude differs at relative order alpha^2.  The sum of
+# the delta_X is therefore NOT the correction of a tabulated rate; it also holds the hole fixed and has no pair
+# (s-channel) term.  The complete 1PN correction in the variables of the tables: src/scripts/sg_1pn.
+#
 # Usage:  julia sg_1pn.jl <S1> <S3> <BH|Inf> <i_start> <i_stop>      (alpha grid of the rate_sve table)
 #         julia sg_1pn.jl test                                         (integration-by-parts / continuity checks)
 
