@@ -107,10 +107,8 @@ function km_spheroidal(l::Int, m::Int, c2; nextra::Int=8, nq::Int=64)
     i0 = findfirst(==(l), ls)
     c2c = ComplexF64(c2)
     if abs(imag(c2c)) <= 1e-6 * abs(c2c) || c2c == 0
-        # Nearly real c² (every quasi-bound level that is not a broad resonance): the real symmetric problem at
-        # Re c², and the imaginary part to first order, Λ = Λ(Re c²) - i Im(c²) <S|cos²θ|S> (error O((Im c²)²)).
-        # A complex eigensolver has an absolute error ~ eps ||A|| ~ 1e-14 in Im Λ, which swamps the imaginary part
-        # that a growth rate Im ω ~ 1e-30 puts there (superradiance tables at small α).
+        # nearly real c²: real symmetric problem at Re c², Im Λ to first order (a complex solver's ~1e-14
+        # error would swamp growth rates ~1e-30)
         E = eigen(Symmetric(Matrix(Diagonal(Float64.(ls .* (ls .+ 1)))) .- real(c2c) .* C))
         k = argmax(abs.(E.vectors[i0, :]))
         v = E.vectors[:, k] ./ sqrt(sum(abs2, E.vectors[:, k]))
@@ -339,8 +337,7 @@ struct KerrMode
     L::LeaverCoeffs{ComplexF64}
     b::Vector{ComplexF64}
     norm::Float64            # f is multiplied by this (unit Klein-Gordon norm after kerr_mode_normalize!)
-    ode::Any                 # nothing (pure series) or (sol, r0, r_end): ODE continuation for r > r0 (radial overtones);
-                             # sol(r) = [h, h'] with h = f e^{-iωr} (unnormalised)
+    ode::Any     # nothing or (sol, r0, r_end): ODE continuation for r > r0, sol(r) = [h, h']
 end
 KerrMode(n, l, m, alph, a, ω, Λ, sph, L, b, norm) = KerrMode(n, l, m, alph, a, ω, Λ, sph, L, b, norm, nothing)
 
@@ -425,8 +422,7 @@ function kerr_mode(n::Int, l::Int, m::Int, alph, a; ω0=nothing, K=nothing, tol=
             g0, g1, _ = km_series_eval(LB, bs, BigFloat(r0))
             (Lr, ComplexF64.(bs), ComplexF64(g0), ComplexF64(g1))
         else
-            # the whole series (it converges slowly at large r): head coefficients in BigFloat, the rest from the
-            # Float64 ratios
+            # whole series: head coefficients in BigFloat, the rest from Float64 ratios
             Kt = K === nothing ? leaver_terms(alph, ω, a) : Int(K)
             t, _ = leaver_cf(Lr, Kt)
             Jb = min(Jh, Kt - 1)
@@ -483,8 +479,7 @@ function kerr_radial_ode_jet(md::KerrMode, r::Float64)
         a = md.a; rp, rm = 1 + sqrt(1 - a^2), 1 - sqrt(1 - a^2); L = md.L; m = md.m
         p = im * L.σ + L.χ - 1 - im * (2rm * ω - m * a) / (rp - rm)
         fe = sol(r_end)[1] * exp(im * ω * r_end)
-        # P(r)/P(r_end) with P(x) = (x - r_-)^p e^{(q+iω)x}, as one exponent: separately both factors overflow for
-        # weakly bound high levels ((x - r_-)^p ~ 1e250 for n = 45, α = 0.03), and Inf/Inf gave NaN
+        # P(r)/P(r_end) as one exponent (the factors overflow separately for weakly bound high levels)
         f = fe * exp(p * (log(r - rm) - log(r_end - rm)) + (L.q + im * ω) * (r - r_end))
         lp = p / (r - rm) + (L.q + im * ω)
         f1 = f * lp

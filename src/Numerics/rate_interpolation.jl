@@ -56,16 +56,14 @@ export symlog, inverse_symlog
 # Floor value used in the data files - anything at or below this is artificial
 const RATE_FLOOR = 1e-90
 
-# Rate tables are read once per session (accretion runs rebuild the SR
-# interpolators on a grid of BH masses).
+# rate tables, read once per session
 const NPZ_CACHE = Dict{String, Any}()
 cached_npzread(fn) = get!(() -> table_read(npzread, fn), NPZ_CACHE, fn)
 
 # :anchored (default), :factorised or :legacy, see the module docstring
 const SR_RATE_INTERP = Ref(:anchored)
 
-# :anchored: table points closer than this (in spin) to a_c are left out (A = G/u there is dominated by
-# the uncertainty of a_c itself)
+# :anchored: table points closer than this (in spin) to a_c are left out
 const ANCHOR_GAP = 0.004
 # ln A at threshold from the knots either side: :harmonic, :linear or :pchip (see anchored_rows)
 const ANCHOR_RULE = Ref(:linear)
@@ -76,8 +74,7 @@ const ANCHORED_CACHE = Dict{Tuple{String, Bool}, Any}()
 
 # Table points closer than this to a_c are left out of ln A (Γ and the prefactor both -> 0 there)
 const SPIN_GAP = 0.004
-# Zero-crossing points with ω/μ = m Ω_H(a_c)/α above 1 + ZERO_W_TOL are not bound states (outliers of
-# the root finder); the tolerance covers the ~1e-4 resolution of a_c at small α
+# zero-crossing points with m Omega_H(a_c)/alpha > 1 + ZERO_W_TOL are root-finder outliers
 const ZERO_W_TOL = 2e-3
 
 # (state, cheby) -> (a_c interpolation, ln A tables), built once per session
@@ -175,9 +172,7 @@ function load_threshold(state_str::String, m::Int, rate_sve_dir::String; cheby::
     count(keep) < 2 && return nothing
     x = Float64.(al[keep]); y = Float64.(ac[keep])
     d = pchip_slopes(x, y)
-    # end slopes = the end secants: the extrapolation continues the trend of the last points, as the linear
-    # interpolation did (PCHIP's own end slope can be 0, e.g. 543 after the far last point at α = 1.29,
-    # which would freeze a_c below 1 and open a spurious growth region at larger α)
+    # end slopes = end secants (continue the trend of the last points)
     d[1] = (y[2] - y[1]) / (x[2] - x[1]); d[end] = (y[end] - y[end - 1]) / (x[end] - x[end - 1])
     return PchipCurve(x, y, d)
 end
@@ -244,8 +239,7 @@ function factorised_tables(state_str::String, l::Int, m::Int, rate_sve_dir::Stri
                 lnA[i, :] = length(ok) == 1 ? fill(lnA[i, ok[1]], length(spins)) :
                     LinearInterpolation(spins[ok], lnA[i, ok], extrapolation_bc=Flat()).(spins)
             end
-            # rows without any usable point (all floored, or a whole row on the wrong side of a_c, e.g.
-            # 433 at α = 0.105, 0.113): linear in ln α between filled rows, α^(4l+5) below the first, flat above
+            # rows without usable points: linear in ln alpha between filled rows, alpha^(4l+5) below, flat above
             filled = findall(i -> !isnan(lnA[i, 1]), eachindex(alphas))
             isempty(filled) && continue
             lnal = log.(alphas)
@@ -344,8 +338,7 @@ struct RateRow
 end
 has_side(r::RateRow, pos::Bool) = pos ? r.i0 < length(r.u) : r.i0 > 1
 
-# beyond a row's outermost knot ln A continues with the knot's own slope, saturating (tanh) at a factor
-# e^EXTRAP_CAP, so the rate is C1 there and cannot run away (top end: a near 0.998 at α between rows)
+# beyond a row's outermost knot: the knot's slope, saturating (tanh) at e^EXTRAP_CAP
 const EXTRAP_CAP = 0.5
 
 """ln A(u) of a row: PCHIP inside the knots; beyond the outermost knot, continued with the knot's
@@ -416,9 +409,7 @@ function anchored_rows(a_c, alphas, spins, sides)
         else
             k1 > 1 ? lA[k1 - 1] : lA[k1]
         end
-        # with ln A falling by Δ from threshold to the first knot, |G| = |u| A peaks between them at
-        # e^(Δ-1)/Δ times the knot's value: Δ <= ANCHOR_MAX_DLNA keeps that <= 1.36 (a very lopsided row,
-        # e.g. 322 at α = 0.95, would otherwise put a 10x bump next to threshold)
+        # limit the drop of ln A from threshold to the first knot (bounds the bump of |G| next to threshold)
         k1 <= length(us) && (lnA0 = min(lnA0, lA[k1] + ANCHOR_MAX_DLNA))
         k1 > 1 && (lnA0 = min(lnA0, lA[k1 - 1] + ANCHOR_MAX_DLNA))
         insert!(us, k1, 0.0); insert!(lA, k1, lnA0)

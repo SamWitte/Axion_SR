@@ -400,13 +400,9 @@ function teuk_radial(s::Int, l::Int, m::Int, ω, a; T=Float64, N::Int=40, rtol=n
 
     # R^up: asymptotic series at r_inf, then inward to r_m
     finf = teuk_series_infinity(s, m, ωT, aT, λT, N, T)
-    # R^up is carried into the near zone, where the Wronskian has no cancellation between the
-    # r^{-2s-1} parts of the two solutions (the contamination of R^up by the solution that
-    # grows inward is ~ (ωr_inf)^4 × the starting error)
+    # R^up carried into the near zone (no Wronskian cancellation there)
     r_mW = max(min(T(ωr_m) / abs(ωT), r_inf / 10), 2 * r_h0)
-    # for the horizon amplitude Z^H (an extended source down to r_+) R^up is carried further in, to
-    # r_up_min: towards the horizon the other solution (R^in ~ Δ^{-s} e^{-ikr*}) decays for s = -2, so the
-    # inward integration stays stable there; the (ωr_inf)^4 contamination of the wave zone is unchanged
+    # for the horizon amplitude Z^H, R^up continues in to r_up_min (stable inward for s = -2)
     r_m = r_up_min === nothing ? r_mW : max(min(r_mW, T(r_up_min)), r_h0)
     r_up_min === nothing || T(r_up_min) > rp || error("teuk_radial: r_up_min = $(r_up_min) must exceed r_+ = $(rp)")
     R1, dR1 = teuk_eval_infinity(finf, s, m, ωT, aT, r_inf)
@@ -423,8 +419,7 @@ function teuk_radial(s::Int, l::Int, m::Int, ω, a; T=Float64, N::Int=40, rtol=n
     end
     W = Ws[1]
     W_spread = maximum(abs.(Ws .- W)) / abs(W)
-    # inside r_h0 the ODE is singular; R^up is continued there as a combination of the two horizon
-    # series, matched at r_h0 (needed for the horizon amplitude of a source that reaches r_+)
+    # inside r_h0: R^up as a combination of the two horizon series, matched at r_h0
     fout = Complex{T}[]
     up_h = (C(NaN), C(NaN))
     if r_up_min !== nothing && T(r_up_min) < r_h0
@@ -687,8 +682,7 @@ function teuk_Z_grid(tr::TeukRadial, Tnn::AbstractMatrix, Tnm::AbstractMatrix, T
     Sv = [(tr.Sfun(θ), tr.Sfun(θ; theta_derivative=1), tr.Sfun(θ; theta_derivative=2)) for θ in θn]
     acc = zero(Complex{typeof(tr.ω)})
     for (i, r) in enumerate(rn)
-        # horizon = true: the horizon amplitude Z^H = (1/W) ∫ R^up 𝒯 Δ^{-2} (same kernels, R^up for R^in;
-        # teuk_radial needs r_up_min <= rn[1])
+        # horizon = true: Z^H = (1/W) ∫ R^up 𝒯 Δ^{-2} (needs r_up_min <= rn[1])
         Rin, dRin, d2Rin = horizon ? teuk_up(tr, r) : teuk_in(tr, r)
         inner = zero(acc)
         for (j, θ) in enumerate(θn)
@@ -724,12 +718,8 @@ function teuk_Z_extended(tr::TeukRadial, Tnn, Tnm, Tmm, rn, rw, θn, θw)
     return (2π)^2 * acc / tr.W
 end
 
-# Direct forms of the source, with the derivatives taken by automatic
-# differentiation. Used to verify the kernels (test/test_teukolsky_source.jl):
-#   * teuk_source_B2: ST03 eqs. 9-12, B'_2 + B'*_2 with ρ = (r - ia cosθ)^{-1};
-#   * teuk_source_T4: Teukolsky (1973) eq. 2.15, T_4 from the NP spin coefficients
-#     of the Kinnersley tetrad (eq. 4.5 there, ρ_NP = -(r - ia cosθ)^{-1});
-#   B'_2 + B'*_2 = T_4, and T_lmω = 4 ∫dΩ dt ρ^{-5} ρ̄^{-1} (B'_2 + B'*_2) e^{-imφ+iωt} S/√(2π).
+# Direct source forms by automatic differentiation, to verify the kernels (test/test_teukolsky_source.jl):
+# teuk_source_B2 (ST03 eqs. 9-12) and teuk_source_T4 (Teukolsky 1973 eq. 2.15).
 using ForwardDiff
 
 _cderiv(f, x) = ForwardDiff.derivative(t -> real(f(t)), x) + im * ForwardDiff.derivative(t -> imag(f(t)), x)
@@ -801,13 +791,8 @@ function teuk_Z_direct(tr::TeukRadial, Tnn, Tnm, Tmm, rn, rw, θn, θw)
 end
 
 # ----------------------------------------------------------------------------
-# Direct source form with second-order jets: the source operators (ST03 eqs. 9-12) evaluated
-# from the value and the (r, θ)-derivatives to second order of T_nn, T_nm̄, T_m̄m̄ at a node.
-# A Jet2 carries (v, ∂r, ∂θ, ∂rr, ∂rθ, ∂θθ); after a derivative operator only the lower
-# orders remain valid, and the operators here are at most second order, so the final
-# value is exact. This is what teuk_source_B2 does with ForwardDiff, at a fraction of the
-# cost, and it allows the horizon amplitude Z^H = (1/W)∫ R^up 𝒯 Δ^{-2} of an extended
-# source that reaches the horizon (where the by-parts kernel form fails).
+# Direct source form with second-order jets (ST03 eqs. 9-12): exact, cheaper than ForwardDiff, valid down
+# to the horizon (for Z^H).
 # ----------------------------------------------------------------------------
 
 struct Jet2{T}

@@ -2,8 +2,7 @@ using DelimitedFiles
 using Interpolations
 include(joinpath(@__DIR__, "Core", "accretion.jl"))
 
-# RMS error norm over the full-basis length n (keep_levels): dropped levels would
-# contribute zero, so step-size control matches a full-basis run.
+# RMS error norm over the full basis length (keep_levels)
 function full_basis_norm(n)
     fnorm(u::AbstractArray, t) = sqrt(real(sum(abs2, u)) / n)
     fnorm(u::Number, t) = abs(u)
@@ -13,26 +12,13 @@ end
 # ============================================================================
 # RHS / JACOBIAN KERNELS (standard mode)
 # ============================================================================
-# The hot loops of solve_system's RHS live here, behind function barriers with
-# typed arguments. Inside the solve_system closure several captured variables
-# are assigned more than once (idx_lvl, m_list, bn_list in both branches of
-# `if spinone`, track_alpha reassigned), so Julia boxes them and every access in
-# a loop is a dynamic dispatch: the scattering loop alone cost ~420 ns per
-# channel (17 ms per RHS call at Nmax 8, 42k channels). Same operations in the
-# same order, so the trajectory is unchanged to the bit.
-#
-# xfl: occupation at or below which a level counts as at the seed floor; a
-# channel with >= 2 floor participants is skipped (-Inf: never skip).
+# Hot loops of the RHS behind function barriers (closure variables are boxed).
+# xfl: seed-floor occupation; channels with >= 2 floor participants are skipped (-Inf: never)
 # sp: per-channel spin factors (NL_SPIN_TABLE, spin_table.jl); sp.on = false leaves the rates as they are.
-# spin_m4: row of the BH spin if the angular momentum of the absorbed quantum is to be counted (default; NL_BH_M4_SPIN=0: 0).
-# A quantum that goes into the hole carries energy mu (mass row, +rate) and angular momentum m4 = m_drag, so the spin
-# row gets m_drag times the mass-row term, in the same raw units as the superradiance terms of _sr_terms! (-m SR X/mu
-# next to -SR X/mu). For kH < 0 the rate is negative and the hole gives up the quantum: the same expression holds.
+# spin_m4: spin row for the angular momentum of absorbed quanta (NL_BH_M4_SPIN=0: 0); an absorbed quantum
+# adds mu to the mass row and m_drag times that to the spin row (also for kH < 0)
 
-# NL_RHS_TRACE=t0,t1 (diagnostics, 2026-11-22): RHS_ax! prints the mass and spin rows split into superradiance,
-# scattering and GW parts, and the largest single terms, for every call with t0 <= t <= t1 (the stage states inside a
-# step, which the saved rows do not show: those are interpolated). A pure side effect; off unless set.
-# SCATTER_TRACE_BUF collects (channel, mass-row term).
+# NL_RHS_TRACE=t0,t1: print the mass and spin rows split by process for t0 <= t <= t1 (diagnostics)
 if !@isdefined(SCATTER_TRACE_ON)
     const SCATTER_TRACE_ON = Ref(false)
     const SCATTER_TRACE_BUF = Tuple{Int, Float64}[]
@@ -72,8 +58,7 @@ function _scatter_terms!(du, X, rate_cache, sc_rates, track_alpha::Bool, idx_lvl
     return
 end
 
-# gw_rhs! (Numerics/gw_rates.jl) with the floor skip. nrm = (M_BH/M)^2 converts the rates, which are per
-# pair of occupations N/(G M^2) at the mass of α, to the solver's X = N/(G M_BH^2) (see lnR_sc in solve_system).
+# gw_rhs! with the floor skip; nrm = (M_BH/M)^2 converts to u units
 function _gw_terms!(du, X, c::GWCache, α, a, xfl::Float64, spinI::Int=0, massI::Int=0, nrm::Float64=1.0)
     gw_set_omegas_cache!(c, α, a)       # gw_omega, plus the tabulated Leaver frequencies for gw_model=:rel
     @inbounds for k in eachindex(c.ann_i)
@@ -93,8 +78,7 @@ function _gw_terms!(du, X, c::GWCache, α, a, xfl::Float64, spinI::Int=0, massI:
         du[hi] -= r
         du[lo] += r
     end
-    # gw_model=:rel with horizon tables: the hole absorbs (or, for superradiant gravitons, feeds) the
-    # horizon part of the emission; raw units of the superradiance terms in the BH rows
+    # gw_model=:rel: horizon part absorbed (or fed) by the hole
     massI > 0 && gw_horizon_bh!(du, X, c, α, a, xfl, spinI, massI, nrm)
     return du
 end
@@ -184,7 +168,7 @@ function _scatter_jac!(J, D, X, live, rate_cache, sc_rates, track_alpha::Bool, i
                     J[it, k] += c
                 end
             end
-            if idxV[jt] == -1 && spin_m4 > 0 && m_drag != 0     # angular momentum of the absorbed quantum (NL_BH_M4_SPIN)
+            if idxV[jt] == -1 && spin_m4 > 0 && m_drag != 0     # NL_BH_M4_SPIN
                 cs = m_drag * c
                 D[spin_m4] += cs
                 for jj in 1:length(sgn)
@@ -267,129 +251,28 @@ end
 """
     solve_system(mu, fa_or_nothing, aBH, M_BH, t_max; spinone=false, ...)
 
-Unified ODE solver for axion-BH superradiance evolution.
+Evolution of the cloud levels, BH spin and mass (standard mode) or of one level (spinone = true).
 
-Handles both standard multi-level mode and spinone single-level mode via the spinone parameter.
+# Arguments (standard mode)
+- `mu`: axion mass (eV); `fa`: decay constant (GeV); `aBH`, `M_BH` (solar masses): initial BH; `t_max`: years
+- `n_times`: output points (default 10000); `stop_on_a`: stop below this spin; `abstol`: absolute tolerance
+- `non_rel`: non-relativistic rates (default true); `high_p`: high-precision tolerances; `Nmax`: largest n
+- `self_grav`: add the self-gravity rates (rate_sve/*_LvrHc_SG.dat; needs non_rel = false); `si_sign`: +1 attractive
+- `rate_input`: custom channel list; `gw_si_levels_only`: GW only between levels of the scattering channels (default true)
+- `f_edd`, `acc_eta`, `acc_dlnM_dt`: constant accretion (Core/accretion.jl; default off)
+- `track_alpha`: rates follow M(t) (default on); `track_alpha_dlnM`: (SR, scattering) grid spacing in ln M;
+  `track_alpha_refresh`: change in ln M between scattering-rate refreshes (default 0 = every RHS call)
+- `emax2_mode`: cap on the 211 cloud, :none (default), :fixed or :evolving; `emax2_taper`: its taper width
+- `t_save_start`: first point of the log saveat grid (a resume must use the same value)
+- `save_factor`, `save_dlna`, `save_rel_floor`: also save when a level changes by save_factor or the spin by save_dlna
+- `skip_floor_channels`: skip channels with two or more levels at the seed floor (default true)
+- `solver`: :trbdf2 (default) or :radau; `analytic_jac`: analytic Jacobian for the level columns (default false)
 
-# Arguments - Standard Mode (spinone=false)
-- `mu::Float64`: Axion mass (eV)
-- `fa::Float64`: Axion decay constant (1/GeV)
-- `aBH::Float64`: Black hole spin (0 ≤ a ≤ 1)
-- `M_BH::Float64`: Black hole mass (solar masses)
-- `t_max::Float64`: Maximum integration time (years)
-- `n_times::Int`: Number of output time steps (default 10000)
-- `impose_low_cut::Float64`: Minimum coupling parameter threshold (default 0.01)
-- `stop_on_a::Float64`: Termination spin threshold (default 0)
-- `abstol::Float64`: Absolute tolerance for ODE solver (default 1e-30)
-- `non_rel::Bool`: Use non-relativistic approximation (default true)
-- `self_grav::Bool`: add the Newtonian self-gravity contribution (and its interference with self-interactions)
-  to the scattering rates, from rate_sve/*_LvrHc_SG.dat (Compute_all_rates.jl --self_grav true); requires non_rel=false
-  (also adds the s-channel graviton term, a contact term equivalent to 1/f_a^2 -> 1/f_a^2 + 12 pi G; NL_S_CHANNEL=0 in
-  the environment switches that off, see load_rates.jl)
-- `si_sign::Float64`: sign of the quartic self-interaction for the SI-SG interference (+1 attractive/axion, -1 repulsive)
-- `rate_input`: custom scattering-channel list (file in rate_sve/ or absolute path) instead of
-  load_rate_input_Nmax_X.txt, e.g. from rate_sve/gen_custom_input.py; its states must be Nmax modes
-- `gw_si_levels_only::Bool`: GW annihilations/transitions only between levels that appear in the
-  scattering channel list (scattering_levels; the hard-coded rate keys for non_rel=true), so a level
-  without self-interaction channels is not populated by GW either (default true). The Nmax level list
-  and GW table contain more levels (e.g. the (19,18,18) truncation mode at Nmax = 18); false keeps
-  them all, as before.
-- `high_p::Bool`: Use high-precision tolerances (default true)
-- `Nmax::Int`: Maximum principal quantum number 3-8 (default 3)
-- `cheby::Bool`: Use Chebyshev interpolation (default true)
-- `f_edd::Float64`: Eddington ratio of constant thin-disc accretion (default 0 = off);
-  Mdot = f_edd * Mdot_Edd(M_BH) is fixed in time (Core/accretion.jl)
-- `acc_eta::Float64`: radiative efficiency defining Mdot_Edd = L_Edd/(eta c^2) (default 0.1)
-- `acc_dlnM_dt::Float64`: alternative to f_edd: accretion with Mdot = acc_dlnM_dt * M(t)
-  [1/yr], i.e. a fixed Eddington ratio lam with acc_dlnM_dt = lam (1-eps)/(eps t_Edd)
-  (default 0 = off; use either this or f_edd)
-
-- `track_alpha`: let the SR rates (tabulated on a grid in M) and the scattering
-  rates (interpolated in log alpha between grid masses) follow M(t). Default
-  (`nothing`) = on (off in spinone mode); with it off they stay at the initial
-  alpha, as in the original code. `track_alpha_dlnM` = (SR, scattering) grid
-  spacing in ln M (default (0.0025, 0.05), converged in tests; 0.01 for SR shifted
-  late spins by ~5e-3)); `track_alpha_refresh` = change in ln M that triggers a
-  refresh of the scattering rates (default 0 = whenever M changes, i.e. every RHS
-  call; one exp per channel). A finite value holds the rates fixed in between, and
-  each refresh is a jump in the RHS: the levels relax to the new rates through a
-  fast transient that collapses the step size, a sawtooth in ln N of ~1e-4-1e-3
-  (BH 10, alpha 1, f_a 1e14, Nmax 8, refresh 1e-5), and the jump times depend on
-  the solver's trial states, so the small modes are not reproducible. The GW rates always follow M(t);
-  the bosenova caps and Emax2 always use the initial alpha. The rate coefficients are defined for
-  occupations N/(G M^2) at the mass of their alpha; with track_alpha they are converted to the state's
-  u = N/(G M_BH^2) by (M_BH/M)^4 (scattering, three occupation factors) and (M_BH/M)^2 (GW, two), so
-  that only the physical alpha dependence follows M(t), not the normalisation (2026-11-17; before
-  that the factor was missing and the rates were off by (M/M_BH)^4 and (M/M_BH)^2). With track_alpha the
-  cloud's back-reaction on M and a also uses the occupation normalisation
-  u = N/(G M_BH^2) correctly (without it the old approximation M ~ M_BH is kept:
-  the SR / scattering terms in dM/dt and da/dt are then too large by (M/M_BH)^2).
-- `emax2_mode`: cap on the 211 cloud (211 superradiance is switched off above it). Default :none (no cap; see
-  the comment where it is set). :fixed = Emax2, the saturated 211 cloud of a BH that starts at (M_BH, aBH) with
-  no cloud (original behaviour). :evolving = current 211 cloud + the 211 cloud the
-  BH can still produce from its current (M, a), i.e. Emax2 evaluated on the
-  current BH, recomputed every step. It equals the fixed cap at a fresh start,
-  stays constant (to first order) while only superradiance acts, grows when
-  accretion spins the BH up, and depends only on the current state, so a run
-  resumed from any intermediate state (u0_override) gets the same cap. Until
-  2026-11-10 the defaults were :evolving with accretion and :fixed otherwise. The evolving cap acts smoothly: the
-  211 SR rate is scaled by clamp((cap - u_211) / (emax2_taper * cap), 0, 1).
-  Under steady accretion the cloud sits at the cap (the spin is pinned just above
-  the 211 threshold), and a hard on/off switch there makes the ODE crawl.
-- `emax2_taper`: width of that taper, as a fraction of the cap (default 0.01).
-- `t_save_start`: first point of the log-spaced saveat grid in years (default max(1, 1e-9 t_max)). A resumed run
-  must use the same value, since the grid is rebuilt from it.
-- `save_factor`, `save_dlna`, `save_rel_floor`: save-on-change output. Besides the
-  log-spaced saveat grid, an accepted step is saved whenever, since the last
-  saved point, a relevant level's occupation changed by more than a factor
-  save_factor (default 5) or the spin changed by |d ln a| > save_dlna (default
-  1e-3). Relevant = within a factor save_rel_floor (default 1e-10) of the largest
-  occupation, so levels growing up from the seed floor do not trigger saves. The
-  solver already takes small steps where the state changes quickly; this only
-  records them, and when a single step changes the state by more than the
-  thresholds, extra points inside it are taken from the step's interpolant (as
-  for saveat), at most save_max_sub per step. No extra RHS evaluations; the
-  solution is unchanged. Set save_factor = save_dlna = Inf to switch it off.
-- `skip_floor_channels`: skip scattering and GW channels with two or more
-  participating levels at the seed floor (u <= e_init, within the solver's floor
-  band). Such a channel adds at most ~e_init (relative) to any d ln N/dt, below
-  double precision next to the other terms; identical trajectories in tests
-  (Nmax 8 and 15), and most channels at large Nmax (default true).
-- `solver`: :trbdf2 (default) or :radau (RadauIIA5, 5th order; far fewer steps at
-  these tolerances, best with `analytic_jac`). Agreed with :trbdf2 to ~1e-8 in the
-  final spin at Nmax 15 and 18; the final BH mass differed by 5e-8 (Nmax 15,
-  alpha 0.2, f_a 1e14) and 3.2e-7 (Nmax 18, alpha 1.3, f_a 1e16, with either
-  Jacobian), not yet understood.
-  With :radau the saved points between step ends are bounded, level by level,
-  by the values at the two ends of their step (see cback_saveat): the stage
-  values of stiff levels are not accurate, and the raw interpolant overflowed.
-- `analytic_jac`: exact Jacobian for the level columns (one pass over the
-  channels; in ln N every term is a rate times a product of N's), finite
-  differences for the spin and mass columns (2 RHS calls), instead of finite
-  differences in every column (one RHS call per state). Matches finite
-  differences to ~1e-5 (their own error) along an Nmax 8 run to 5e6 yr. A
-  Jacobian error would only slow Newton; the solution is controlled by the error
-  estimate on the RHS. Default false.
-
-# Arguments - Spinone Mode (spinone=true)
-- `mu::Float64`: Axion mass (eV)
-- `fa_or_nothing::Any`: Ignored in spinone mode (for signature compatibility)
-- `aBH::Float64`: Black hole spin
-- `M_BH::Float64`: Black hole mass
-- `t_max::Float64`: Maximum integration time
-- `n_times::Int`: Number of output time steps
+# Arguments (spinone mode)
+`mu`, `aBH`, `M_BH`, `t_max`, `n_times`; `fa_or_nothing` is ignored.
 
 # Returns
-- `(spinBH::Float64, MassB::Float64)`: Final spin and mass after evolution
-
-# Details
-Both modes integrate the coupled ODE system tracking:
-- Energy populations E_nlm for axion cloud states
-- Black hole spin a
-- Black hole mass M
-
-Standard mode: Multi-quantum level with scattering terms, bosenova boundaries, Emax2 cutoff
-Spinone mode: Single quantum level with precomputed rates, simpler spin dynamics
+With `return_all_info`: times, occupations, modes, spin, mass; otherwise the final spin and mass.
 """
 function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     n_times=10000, debug=false, impose_low_cut=0.01, return_all_info=false,
@@ -416,15 +299,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     Mdot_acc = f_edd > 0 ? f_edd * eddington_rate(M_BH; eta=acc_eta) : 0.0  # M_sun/yr, constant part
     acc_mdot(M) = Mdot_acc + acc_dlnM_dt * M                                 # M_sun/yr
     track_alpha = (track_alpha === nothing) ? !spinone : track_alpha
-    # No cap by default (2026-11-10). emax_211 is exact M, J conservation down to the omega = mu threshold, while
-    # the tabulated SR rate vanishes at the Leaver threshold, lower in spin (0.852 against 0.8575 at alpha = 0.283).
-    # :fixed (the default without accretion until then) therefore switched the 211 rate off while it was still
-    # positive: the solver slid on the switch until GW emission had drained the cloud (10^5-10^6 steps at alpha
-    # 0.1-0.3, and a stall at dt < 1e-13 with gw_model = :rel), and the 211 cloud was held 0.1-5 % below its
-    # maximum meanwhile. :evolving (the default with accretion until then) does not slide but freezes the spin
-    # where emax_211 vanishes, 1e-3 to 4e-3 above the tabulated threshold. Without a cap the 211 cloud stops, like
-    # every other level, where its rate vanishes: same end states as :fixed to <= 1e-7 in spin and mass (alpha 0.1,
-    # 0.2, 0.3, with and without self-interactions, both SR interpolations), 150-1000 times fewer steps.
+    # no emax cap by default: each level stops where its rate vanishes
     emax2_mode = (emax2_mode === nothing) ? :none : emax2_mode
     emax2_mode in (:fixed, :evolving, :none) || error("emax2_mode must be :fixed, :evolving or :none")
     if track_alpha && spinone
@@ -452,11 +327,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         fa = fa_or_nothing  # Unpack the fa parameter
         idx_lvl, m_list, bn_list, modes = setup_quantum_levels_standard(Nmax, fa, M_pl, alph, aBH)
 
-        # Truncated basis (keep_levels; an approximation): evolve only the levels (n,l,m)
-        # for which keep_levels returns true. SR rates and the GW cache below are built
-        # from the kept modes; scattering channels touching a dropped level are removed
-        # (and the rest renumbered) where rate_cache is built. A resume u0_override must
-        # already be restricted to the kept levels, in basis order (run_Nlevels.jl does this).
+        # keep_levels: evolve only the kept levels; channels touching a dropped level are removed
         if keep_levels !== nothing
             keep = BitVector([keep_levels(md[1], md[2], md[3]) for md in modes])
             n_full_lvl = idx_lvl
@@ -500,8 +371,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # ============================================================================
     # RATE SETUP
     # ============================================================================
-    # Per-channel spin tables (NL_SPIN_TABLE, spin_table.jl): the loader also returns the SI, cross and SG terms of
-    # every channel (at the initial mass and, with track_alpha, at the nodes of the scattering mass grid).
+    # spin tables: the loader also returns the SI, cross and SG terms of every channel
     spin_tab_file = (spinone || non_rel) ? "" : spin_table_path()
     spin_tab_on = !isempty(spin_tab_file)
     spin_parts0 = spin_tab_on ? Dict{String, NTuple{3, Float64}}() : nothing
@@ -528,9 +398,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # ============================================================================
     # TRACK_ALPHA: rate grids in BH mass so that alpha can follow M(t)
     # ============================================================================
-    # M_lo allows for SR spin-down mass loss (up to ~30% at large alpha); M_hi bounds the mass reached by
-    # t_max. SR rates: log-spaced nodes (1%), linear in ln M between them.
-    # Scattering rates: coarser nodes (5%), linear in ln(rate) vs ln M.
+    # rate grids in M: SR nodes 1 %, scattering nodes 5 % (linear in ln rate)
     M_hi = track_alpha ? 1.02 * (M_BH + Mdot_acc * t_max) * exp(acc_dlnM_dt * t_max) : M_BH
     lnM_lo, nM_sr, dlnM_sr, M_sr, sr_nodes, nM_sc, dlnM_sc, rates_sc = if track_alpha
         M_lo = 0.7 * M_BH
@@ -562,10 +430,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         return j, clamp(x - (j - 1), 0.0, 1.0)
     end
 
-    # GW annihilations/transitions for every pair of levels that take part in the
-    # scattering channels (gw_si_levels_only); gw_rhs! re-evaluates them each RHS
-    # call at the current BH mass and spin (single assignment keeps the RHS
-    # closure type-stable).
+    # GW channels between the levels of the scattering channels, evaluated in each RHS call
     gw_levels = if spinone || !gw_si_levels_only
         nothing
     elseif non_rel
@@ -595,8 +460,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # state label in the trailing slot, so get_m would fail to parse it there.
     get_m(s) = occursin("-", s) ? parse(Int, split(s, "-")[3]) : parse(Int, s[end:end])
     if keep_levels !== nothing && !spinone
-        # key_to_indx numbers levels in the full basis: drop channels that touch a dropped
-        # level (before rate_keys/lnR_sc are taken from `rates`); the rest are renumbered below.
+        # drop channels that touch a dropped level (renumbered below)
         for k in collect(keys(rates))
             idxV_k, _ = key_to_indx(k, Nmax)
             any(j -> 0 < j <= n_full_lvl && full_to_red[j] == 0, idxV_k) && delete!(rates, k)
@@ -634,13 +498,8 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # Accretion: ln|rate| of every rate_cache entry at each scattering-grid mass
     # (same key order as rate_cache; sign taken from the initial-mass rate).
     rate_keys = spinone ? String[] : collect(keys(rates))
-    # Occupation normalisation. The tabulated coefficients gamma(alpha) multiply occupations N/(G M^2) with M
-    # the mass of that alpha, so a term with p occupation factors contains (G M^2)^(p-1): alpha^4 of the
-    # alpha^11 (BH) and alpha^8 (Inf) of the 2 -> 2 channels. The state is u = N/(G M_BH^2), initial mass, so
-    # the coefficient in u units at mass M is gamma(alpha(M)) (M_BH/M)^(2(p-1)): only the physical part of the
-    # alpha dependence follows M(t). ln of that factor is linear in ln M, so adding it at the nodes is exact
-    # under the interpolation of refresh_sc_rates!. (Until 2026-11-17 the factor was missing: with M != M_BH
-    # the scattering rates were off by (M/M_BH)^4 and the GW rates by (M/M_BH)^2.)
+    # Occupation normalisation: rates are per N/(G M^2) at the mass of alpha; in u = N/(G M_BH^2) a term with
+    # p occupations gets (M_BH/M)^(2(p-1)).
     sc_npow = Int[2 * (count(j -> 0 < j <= idx_lvl, r[1]) - 1) for r in rate_cache]
     lnR_sc = if track_alpha
         [log(max(abs(get(rates_sc[j], k, 0.0)) < 1e20 ? abs(get(rates_sc[j], k, 0.0)) : 0.0, 1e-300)) +
@@ -649,17 +508,12 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     else
         zeros(0, 0)
     end
-    # same conversion for the GW rates (p = 2), evaluated in the RHS at the current mass (clamped to the grid
-    # range, as the scattering rates are: trial Newton states may be wild)
+    # same for the GW rates (p = 2), at the current mass clamped to the grid
     M_nrm_lo, M_nrm_hi = track_alpha ? (exp(lnM_lo), Float64(M_hi)) : (Float64(M_BH), Float64(M_BH))
     M_BH_f = Float64(M_BH)
-    # Current scattering rates under track_alpha, recomputed only when ln M has
-    # moved by more than 1e-5 since the last refresh (rates ~ alpha^p with p <~ 11,
-    # so the error is <~ 1e-4), instead of one exp per rate in every RHS call.
+    # scattering rates under track_alpha, refreshed when ln M moves by more than 1e-5
     sc_rates_now = [r[4] for r in rate_cache]
-    # Regime-split channels (rate_sve/regime_split.txt): each half is on only on its side of
-    # alpha_c, i.e. of the mass sc_Mc; it may be off (zero) at the initial mass, so its sign
-    # comes from the grid.
+    # regime-split halves: on only on their side of alpha_c (mass sc_Mc)
     sc_Mc = zeros(length(rate_keys))
     sc_below = falses(length(rate_keys))
     sc_sign = [sign(r[4]) for r in rate_cache]
@@ -679,8 +533,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
             end
         end
     end
-    # Spin factors of the channels (NL_SPIN_TABLE): evaluated in the RHS kernels at the current spin and mass, on top
-    # of sc_rates_now / the fixed rates. The terms carry the same occupation normalisation as lnR_sc.
+    # spin factors of the channels (NL_SPIN_TABLE), applied in the RHS kernels
     spin_fac = if spin_tab_on && track_alpha
         build_spin_factor(spin_tab_file, rate_keys, spin_parts_sc,
                           Float64[sc_npow[kk] * (log(M_BH) - (lnM_lo + dlnM_sc * (j - 1))) for kk in eachindex(rate_keys), j in 1:nM_sc],
@@ -692,9 +545,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         debug && !spinone && !non_rel && println("no spin table (NL_SPIN_TABLE=0 or table not found): scattering rates into the hole scale with r+ only")
         SpinFactor()
     end
-    # Scattering channels into the hole with m4 != 0 also change its angular momentum (see _scatter_terms!): on by
-    # default since 2026-11-23, NL_BH_M4_SPIN=0 switches it off (until then only the mass row was written). In the
-    # November run sets these channels carry < 2e-8 of the scattering flux and the term changes nothing visible.
+    # horizon channels with m4 != 0 also change the spin (NL_BH_M4_SPIN=0: off)
     spin_m4_row = (!spinone && get(ENV, "NL_BH_M4_SPIN", "1") != "0") ? Int(spinI) : 0
     debug && !spinone && println(spin_m4_row > 0 ? "NL_BH_M4_SPIN on: $(count(r -> r[3] && r[5] != 0, rate_cache)) channels into the hole with m4 != 0 write to the spin row" :
                                                    "NL_BH_M4_SPIN=0: channels into the hole with m4 != 0 change the mass of the hole only")
@@ -740,8 +591,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         saveat = saveat_full
     end
 
-    # Spin callback: without accretion the spin cannot exceed its initial value
-    # (reset to aBH beyond aBH + 0.01); with accretion it may spin up to maxSpin.
+    # spin capped at its initial value (+0.01) without accretion, at maxSpin with it
     spin_reset = accreting ? maxSpin : aBH
     spin_ceiling = accreting ? maxSpin : aBH + 0.01
 
@@ -779,8 +629,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         end
     end
 
-    # 211 cloud the current BH (M, a) can still produce before saturating, in
-    # u units (N / (G M_BH^2)); emax_211 is normalised to G M^2.
+    # 211 cloud the current (M, a) can still produce, in u units
     function emax2_remaining(u_real)
         M, a = u_real[massI], clamp(u_real[spinI], 0.0, maxSpin)
         OmH = a / (2 * GNew * M * (1 + sqrt(1 - a^2)))
@@ -912,9 +761,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         else
             du[massI] *= (mu .* u_real[massI]) .* (mu .* GNew .* u_real[massI]) ./ hbar .* 3.15e7
         end
-        # a = J/(G M^2): da = dJ/(G M^2) - 2a dM/M, with dM from superradiance and horizon absorption
-        # (before 2026-11-09 only the dJ part was kept, which saturates a single level with less
-        # extraction than emax_211, e.g. 211 at alpha = 0.2, a = 0.95: N = 0.27 instead of 0.40 G M^2)
+        # a = J/(G M^2): da = dJ/(G M^2) - 2a dM/M
         du[spinI] -= 2 * u_real[spinI] * du[massI] / u_real[massI]
 
         if accreting   # already per year
@@ -929,9 +776,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         return
     end
 
-    # Analytic Jacobian (analytic_jac): level columns exact in ln N, spin and mass
-    # columns by forward differences (SR interpolants, rate grids in M). Mirrors
-    # RHS_ax!: D holds the raw terms before the unit factors.
+    # Analytic Jacobian: level columns exact in ln N, spin and mass columns by forward differences
     jac_f0 = zeros(massI); jac_f1 = zeros(massI); jac_up = zeros(massI)
     function jac_ax!(J, u, Mvars, t)
         n = length(u)
@@ -1044,8 +889,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     end
 
     # Standard mode only: check_timescale and affect_timescale!
-    # Step limit for growing levels (NL_DT_EFOLD = c, default 1, 0 = off): a step spans at most ~c e-folds. Growth rate
-    # from the last step, not get_du, which is noise for levels in stiff equilibrium.
+    # step limit for growing levels (NL_DT_EFOLD = c e-folds, default 1, 0 = off); growth from the last step
     dt_efold = parse(Float64, get(ENV, "NL_DT_EFOLD", "1"))
     growth(itg, i) = itg.t > itg.tprev ? (itg.u[i] - itg.uprev[i]) / (itg.t - itg.tprev) : 0.0
     debug && println("NL_DT_EFOLD = ", dt_efold, dt_efold > 0 ? ": growing levels limit the step to ~$(dt_efold) e-folds" : ": no step limit for growing levels")
@@ -1171,8 +1015,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     start_time = Dates.now()
     println("ODE wall-clock limit: $(max_real_time / 3600.0) h (then save and exit)")
     flush(stdout)
-    # Progress line every progress_sec of wall time (NL_PROGRESS_SEC overrides; default 1 h),
-    # since nothing else is written until the run ends.
+    # progress line every NL_PROGRESS_SEC of wall time (default 1 h)
     progress_sec = parse(Float64, get(ENV, "NL_PROGRESS_SEC", "3600"))
     next_progress_ms = progress_sec * 1e3
     function time_limit_callback(u, t, integrator)
@@ -1218,11 +1061,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
         end
     end
 
-    # :radau only: a step that ends with a level more than an e-fold above its bosenova cap is
-    # rejected and retried with a smaller dt. Above the cap the RHS is clamped flat (X = bn, no
-    # growth), so the error estimate cannot see such an overshoot: at BH 10, f_a = 1e12,
-    # alpha = 1.3 one accepted step took (n,8,8) from ~1e-14 to ~1e190 and the run then stalled.
-    # :trbdf2 keeps the original behaviour.
+    # :radau: reject a step that ends a level more than an e-fold above its bosenova cap
     radau_out_of_domain(u, p, t) = any(i -> u[i] > ln_bn_vec[i] + 1.0, 1:idx_lvl)
 
     # ============================================================================
@@ -1233,14 +1072,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     dt_guess = abs.((maximum(SR_rates) ./ hbar .* 3.15e7)^(-1) ./ 5.0)
     cback_lower = DiscreteCallback(check_lower_bound, affect_lower_bound!, save_positions=(false, false))
 
-    # :radau only: the saveat points, and the save-on-change points inside a step, are taken
-    # here (cback_saveat, affect_change!) from the step's interpolant with every level bounded
-    # by its values at the two ends of the step, instead of by solve(saveat). The RadauIIA5
-    # interpolant runs through the stage values, which are not accurate for a stiff level held
-    # in quasi-equilibrium (only the step ends are): at BH 10, f_a = 1e14, alpha = 1.6 the
-    # accepted steps kept (15,10,10) at ln N = -32.1 while the interpolant inside the same steps
-    # swung between -42 and -16, and in other steps far above the bosenova cap, up to overflow
-    # (~1e5 saved points). Only the saved points change; the integration does not.
+    # :radau: saved points from the step interpolant, bounded by the step-end values
     bounded_saves = solver === :radau && !spinone
     function save_interp(integrator, tk)
         tk == integrator.t && return copy(integrator.u)
@@ -1270,14 +1102,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     end
     cback_saveat = DiscreteCallback(check_saveat, affect_saveat!, save_positions=(false, false))
 
-    # Save-on-change (see docstring), in log space against the last saved point
-    # (saveat or callback). change_units = change in units of the thresholds; only
-    # the part of a level's change above save_rel_floor * (largest occupation)
-    # counts. First in the callback set: the other saving callbacks fire on exactly
-    # the fast steps, and would otherwise save the end point first and hide the
-    # step from this one. It never modifies u, so the integration is unaffected;
-    # points it adds inside a step can precede pending saveat points and are put in
-    # time order on output.
+    # Save-on-change in log space against the last saved point; never modifies u. First in the callback set.
     ln_save_factor = log(save_factor)
     ln_save_floor = log(save_rel_floor)
     function change_units(ua, ub)
@@ -1319,9 +1144,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     else
         # Standard: full callback set
         callbackTIME = DiscreteCallback(time_limit_callback, affect_time!, save_positions=(false, false))
-        # affect_timescale! never changes u. With :radau tell the integrator so
-        # (a DiscreteCallback otherwise flags u as modified, which marks the
-        # Jacobian stale); :trbdf2 keeps the original behaviour.
+        # affect_timescale! never changes u (keeps the Jacobian valid with :radau)
         cbackdt = solver === :radau ?
             DiscreteCallback(check_timescale, itg -> (affect_timescale!(itg); u_modified!(itg, false)),
                              save_positions=(false, false)) :
@@ -1332,14 +1155,8 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
 
     end
 
-    # Minimum step. The OrdinaryDiffEq default, dtmin = eps(t_end), is ~2e-6 yr for t_end = 1e10 yr: longer than
-    # the fastest transients (e.g. the 322 burst at alpha = 0.2, f_a = 1e16 GeV, e-folding ~1 min), which then
-    # abort with DtLessThanMin. Use no fixed floor (dtmin = floatmin) and instead stop once a step can no longer
-    # advance t, i.e. dt is below the floating-point resolution at the current t.
-    # NL_DIAG=1: print every accepted step (t, dt, error estimate) and every timescale-callback action.
-    # NL_DIAG_LEVEL=n-l-m with NL_DIAG_T=t0,t1: also that level's ln N at both step ends and the
-    # step's interpolant at a few interior points, for steps ending in [t0, t1]. With NL_DIAG_T
-    # given, only steps ending in [t0, t1] are printed at all.
+    # no fixed dtmin: stop when a step can no longer advance t
+    # NL_DIAG=1: print accepted steps and timescale actions; NL_DIAG_LEVEL=n-l-m, NL_DIAG_T=t0,t1: one level in detail
     diag_nlm = get(ENV, "NL_DIAG_LEVEL", "")
     diag_i = isempty(diag_nlm) ? 0 :
         something(findfirst(md -> Tuple(md[1:3]) == Tuple(parse.(Int, split(diag_nlm, "-"))), modes), 0)
@@ -1387,27 +1204,14 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     end
     solver in (:trbdf2, :radau) || error("solver must be :trbdf2 or :radau")
     (analytic_jac && spinone) && error("analytic_jac is not implemented for spinone mode")
-    # radau_kappa: RadauIIA5's Newton stopping tolerance kappa (OrdinaryDiffEq default 1/100). The first
-    # Newton iterate is accepted when eta_old * |correction| < kappa, with eta_old carried over from earlier
-    # steps (~1e-6 in quiet phases) and |correction| the RMS over the full basis, so one level's whole change
-    # over the step can pass unchecked: at BH 10, f_a = 1e14, alpha = 0.8 (T1620) the step t = 64.155 ->
-    # 81.33 was accepted after one iteration with (16,6,6) grown 38 e-folds at its start rate (+2.2/yr) past
-    # the point (ln N ~ -19) where it levels off; its rate at the accepted end was -4.4e4/yr. A smaller
-    # kappa makes such a step take a second iteration, which sees that rate and rejects the step.
-    # linsolve: LUFactorization (LinearAlgebra.lu!, OpenBLAS) for both the real W1 and the complex W2. The default
-    # sends W1 to MKL and W2 to OpenBLAS; the two 10-thread pools, called alternately, slowed every factorization
-    # ~11x (at BH 10, f_a = 1e14, alpha = 0.6, towers45: 88% of the solve in LU, 0.67 s per step vs 0.17 s with
-    # this; same steps, states equal to 2e-11 relative).
+    # radau_kappa: Newton stopping tolerance (smaller: an extra iteration catches overshooting levels).
+    # LU via OpenBLAS for both W matrices (MKL for one of them was ~11x slower).
     radau_lin = OrdinaryDiffEq.LinearSolve.LUFactorization()
     alg = solver === :radau ? (radau_kappa === nothing ? RadauIIA5(autodiff=false, linsolve=radau_lin) :
                                RadauIIA5(autodiff=false, κ=radau_kappa, linsolve=radau_lin)) : TRBDF2(autodiff=false)
     t_solve0 = time()
     domain_kw = (solver === :radau && !spinone) ? (isoutofdomain=radau_out_of_domain,) : NamedTuple()
-    # :radau saves the saveat grid itself (cback_saveat, bounded interpolant) and the end point (t_max, or
-    # the wall-clock stop). A fresh run also saves t = 0: the grid starts at t_log_start (>= 1 yr) and
-    # save-on-change only fires once something is saved, so without it nothing before t_log_start is
-    # written (the whole growth of the fastest level when that takes < 1 yr). A resume does not save
-    # t_start, which is the last point of the previous segment.
+    # :radau saves the saveat grid (cback_saveat), the end point, and t = 0 for a fresh run
     save_kw = bounded_saves ? (saveat=Float64[], save_everystep=false, save_start=(t_start == 0.0), save_end=true) :
                               (saveat=saveat,)
     sol = if keep_levels === nothing || spinone
@@ -1424,8 +1228,7 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     # ============================================================================
     # EXTRACT AND PROCESS OUTPUT
     # ============================================================================
-    # Save-on-change can add points inside a step before that step's saveat points;
-    # a stable sort restores time order (identity when nothing was added).
+    # stable sort: save-on-change points may precede saveat points of the same step
     perm = sortperm(sol.t, alg=MergeSort)
     sol_t = sol.t[perm]
     sol_u = sol.u[perm]

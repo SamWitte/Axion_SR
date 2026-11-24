@@ -34,12 +34,8 @@ function gw_kerr_tetrad(ma::KerrMode, mb::KerrMode, kind::Symbol, rn, θn)
     ω̃ = conjb ? ωa - ωb : ωa + ωb
     m̃ = conjb ? ma.m - mb.m : ma.m + mb.m
     c = same ? 1 / (2ωa) : 1 / sqrt(ωa * ωb)
-    # radial factors: n·∂ψ = -[ΔR' + iKR] S/(2Σ) = -Δ f' e^{-iωr*+imr#} S/(2Σ) (the iKR cancels exactly
-    # against the phase derivative, so use f' directly),  m̄·∂ψ = (ρ/√2)[S' + (m/sinθ - aω sinθ) S] R.
-    # The source is quasi-stationary at Re ω: the profile is the horizon-regular f(r) with the phase
-    # e^{-i Re ω r* + imr#}. (With the complex ω in the phase, R = f e^{-iωr*+imr#} is the Boyer-Lindquist
-    # eigenfunction, which carries e^{Im ω r*}: harmless for Z^∞, where R^in ∝ Δ² suppresses the horizon,
-    # but its derivatives ~ Im ω/(r-r_+)² spoil the horizon amplitude.)
+    # radial factors: n.dpsi = -Delta f' e^{-i w r* + i m r#} S/(2 Sigma), mbar.dpsi = (rho/sqrt2)[S' + (m/sin - a w sin) S] R;
+    # the source is taken at Re w (with complex w the horizon derivatives carry spurious e^{Im w r*}).
     C = Complex{promote_type(eltype(rn), Float64)}
     nr_a = zeros(C, length(rn)); nr_b = similar(nr_a); Ra = similar(nr_a); Rb = similar(nr_a)
     for (i, r) in enumerate(rn)
@@ -273,8 +269,7 @@ function gw_kerr_rate(ma::KerrMode, mb::KerrMode, kind::Symbol; lmax::Int=12, lt
     modesH = Dict{Int,Float64}()
     P = 0.0; PH = 0.0; Pd = 0.0
     nsmall = 0
-    # R^in must be available over the whole source grid and is stepped through its nodes; for the
-    # horizon flux R^up is carried in to the first node as well
+    # R^in (and R^up for the horizon flux) stepped through the source nodes
     kw = merge((r_in_max=1.05 * rn[end], tstops_in=rn, T=T), values(teuk_kwargs))
     horizon && (kw = merge(kw, (r_up_min=rn[1], tstops_up=rn)))
     l0 = max(2, abs(m̃))
@@ -282,9 +277,7 @@ function gw_kerr_rate(ma::KerrMode, mb::KerrMode, kind::Symbol; lmax::Int=12, lt
         tr = try
             teuk_radial(-2, l, m̃, T(ω̃), T(ma.a); kw...)
         catch
-            # the Teukolsky integration can fail at a high ℓ (R^up near the horizon at a → 1) after the sum has
-            # converged in all but the formal sense: if the previous ℓ added less than ltrunc of the total, the sum
-            # ends there (truncation error below ltrunc); otherwise the failure stands
+            # a failed Teukolsky integration at high l ends the sum if the previous l added < ltrunc of the total
             if l > l0 && modes[l - 1] < ltrunc * P && (!horizon || abs(modesH[l - 1]) < ltrunc * (P + abs(PH)))
                 verbose && println("  ℓ = $l: Teukolsky solution failed; sum ended at ℓ = $(l - 1), whose term is $(modes[l - 1] / P) of the total")
                 break
@@ -301,8 +294,7 @@ function gw_kerr_rate(ma::KerrMode, mb::KerrMode, kind::Symbol; lmax::Int=12, lt
             Pd += Float64(abs2(teuk_Z_hat(tr, Shat, Ph, rn, rw, θn, θw)) / (2π * ω̃^2))
         end
         verbose && println("  ℓ = $l: |Z|²/(2πω̃²) = $(modes[l])" * (horizon ? "   P_H = $(modesH[l])" : "") * "   W_spread = $(tr.W_spread)")
-        # converged when two consecutive ℓ add less than ltol of the total (horizon part included: near-horizon
-        # sources radiate into the hole at higher ℓ than to infinity)
+        # converged when two consecutive l add < ltol of the total (horizon part included)
         small = modes[l] < ltol * P && (!horizon || abs(modesH[l]) < ltol * (P + abs(PH)))
         nsmall = small ? nsmall + 1 : 0
         nsmall >= 2 && break

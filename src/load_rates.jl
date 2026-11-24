@@ -4,20 +4,17 @@ include(joinpath(@__DIR__, "Numerics", "gw_rates.jl"))
 include(joinpath(@__DIR__, "spin_table.jl"))
 @isdefined(table_read) || include(joinpath(@__DIR__, "Core", "table_io.jl"))
 
-# Leaver rate files (rate_sve/*_LvrHc_.dat), read once per session: solve_system
-# with track_alpha evaluates the scattering rates on a grid of BH masses.
+# rate tables, read once per session
 if !@isdefined(LVR_FILE_CACHE)
     const LVR_FILE_CACHE = Dict{String, Any}()
 end
 
-# Channels requested with self_grav=true but lacking an SG table (warned about once per session).
+# channels with self_grav = true but no SG table (warned once per session)
 if !@isdefined(SG_MISSING_WARNED)
     const SG_MISSING_WARNED = Ref(false)
 end
 
-# rate_sve/regime_split.txt (written by rate_sve/split_regime.py): "S1 S2 S3 alpha_c [LOW]". The
-# fourth quantum of S1 S2 -> S3 + X is LOW (BH = bound, Inf = escaping; default BH) below alpha_c
-# and the other one above; the two halves of the channel are in S1_S2_S3_BH / _Inf files.
+# rate_sve/regime_split.txt: "S1 S2 S3 alpha_c [LOW]"; the fourth quantum is LOW (BH/Inf, default BH) below alpha_c.
 if !@isdefined(REGIME_SPLIT_CACHE)
     const REGIME_SPLIT_CACHE = Dict{String, Dict{String, Tuple{Float64, String}}}()
 end
@@ -42,38 +39,12 @@ end
 # not in this dictionary: they come from Numerics/gw_rates.jl (gw_build_cache /
 # gw_rhs!) inside solve_system.
 #
-# self_grav = true adds the Newtonian self-gravity contribution to every channel with an SG table
-# (rate_sve/<...>_LvrHc_SG.dat, written by Compute_all_rates.jl --self_grav true). The SI and SG
-# amplitudes interfere, so
-#     Gamma(f_a) = Gamma_SI (M_pl/f_a)^4 + si_sign * 2 kappa sqrt(Gamma_SI Gamma_SG) (M_pl/f_a)^2 + Gamma_SG,
-# with kappa = cos(relative phase) = +-1 tabulated per channel and si_sign = +1 for an attractive
-# quartic (axion cosine potential), -1 for a repulsive one. Only available with non_rel = false.
-# NL_SI_FROM_SG=1 takes Gamma_SI from the SG table inside that table's alpha range; with self_grav = false this gives
-# a self-interaction-only run with exactly the Gamma_SI of the corresponding self_grav = true run.
-# self_grav = true also includes the s-channel graviton exchange ("pair term"; ongoing_tests/sg_relativistic/
-# note_source, Section 3.6): the two incoming quanta source a metric perturbation at frequency ~ 2 mu (the oscillating
-# pressure of a real field), which acts on the outgoing bound quantum. It is local and has the form and sign of an
-# attractive quartic, mu^2/f_a^2 -> mu^2/f_a^2 + 12 pi G mu^2 (relative order alpha^2 to the Newtonian exchange, i.e.
-# a 1PN term; it is in neither the Newton + recoil tables nor the relativistic t/u-channel exchange tables). With the
-# tabulated quantities it needs no new computation:
-#     Gamma = Gamma_SI c^2 + 2 kappa c sqrt(Gamma_SI Gamma_SG) + Gamma_SG,   c = si_sign (M_pl/f_a)^2 + 12 pi G M_pl^2,
-# and it is applied wherever the self-interaction rate of the channel is (also where the channel has no SG table).
-# The coefficient holds at leading order in alpha (corrections are 2PN) and for a real scalar only.
-# On by default since 2026-11-19; NL_S_CHANNEL=0 switches it off (the formula two paragraphs up, as in all runs made
-# before that date).
-#
-# rate_input: custom channel list (file name in rate_sve/ or absolute path, same format as
-# load_rate_input_Nmax_X.txt, e.g. written by rate_sve/gen_custom_input.py) used instead of the default
-# list for this Nmax. Every state in it must be one of the Nmax modes (standard or truncation).
-#
-# regime_split = true: channels in rate_sve/regime_split.txt get both their BH and Inf rows (the list
-# needs only one of them), and each half is used only on its side of alpha_c (extrapolated up to
-# alpha_c within its own points). regime_mask = false skips that last cut, giving each half's rate
-# at every alpha (solve_system applies the cut itself when tracking alpha).
-#
-# parts: a Dict to be filled with the three terms of every tabulated channel (non_rel = false),
-#     parts[key] = (Gamma_SI c^2, 2 kappa c sqrt(Gamma_SI Gamma_SG), Gamma_SG)    (sum = the returned rate),
-# for the per-channel spin tables (NL_SPIN_TABLE, spin_table.jl). The returned rates do not depend on it.
+# self_grav = true: Gamma(f_a) = Gamma_SI c^2 + 2 kappa c sqrt(Gamma_SI Gamma_SG) + Gamma_SG with
+# c = si_sign (M_pl/f_a)^2 + 12 pi G M_pl^2 (s-channel graviton term; NL_S_CHANNEL=0 drops it), from the SG tables
+# (rate_sve/*_LvrHc_SG.dat, non_rel = false). NL_SI_FROM_SG=1 takes Gamma_SI from the SG table.
+# rate_input: channel list in rate_sve/ or an absolute path (format of load_rate_input_Nmax_X.txt).
+# regime_split: channels in rate_sve/regime_split.txt get BH and Inf rows, each used on its side of alpha_c
+# (regime_mask = false: no cut). parts: filled with (SI, cross, SG) terms per channel (spin tables).
 function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=false, self_grav=false, si_sign=1.0, rate_input=nothing,
                           regime_split=true, regime_mask=true, parts=nothing)
     alph = mu * GNew * M
@@ -81,7 +52,7 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
     faFac = (M_pl ./ f_a)^4
     si_from_sg = get(ENV, "NL_SI_FROM_SG", "0") == "1"
     sg_overlay = get(ENV, "NL_SG_OVERLAY", "")
-    # s-channel graviton exchange (see above): amplitude factor of the contact term, c = si_sign (M_pl/f_a)^2 + 12 pi G M_pl^2
+  # s-channel graviton term
     s_chan = self_grav && !non_rel && get(ENV, "NL_S_CHANNEL", "1") != "0"
     c_contact = si_sign * sqrt(faFac) + 12pi * (GNew / M_to_eV) * (M_pl * 1e9)^2
     si_fac = s_chan ? c_contact^2 : faFac          # Gamma_SI is multiplied by this
@@ -93,9 +64,7 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
             get_state_idx(st, Nmax) == -1 && error("rate_input $(rate_input): state $(st) is not among the Nmax = $(Nmax) modes; increase Nmax")
         end
     end
-    # (SR_rates is no longer used: the former pruning of channels involving non-superradiant levels never
-    #  removed anything, and a static t = 0 pruning would drop physical channels once spin/alpha evolve.
-    #  The argument is kept so existing callers do not change.)
+    # (SR_rates unused, kept for the callers)
 
     Drate = Dict()
     
@@ -268,10 +237,9 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
             end
             split_ch = get(split_tab, s1 * "_" * s2 * "_" * s3, nothing)
             sg = nothing
-            if self_grav || si_from_sg     # NL_SI_FROM_SG=1 without self_grav: the SG table is read for its Gamma_SI column only
+            if self_grav || si_from_sg  # NL_SI_FROM_SG=1 without self_grav: SG table read for Gamma_SI only
                 fileSG = dirN * s1 * "_" * s2 * "_" * s3 * "_" * s4 * ftag * "SG.dat"
-                # NL_SG_OVERLAY=<dir>: a table of the same name in that directory replaces the one in rate_sve
-                # (e.g. the fully relativistic self-gravity tables of ongoing_tests/sg_relativistic).
+                # NL_SG_OVERLAY=<dir>: tables there replace those in rate_sve
                 if !isempty(sg_overlay)
                     alt = joinpath(sg_overlay, basename(fileSG))
                     table_exists(alt) && (fileSG = alt)
@@ -306,17 +274,14 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
                     g_si = 10 .^itp(log10.(alph))
                     rate_out = g_si .* si_fac
                 end
-                # A regime-split channel has the same SG table under both labels (each row is computed in the regime
-                # the energies give at that alpha), so the SG part follows the same mask as the SI part.
+                # a split channel has the same SG table under both labels: same mask as SI
                 sg_in_regime = split_ch === nothing || !regime_mask ||
                                ((s4 == split_ch[2]) ? (alph < split_ch[1]) : (alph >= split_ch[1]))
                 if sg !== nothing && size(sg, 1) >= 2 && alph .<= maximum(sg[:, 1]) && sg_in_regime
                     itp_sg = LinearInterpolation(log10.(sg[:, 1]), log10.(sg[:, 3]), extrapolation_bc=Line())
                     itp_ka = LinearInterpolation(log10.(sg[:, 1]), sg[:, 5], extrapolation_bc=Flat())
                     g_sg = 10 .^itp_sg(log10.(alph))
-                    # NL_SI_FROM_SG=1: take Gamma_SI from the SG table too (its second column: same run, alpha grid
-                    # and step as Gamma_SG and kappa) wherever alpha lies inside that table, instead of from the
-                    # separate *_LvrHc_.dat table.
+                    # NL_SI_FROM_SG=1: Gamma_SI from the SG table inside its alpha range.
                     if si_from_sg && alph >= minimum(sg[:, 1]) * (1 - 1e-9)
                         pos = sg[:, 2] .> 0.0
                         if count(pos) >= 2

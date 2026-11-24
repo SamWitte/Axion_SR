@@ -715,8 +715,7 @@ function gw_build_cache(Nmax, modes, mu, M, a; gw_model=:nonrel, min_rate_per_yr
     c = gw_empty_cache(modes)
     gw_model == :off && return c
     if gw_model == :rel
-        # transitions the hole can reverse (tabulated h < -1 somewhere) are kept whatever their radiation rate:
-        # the channel floor below tests Γ_∞, which for the same-n pairs is far smaller than |Γ_H|
+        # transitions the hole can reverse (h < -1 somewhere) are kept whatever their radiation rate
         tabs = (rel_horizon && GW_HFRAC_FLOOR[] < -1) ? gw_kerr_load_tables() : nothing
         keep = tabs === nothing ? nothing : gw_kerr_reversible_pairs(tabs)
         cnr = gw_build_cache(Nmax, modes, mu, M, a; gw_model=:nonrel, min_rate_per_yr=min_rate_per_yr,
@@ -800,13 +799,8 @@ end
 
 @inline gw_rel_factor(c::GWCache, k::Int, α, a) = k == 0 ? 1.0 : exp(gw_interp2(c.itp[k], α, a))
 
-# Lower bound on the horizon fraction h = Γ_H/Γ_∞ used in the evolution. -Inf (default since 2026-11-10): no
-# bound. A channel whose horizon part is superradiant and larger than its radiation (h < -1: the same-n
-# transitions such as 322 <-> 311, and pairs with an absorbed level at large α) then has a negative net rate
-# (1 + h) Γ_∞: the transfer runs from the lower-frequency to the higher-frequency level, pumped by the hole,
-# which loses ω̃ and m̃ per quantum (gw_horizon_bh!). -1 restores the earlier floor (net rate >= 0: such a
-# transition is switched off). Set with ENV NL_GW_HFRAC_FLOOR before loading, or GW_HFRAC_FLOOR[] = x.
-# See GW_note/horizon_tide_note.tex.
+# Lower bound on the horizon fraction h = Gamma_H/Gamma_inf (NL_GW_HFRAC_FLOOR; default -Inf = none, -1 = net
+# rate >= 0). With h < -1 the hole pumps the transfer from the lower- to the higher-frequency level.
 if !@isdefined(GW_HFRAC_FLOOR)
     const GW_HFRAC_FLOOR = Ref(parse(Float64, get(ENV, "NL_GW_HFRAC_FLOOR", "-Inf")))
 end
@@ -1039,8 +1033,7 @@ function gw_time_samples(timeT, n)
     return unique(vcat(1, ks, length(timeT)))
 end
 
-# Sets the cache frequencies at (M, a) and fills ω with the per-level frequency used for the lines
-# (the tabulated Leaver value where the cache has one, else gw_omega); returns α.
+# set the cache frequencies at (M, a) and the per-level line frequencies; returns alpha
 function gw_set_omegas!(ω, c::GWCache, M, a, mu)
     α = GNew * M * mu
     gw_set_omegas_cache!(c, α, a)
@@ -1050,9 +1043,7 @@ function gw_set_omegas!(ω, c::GWCache, M, a, mu)
     return α
 end
 
-# (f [Hz], P [erg/s]) of line q at output time index k; q <= n_ann: annihilation. The cache
-# frequencies must be current (gw_set_omegas! at the same (α, a)). The power is the flux to
-# infinity only (the horizon part never reaches a detector).
+# (f [Hz], P [erg/s]) of line q at output index k (q <= n_ann: annihilation); power to infinity only
 function gw_line_at(c::GWCache, q, α, a, states, k, M0, mu)
     na = length(c.ann_i)
     if q <= na

@@ -4,27 +4,12 @@ include("state_utils.jl")
 using ArgParse
 using DelimitedFiles
 
-# Self-interaction + self-gravity rate of a list of scattering channels at an explicit list of alpha values, with the
-# settings of Compute_all_rates.jl (a = 0.95, Leaver/Heun bound states, BHlmax 2, Gauss-Legendre angles, BH recoil)
-# and three changes that make large channel lists with high-n levels tractable and accurate at low alpha:
-#   --rel_nmax N   levels with n <= N use the relativistic (Leaver/Heun) bound state as in the existing tables, levels
-#                  with n > N the hydrogenic one (gf_radial NR_states). The relativistic solve is slow and fragile at
-#                  n >~ 10, where the hydrogenic state is accurate; for low n it is needed (hydrogenic 322, 211 change
-#                  the self-gravity rate of 322 322 -> 211 + inf by 2x at alpha = 0.2).
-#   --alpha_h c    when the fourth quantum is bound, the step of its radial integration (h = r+/h_mve in r*) is capped
-#                  at c/alpha, i.e. >= 2 pi/c points per near-horizon wavelength. The default step grows like
-#                  n_max^2/alpha^2 and is not converged at low alpha (commit 2767135; pilot of 2026-11-12:
-#                  433 433 -> 10-6-6 off by 65% at alpha 0.05, 322 322 -> 544 by 12%). 0 = default step only.
-#   --cache DIR    gf_radial caches (eigenvalue searches and relativistic radial solves, GF_CACHE_DIR), shared on disk.
-# Never touches rate_sve/*_LvrHc_*.dat: each channel goes to <out>/<S1>_<S2>_<S3>_<S4>.pts with rows
-#   alpha  G_SI  G_SG  G_x  kappa  seconds  nr_mask  h_fac  inf_flag
-# (rates at f_a = M_pl as in the *_LvrHc_SG.dat tables; nr_mask = bit i set if level i is hydrogenic; h_fac = step
-# refinement relative to the default; inf_flag = 1 if the hydrogenic + fine-structure energies put the fourth quantum
-# above mu at this alpha). Rows already present with the same nr_mask and at least this h_fac are skipped, so a
-# stopped task list can simply be rerun.
-#   julia Compute_sg_points.jl --tasks tasks.txt --alpha_list 0.05,0.1,0.2 --out DIR --cache CACHE
-#   julia Compute_sg_points.jl --precompute levels.txt --alpha_list ... --cache CACHE [--part 3/64]
-# Task lines: "S1 S2 S3 S4 [rel_nmax=N] [alpha_h=c] [h_mve_fac=X] [alphas=a,b,c]" (per-task overrides).
+# SI + SG rates of a list of channels at explicit alphas (settings of Compute_all_rates.jl), one file per channel
+# <out>/<S1>_<S2>_<S3>_<S4>.pts: alpha G_SI G_SG G_x kappa seconds nr_mask h_fac inf_flag (existing rows skipped).
+# --rel_nmax N: relativistic bound states for n <= N, hydrogenic above; --alpha_h c: step of a bound fourth quantum
+# capped at c/alpha; --cache DIR: cached eigenvalue searches and radial solves.
+#   julia Compute_sg_points.jl --tasks tasks.txt --alpha_list 0.05,0.1 --out DIR --cache CACHE
+# Task lines: "S1 S2 S3 S4 [rel_nmax=N] [alpha_h=c] [h_mve_fac=X] [alphas=a,b,c]".
 
 function parse_commandline()
     s = ArgParseSettings()
@@ -68,13 +53,13 @@ function parse_commandline()
         "--BHlmax"
             arg_type = Int
             default = 2
-        "--inf_all_l"   # channels to infinity: sum every outgoing multipole (false: only l1 + l2 - l3, as before 2026-11-19)
+        "--inf_all_l"   # to infinity: sum every outgoing multipole
             arg_type = Bool
             default = true
-        "--inf_wkb"     # channels to infinity: WKB start of the outgoing solution and outer radius that contains the levels (false: exp(i k r*) at 30 / k, as before 2026-11-19)
+        "--inf_wkb"   # to infinity: WKB outgoing start, outer radius containing the levels
             arg_type = Bool
             default = true
-        "--kg_norm"     # Klein-Gordon normalisation of the cloud modes (false: int |R|^2 r^2 dr = 1, as before 2026-11-19)
+        "--kg_norm"   # Klein-Gordon normalisation of the cloud modes
             arg_type = Bool
             default = true
         "--alpha_min"   # only for the NptsCh mapping of Compute_all_rates.jl
@@ -156,7 +141,7 @@ function run_channel(S1, S2, S3, S4, alphas, rel_nmax, alpha_h, hfac; rpts=1500,
         println("pt ", join((S1, S2, S3, S4), " "), "  alpha ", alpp, "  SI ", g_si, "  SG ", g_sg, "  kappa ", round(kappa, digits=4),
                 "  ", round(dt, digits=1), " s  mask=", mask, " hfac=", h_fac)
         flush(stdout)
-        GC.gc()     # many of these processes share a node; without this their heaps grow until the node runs out of memory
+        GC.gc()   # keeps the heaps of many processes on a node small
     end
 end
 

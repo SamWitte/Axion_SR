@@ -373,13 +373,8 @@ println("  solver  = ", solver, parsed["analytic_jac"] ? " (analytic Jacobian)" 
 println("  f_edd   = ", f_edd, f_edd > 0 ? "  (Mdot = $(f_edd * eddington_rate(MassBH; eta=acc_eta)) M_sun/yr, eta = $(acc_eta))" : "  (no accretion)")
 println("================================================")
 
-# Output filename -- mirrors single_BH.jl naming convention with Nmax appended.
-# With accretion a _fedd_<f_edd> tag goes before _Nmax_ (the *Nmax_N.dat globs and
-# the gw_lines_from_run.jl filename parser still match); without it the name is unchanged.
+# Output name as in single_BH.jl; tags _fedd_, _SG, _rin_<list>, _srlin go before _Nmax_.
 fedd_tag = f_edd > 0 ? "_fedd_$(f_edd)" : ""
-# _SG (self-gravity on), _rin_<list> (custom channel list) and _srlin (legacy SR-rate interpolation) tags also
-# go before _Nmax_, so SI-only and SG runs, default and custom channel lists, or the two SR interpolations never
-# overwrite each other.
 sg_tag  = self_grav ? "_SG" : ""
 rin_tag = rate_input === nothing ? "" : "_rin_" * splitext(basename(rate_input))[1]
 srlin_tag = sr_interp === :legacy ? "_srlin" : sr_interp === :factorised ? "_srfac" : ""
@@ -494,8 +489,7 @@ end
 println("Saved output to: ", outdir)
 println("  ", fname)
 
-# Stopped early (wall-clock limit): mark the run incomplete so finish_nmax_output.sh
-# leaves the loose .dat files for --resume instead of pruning/archiving them.
+# stopped early: mark incomplete (--resume continues)
 incomplete_marker = joinpath(outdir, "NL_incomplete_Nmax_$(Nmax)")
 if timeT[end] < tau_max * (1 - 1e-12)
     write(incomplete_marker, "stopped at t=$(timeT[end]) of tau_max=$(tau_max); continue with --resume\n")

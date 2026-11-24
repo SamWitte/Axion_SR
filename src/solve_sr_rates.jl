@@ -1087,10 +1087,7 @@ function spheroidals(l, m, a, erg, alph; spherical_above=typemax(Int))
         return 0.0
     end
 
-    # spherical_above = L: spherical harmonic for l >= L.  Used for the outgoing wave of channels to infinity (inf_wkb
-    # path of gf_radial, L = 10): with all multipoles summed l reaches l1 + l2 + l3, the spheroidal solver then takes
-    # minutes to hours per harmonic when l - |m| is large (final states such as 11-10-10 with m4 ~ 0), and the
-    # spheroidicity c^2 = a^2 k^2 <= 2e-3 changes the harmonic by less than 1e-4 there.
+    # spherical_above = L: spherical harmonic for l >= L (outgoing waves of the inf_wkb path, c^2 <= 2e-3)
     if l >= spherical_above
         return (theta, phi) -> sphericalY(l, m, theta, phi)
     end
@@ -1426,11 +1423,6 @@ end
 
 function generalized_laguerre(n, α, x)
     # L_n^(α)(x) from the three-term recurrence in BigFloat (stable for every argument type).
-    # Until 2026-11-16 this was (-1)^n / n! * HypergeometricFunctions.U(-n, α+1, x).  That form is accurate when x is a
-    # BigFloat, which is how radial_bound_NR is called from gf_radial (rlist is BigFloat): 3,221 rate points recomputed
-    # with the recurrence are identical to the old ones.  With Float64 arguments it loses all precision at small x for
-    # n >~ 7 (the hydrogenic 15-4-4 becomes noise for r < 5 a0; scripts/sg_ext/laguerre_survey.jl), which matters for any
-    # caller that passes Float64 radii.
     function lag1(xi)
         xb = big(xi)
         L0 = one(xb)
@@ -1587,13 +1579,8 @@ end
 
 
 # =====================================================================================
-# Self-gravity (Newtonian h_00 exchange) contribution to the 2 -> 2 scattering rates.
-# Integrating out the Newtonian potential gives the quartic interaction
-#     H = 1/2 ∫∫ |psi(x)|^2 K(x - y) |psi(y)|^2,   K_SG = -G mu^2 / |x - y|,
-# i.e. the same structure as the axion self-interaction, K_SI = -(lambda / 8 mu^2) delta^3(x - y).
-# For a long-range kernel the two orderings of the incoming states differ, so the source for
-# mode 4 is (1/2)[psi1 Phi_23 + psi2 Phi_13] with Phi_b3(x) = ∫ conj(psi3) psi_b (y) / |x - y|
-# (reduces to psi1 psi2 conj(psi3) for a unit contact kernel). Used by gf_radial(...; self_grav=true).
+# Self-gravity (Newtonian h_00 exchange) contribution to the 2 -> 2 rates: kernel K_SG = -G mu^2/|x - y|
+# (SI: -(lambda/8 mu^2) delta); mode-4 source (1/2)[psi1 Phi_23 + psi2 Phi_13], Phi_b3 = ∫ conj(psi3) psi_b/|x - y|.
 # =====================================================================================
 function sg_gauss_legendre(n)
     beta = [k / sqrt(4k^2 - 1) for k in 1:n-1]
@@ -1620,8 +1607,7 @@ end
 
 # multipole L of the Coulomb potential of a radial profile f on the (log) grid r:
 #   Q_L(r) = r^{-L-1} ∫_{r0}^r r'^{L+2} f + r^L ∫_r^∞ r'^{1-L} f
-# recoil = true (L = 1 only) subtracts the BH's acceleration: in the BH frame the kernel x.y/r_>^3 becomes
-# x.y (1/r_>^3 - 1/|y|^3), i.e. Q_1(r) -> Q_1(r) - r ∫_{r0}^∞ f (the uniform field of the exterior cloud drops out).
+# recoil = true (L = 1): BH-frame kernel, Q_1(r) -> Q_1(r) - r ∫_{r0}^∞ f
 function sg_coulomb_radial(f, r, L; recoil=false)
     n = length(r)
     ci = zeros(ComplexF64, n); co = zeros(ComplexF64, n)
@@ -1638,8 +1624,7 @@ end
 
 # potential of the transition density conj(psi3) psi_b, multipole by multipole:
 #   Phi_b3(r, theta) e^{i M phi} = sum_L cL[L] * QL[L](r) * Y_{L M}(theta),   M = m_b - m3
-# contact = true returns the density itself in the same form (unit contact kernel; for tests)
-# recoil = true includes the BH's recoil (indirect term) in the dipole, L = 1, part (see sg_coulomb_radial)
+# contact = true: the density itself (tests); recoil = true: BH recoil in the L = 1 part
 function sg_transition(rf_b, rf_3, Zb_prof, Z3_prof, mb, m3, lb, l3, r; contact=false, recoil=false)
     M_ = mb - m3
     Ls = [L for L in abs(M_):(lb + l3 + 4) if iseven(lb + l3 + L)]
@@ -1663,11 +1648,7 @@ function sg_radial_source(tr, Za_prof, ma, rf_a, Z4_prof, m4, r, a)
     return rf_a .* T
 end
 
-# Optional caches for gf_radial (set by Compute_sg_points.jl). The eigenvalue search find_im_part (~4.6 s per level
-# and alpha, three calls per rate point) and the relativistic radial solve of a level depend only on the level and on
-# (mu, M, a), so task lists that revisit the same levels can reuse them. GF_CACHE_DIR[] = "" (the default) switches
-# both off and leaves gf_radial exactly as before; otherwise the results are kept in memory and on disk in that
-# directory (one small file per level, alpha and kind), shared between processes.
+# Optional caches of eigenvalue searches and relativistic radial solves, in memory and on disk (GF_CACHE_DIR[]; "" = off).
 const GF_CACHE_DIR = Ref("")
 const GF_CACHE_MEM = Dict{Any, Any}()
 function gf_cached(f, kind::String, key)
@@ -1695,12 +1676,9 @@ function gf_cached(f, kind::String, key)
     return val
 end
 
-# Klein-Gordon charge of a bound mode whose radial function is normalised with int |R|^2 r^2 dr = 1 (the convention of
-# the radial functions in gf_radial), in units of 2 mu:
-#     Q = int dr |R|^2 < (w/mu) [(r^2 + a^2)^2 - Delta a^2 sin^2(theta)] / Delta - 2 a m r / (mu Delta) > / int dr |R|^2 r^2
-# with r in units of GM, w the real part of the frequency, and sin^2(theta) averaged with |Y_lm|^2.  For a hydrogenic
-# level Q = 1 + 3 alpha^2 / (2 n^2) + O(alpha^4).  An occupation number N means a mode of charge N, so every rate that is
-# cubic in the mode functions has to be divided by Q_1 Q_2 Q_3.
+# Klein-Gordon charge (units of 2 mu) of a mode normalised with int |R|^2 r^2 dr = 1, ~ 1 + 3 alpha^2/(2 n^2):
+#   Q = int dr |R|^2 <(w/mu)[(r^2 + a^2)^2 - Delta a^2 sin^2]/Delta - 2 a m r/(mu Delta)> / int dr |R|^2 r^2
+# Rates cubic in the modes are divided by Q_1 Q_2 Q_3.
 function kg_norm_ratio(rf, rlist, l, m, a, alph, wre)
     r = Float64.(real.(rlist)); f2 = Float64.(abs2.(rf)); aF = Float64(a); alpF = Float64(alph); wF = Float64(wre)
     s2 = 1 - (2 * l^2 + 2 * l - 1 - 2 * m^2) / ((2 * l - 1) * (2 * l + 3))
@@ -1778,11 +1756,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         kk_pxy = real(sqrt.(erg_pxy.^2 .- alph.^2))
         rmax = 1/kk_pxy .* 30.0 # Need prefactor here i think...
         if inf_wkb
-            # Outer radius with the WKB start of the outgoing solution (see mode_amplitude):
-            #  - near threshold 30 / k is very large, while the WKB start is already accurate (|q'| / q^2 < 0.005) once the
-            #    Coulomb tail dominates the local wavenumber, at 5000 Bohr radii;
-            #  - it must contain the bound states: the self-gravity source of a far level (dipole exchange and recoil)
-            #    extends over the whole level, and 30 / k alone cuts levels with n >~ 5 (same extent as the BH channels).
+            # outer radius with the WKB start: min(30/k, 5000 Bohr), at least the extent of the levels
             rmax = min(rmax, 5000.0 / Float64(alph)^2)
             rbnd_inf = maxN < 10 ? 2.0^(2.0 * maxN - 2 * (1 + maxN)) * gamma(2 + 2 * maxN) / alph^2 / factorial(2 * maxN - 1) * 10.0 :
                                    2.0^(2.0 * maxN - 2 * (1 + maxN)) * 4 * maxN^2 / alph^2 * 10.0
@@ -1941,9 +1915,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     # writedlm("test_store/322.dat", hcat(real(rlist), real(rf_3 .* conj.(rf_3))))
     erg = (erg_1 + erg_2 - erg_3) + 0 * im # leave the 0 im for NR case
 
-    # Klein-Gordon normalisation of the three cloud modes (kg_norm, since 2026-11-19; see kg_norm_ratio).  Until then the
-    # rates were computed with modes normalised to int |R|^2 r^2 dr = 1, which overestimates them by Q_1 Q_2 Q_3
-    # (0.9 % / 3.8 % / 9 % at alpha = 0.1 / 0.2 / 0.3 for 211 x 211 -> 322).
+    # Klein-Gordon normalisation of the three cloud modes (kg_norm)
     kg_fac = 1.0
     if kg_norm
         kg_fac = 1.0 / (kg_norm_ratio(rf_1, rlist, l1, m1, a, alph, real(erg_1)) * kg_norm_ratio(rf_2, rlist, l2, m2, a, alph, real(erg_2)) *
@@ -1983,12 +1955,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     # reproduces the single-mode result exactly.
     if to_inf
         if inf_all_l
-            # Emission to infinity: the outgoing quantum leaves in every partial wave |m| <= l <= l1 + l2 + l3 with the
-            # parity of l1 + l2 + l3, and their fluxes add (sum_l |R_l|^2, as for the horizon).  The higher ones are not
-            # suppressed, because k r is not small over the cloud: keeping only l1 + l2 - l3, as was done until
-            # 2026-11-19 (inf_all_l = false), loses more than 10 % of the rate in about a third of the channels among
-            # the levels with n <= 6 and forces the SI-SG interference coefficient kappa to +-1.  The multipole used
-            # before stays first in the list.
+            # to infinity: every partial wave |m| <= l <= l1 + l2 + l3 with the parity of l1 + l2 + l3; fluxes add
             lsum = l1 + l2 + l3
             lmin = max(abs(m), 1)
             isodd(lmin + lsum) && (lmin += 1)
@@ -2021,13 +1988,8 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     itpGI = LinearInterpolation(log10.(rlist), Float64.(imag.(gammaT)), extrapolation_bc=Line())
 
     # ---- self-gravity (Newtonian h_00 exchange), see sg_transition / sg_radial_source above.
-    # The SG source is multiplied by 8 alpha^2: pushed through the SI rate formula below (lambda = mu^2/M_pl^2,
-    # i.e. f_a = M_pl) this gives Gamma_SG directly, independent of f_a, since
-    #     A_SG / A_SI = 8 (f_a/M_pl)^2 alpha^2 J_SG / J_SI   (lengths in GM; K_SG = -G mu^2/r vs K_SI = -delta/(8 f_a^2)).
-    # Both kernels are attractive for the axion, so the amplitudes add coherently and
-    #     Gamma(f_a) = Gamma_SI (M_pl/f_a)^4 + Gamma_x (M_pl/f_a)^2 + Gamma_SG      (flip Gamma_x for lambda < 0).
-    # sg_test_contact = true swaps the Coulomb kernel for a unit contact kernel (and drops 8 alpha^2), which must
-    # reproduce the SI rate: a check of the construction, including distinct incoming states.
+    # The SG source times 8 alpha^2 gives Gamma_SG through the SI rate formula (lambda = mu^2/M_pl^2):
+    #   Gamma(f_a) = Gamma_SI (M_pl/f_a)^4 + Gamma_x (M_pl/f_a)^2 + Gamma_SG; sg_test_contact: unit contact kernel (check).
     if self_grav || ang_method == :gl
         Z1p = sg_theta_profile(Z1); Z2p = sg_theta_profile(Z2); Z3p = sg_theta_profile(Z3)
     end
@@ -2204,8 +2166,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             println("Energies: erg_1=$erg_1, erg_2=$erg_2, erg_3=$erg_3, erg=$erg")
         end
         if ang_method == :gl
-            # exact Gauss-Legendre quadrature in cos(theta) (the phi integral is analytic); the Monte Carlo
-            # estimator below scatters by ~1% in amplitude from seed to seed
+            # exact Gauss-Legendre quadrature in cos(theta) (Monte Carlo below scatters by ~1 %)
             Z4p_ang = sg_theta_profile(Z4)
             CG = sg_ang([Z1p, Z2p, conj.(Z3p), conj.(Z4p_ang)], [m1, m2, -m3, -m])
             CG_2 = sg_ang([Z1p, Z2p, conj.(Z3p), conj.(Z4p_ang)], [m1, m2, -m3, -m]; cos2=true)
@@ -2253,13 +2214,8 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         append!(rvals, rr)
         rr -= h_step
 
-        # Outgoing condition for channels to infinity (inf_wkb, since 2026-11-19).  At r_max the Coulomb tail of the
-        # mass term, 2 alpha mu / r, is not small against k^2 (at r_max = 30 / k it is 1 / (15 k_B) of it, k_B = k / (mu
-        # alpha)), so the pure exp(i k r*) start above is not an outgoing wave: it reflects part of it, and the rate
-        # then oscillates with r_max (-11 % for 322 x 322 -> 211, +21 % for 422 x 544 -> 322 at 30 / k; the multipole
-        # shares are wrong as well).  Start instead from the WKB solution u = exp(i int q dr*) / sqrt(q) with the local
-        # wavenumber q^2 = w^2 - V(r); its flux is q |u|^2, so the amplitude is returned times sqrt(q / k) and the rate
-        # formula below (written with k) stays as it is.  The result is independent of r_max to ~1e-5.
+        # Outgoing condition to infinity (inf_wkb): WKB start u = exp(i int q dr*)/sqrt(q), q^2 = w^2 - V(r) (exp(i k r*)
+        # at r_max is inside the Coulomb tail and reflects); amplitude times sqrt(q/k).
         wkb_fac = 1.0
         if to_inf && inf_wkb
             q_loc = rs -> begin
@@ -2276,9 +2232,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
 
 
         if to_inf && inf_wkb
-            # Double-precision recurrences (the two solutions are oscillatory: no dynamic range to protect).  Same
-            # three-point scheme, grid and start values as the general loops in the else branch, which do their
-            # arithmetic in BigFloat and take minutes once r_max contains a level with n ~ 20.
+            # double-precision recurrences (oscillatory solutions; same scheme as the BigFloat loops below)
             ergF = ComplexF64(erg); alpF = Float64(alph); aF = Float64(a); LLMF = ComplexF64(LLM); hF = Float64(h_step); rpF = Float64(rp)
             Vf = r_in -> begin
                 dl = r_in^2 - 2 * r_in + aF^2; f2 = r_in^2 + aF^2
@@ -2481,8 +2435,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             # integrator's convergence test is relative, so it would happily settle
             # onto sampling noise there. Skip those. Only applied beyond the leading
             # multipole, so BHlmax=0 reproduces the previous result untouched.
-            # (Channels to infinity with the exact Gauss-Legendre angles are not skipped: the self-gravity
-            # amplitude of a multipole need not vanish where the contact one does.)
+            # (channels to infinity with Gauss-Legendre angles are not skipped)
             _, ang_iszero = integral4(l1, m1, l2, m2, l3, -m3, lmode, -m)
             if ang_iszero
                 if debug

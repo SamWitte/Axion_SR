@@ -1,33 +1,11 @@
-# Spin dependence of the scattering rates beyond the r+ factor (NL_SPIN_TABLE, 2026-11-20).
-#
-# The scattering tables (rate_sve/*_LvrHc_*.dat) are computed at spin 0.95. For channels whose fourth quantum goes into
-# the hole the loader and solve_system rescale them with r+(a)/r+(0.95), which is only the alpha -> 0 limit. The
-# residual factor
-#     R(alpha, a) = [Gamma_tab(alpha, a) / Gamma_tab(alpha, 0.95)] / rho(a),   rho = r+(a)/r+(0.95) (BH label), 1 (Inf label)
-# (Gamma_tab: the tabulated quantity, i.e. without kH for BH channels with m4 != 0) is tabulated per channel for the
-# self-interaction and the self-gravity amplitude separately, in rate_sve/spin_table_v1.txt or the file named by the
-# environment variable NL_SPIN_TABLE (NL_SPIN_TABLE=0: no table, the r+ scaling only, as before 2026-11-23):
-#     # spins 0 0.3 0.5 0.7 0.8 0.9 0.95 0.99 0.998
-#     S1 S2 S3 S4 alpha flag  lnRsi_1 .. lnRsi_N  lnRsg_1 .. lnRsg_N
-# (labels as in the rate tables; flag = provenance, not used here; natural logarithms). With the table
-#     Gamma(a) = Gamma_SI c^2 R_SI + 2 kappa c sqrt(Gamma_SI Gamma_SG R_SI R_SG) + Gamma_SG R_SG
-# (kappa from the 0.95 table), still multiplied by the r+ and kH factors of solve_system. Interpolation: monotone cubic
-# (PCHIP) in a on ln R, linear in ln(alpha) between the rows of a channel, nearest row outside them; spin clamped to the
-# range of the nodes; a channel without rows has R = 1.
-#
-# In solve_system the factor is evaluated on every RHS call as a correction to the rate used so far,
-#     rate = rate_0.95 + A (R_SI - 1) + X (sqrt(R_SI R_SG) - 1) + G (R_SG - 1),
-# with A, X, G the three terms above at the current mass (load_rate_coeffs(...; parts = Dict())). No ratio to the total
-# is formed (it nearly cancels for some channels at f_a ~ 1e17 GeV), and a table with R = 1 leaves the run unchanged to
-# the bit.
+# Spin dependence of the scattering rates beyond r+(a)/r+(0.95): per-channel factors R_SI, R_SG(alpha, a) from
+# rate_sve/spin_table_v1.txt. Rows: S1 S2 S3 S4 alpha flag lnRsi_1..N lnRsg_1..N (spins in the header line).
 
 if !@isdefined(SPIN_TABLE_CACHE)
     const SPIN_TABLE_CACHE = Dict{String, Any}()
 end
 
-# The table in use. Default since 2026-11-23: rate_sve/spin_table_v1.txt (unzip rate_sve/spin_table_v1_20261123.zip there).
-# NL_SPIN_TABLE=<file> selects another table; NL_SPIN_TABLE=0 (or off / none) switches the factors off (r+ scaling only,
-# as before). If the default file is not there the run goes on without the factors and says so.
+# Table path: NL_SPIN_TABLE (0 = off), else the default file (missing: warn, run without).
 @isdefined(table_read) || include(joinpath(@__DIR__, "Core", "table_io.jl"))
 const SPIN_TABLE_DEFAULT = joinpath(@__DIR__, "rate_sve", "spin_table_v1.txt")
 if !@isdefined(SPIN_TABLE_WARNED)
@@ -63,8 +41,7 @@ function spin_table_key(k::AbstractString)
     return spin_table_key(p[1], c[1], c[2], c[3])
 end
 
-# The table, read once per session: (spins, alpha of every row, V = 2 ns x rows matrix of [ln R_SI; ln R_SG],
-# Dict(channel => range of its rows, sorted in alpha)).
+# Read once per session: spins, row alphas, ln R matrix, channel => row range.
 function load_spin_table(path::AbstractString)
     get!(SPIN_TABLE_CACHE, String(path)) do
         table_exists(path) || error("NL_SPIN_TABLE: no file $(path)")
@@ -153,9 +130,7 @@ end
 SpinFactor() = SpinFactor(false, Float64[], Int[], Int[], Float64[], zeros(0, 0), zeros(0, 0), zeros(0, 0), zeros(0, 0),
                           0.0, 1.0, 2, 0.0, 0.0, false, false, 1, 0.0, 0.0, 0.0, 0.0, 0.0, 1, 0.0)
 
-# parts[j][key] = (SI, cross, SG) terms of the rate at mass node j (as returned by load_rate_coeffs(...; parts)), already
-# in the units of the rates the kernels use except for norm_ln[kk, j], which is added to ln SI and ln SG.
-# alpha_lo, alpha_hi: range of alpha the run can reach (rows outside it are dropped, keeping one on either side).
+# parts[j][key] = (SI, cross, SG) rate terms at mass node j; rows outside [alpha_lo, alpha_hi] are dropped.
 function build_spin_factor(path, rate_keys, parts, norm_ln, alpha_lo, alpha_hi; lnMlo=0.0, dlnM=1.0, lnGmu=0.0, track=false, verbose=true)
     spins, tal, V, index = load_spin_table(path)
     ns = length(spins); nch = length(rate_keys); nM = length(parts)

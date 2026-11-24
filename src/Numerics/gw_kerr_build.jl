@@ -245,11 +245,9 @@ function gw_kerr_table_point(kind::Symbol, sa, sb, α, a; nr, ω0a=nothing, ω0b
         Γ, P, modes, ω̃abs, m̃, ΓH, modesH, chk = gw_kerr_rate(hi, lo, kind; lmax=lmax, ltol=ltol, decay=decay, T=T, horizon=horizon, kerr_kwargs...)
         Γnr = kind == :tr ? gw_transition_rate(nr, α, ω̃abs / α) : nr[1] * α^nr[2]
         isfinite(Γ) && Γ > 0 && isfinite(Γnr) && Γnr > 0 || return fail("rate_nonfinite", ma, mb)
-        # the direct and kernel forms of the source cancel differently: if their P_∞ disagree, the strongly
-        # cancelling (small-α, high-l) annihilation integrals are at the precision floor of T -> not usable
+        # direct and kernel forms of the source disagree: precision floor reached, not usable
         status = (isnan(chk) || abs(chk) < chk_tol) ? "ok" : "noisy"
-        # a level whose width exceeds broad_tol of the spacing to its neighbours is a resonance, not a level: the
-        # rate into or out of it is not what this (narrow-level) calculation gives. The value is kept in the row.
+        # a level wider than broad_tol of the spacing to its neighbours is a resonance (value kept)
         (abs(imag(ma.ω)) > broad_tol * gw_kerr_overtone_gap(sa, α) || abs(imag(mb.ω)) > broad_tol * gw_kerr_overtone_gap(sb, α)) &&
             (status = "broad")
         return (alpha=α, a=a, Gamma_kerr=Γ, Gamma_nr=Γnr, ratio=Γ / Γnr, omega_tilde=ω̃ / α,
@@ -341,8 +339,7 @@ function gw_kerr_build_channel(kind::Symbol, sa, sb; αs=nothing, as=nothing, pa
                                     ω0a=ta === nothing ? nothing : ta[2], ω0b=tb === nothing ? nothing : tb[2],
                                     lost=losta ? :a : (lostb ? :b : :none), kerr_kwargs...)
             println(io, gw_kerr_row_string(r)); flush(io)
-            # the next point starts from the followed eigenfrequencies; a level found without a seed (the first α of
-            # a spin) starts its history
+            # next point starts from the followed eigenfrequencies
             a_ok = r.ma !== nothing && !startswith(r.status, "fail:mode_a_")      # level a was accepted at this point
             b_ok = r.mb !== nothing && !startswith(r.status, "fail:mode_")
             ha = ta !== nothing ? ta : (a_ok ? gw_kerr_push(ha, α, r.ma.ω) : ha)

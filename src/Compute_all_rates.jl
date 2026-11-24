@@ -55,20 +55,18 @@ function parse_commandline()
             arg_type = Int
             default = 2
 
-        "--self_grav" # also compute the Newtonian self-gravity (h_00) rate of the same channel and its
-                      # interference with SI; written to rate_sve/<S1>_<S2>_<S3>_<S4><ftag>SG.dat with columns
-                      # alpha, Gamma_SI, Gamma_SG, Gamma_x, kappa = Gamma_x / (2 sqrt(Gamma_SI Gamma_SG)),
-                      # all at f_a = M_pl, so that Gamma(f_a) = Gamma_SI (M_pl/f_a)^4 + Gamma_x (M_pl/f_a)^2 + Gamma_SG
+        "--self_grav"
+                      # also the self-gravity rate: <S1>_<S2>_<S3>_<S4><ftag>SG.dat (alpha, G_SI, G_SG, G_x, kappa)
             arg_type = Bool
             default = false
 
-        "--sg_recoil" # include the BH's recoil (indirect term) in the self-gravity kernel; matters only for
-                      # transitions with a dipole (L = 1) transition density, |m_b - m3| <= 1
+        "--sg_recoil"
+                      # BH recoil in the self-gravity kernel (dipole transitions)
             arg_type = Bool
             default = false
 
-        "--ang_method" # angular overlaps in gf_radial: "mc" (Monte Carlo, the previous behaviour) or
-                       # "gl" (Gauss-Legendre in cos(theta), exact and deterministic)
+        "--ang_method"
+                       # angular overlaps: "mc" (Monte Carlo) or "gl" (Gauss-Legendre)
             arg_type = String
             default = "mc"
             

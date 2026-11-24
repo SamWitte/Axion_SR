@@ -168,8 +168,7 @@ function gw_kerr_fill_grid!(z::Matrix{Float64}, αs::AbstractVector, as::Abstrac
                     z[i, j] = z[k, j] * exp(p * (lα[i] - lα[k])); how[i, j] = pfit >= 0.5 ? 2 : 5
                 end
             elseif kind == :tr
-                # a transition whose computed ratio has levelled off away from 1 (a table built before the grid fix of
-                # 22 Nov 2026, or a channel whose flat-space reference has another limit): hold it, as for annihilations
+                # a transition whose ratio levelled off away from 1: hold it, as for annihilations
                 for i in 1:(k - 1)
                     z[i, j] = z[k, j]; how[i, j] = 2
                 end
@@ -390,8 +389,7 @@ function gw_kerr_load_tables(dir=gw_kerr_table_dir(); verbose::Bool=false)
             end
             isempty(dl) || (lfr[(kind, gw_pair_key(sa, sb)...)] = dl)
         end
-        # horizon fraction h = Γ_H/Γ_∞: changes sign at the graviton's superradiant threshold and spans decades
-        # in α, so it is interpolated as asinh(h/GW_HFRAC_SCALE) (odd, logarithmic in |h| ≫ the scale)
+        # horizon fraction h interpolated as asinh(h/GW_HFRAC_SCALE) (changes sign, spans decades)
         hp = [(r.alpha, r.a, asinh(r.Gamma_H / r.Gamma_kerr / GW_HFRAC_SCALE)) for r in ok if isfinite(r.Gamma_H) && r.Gamma_kerr != 0]
         if !isempty(hp)
             ith = gw_interp_from_points(hp)
