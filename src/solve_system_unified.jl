@@ -1044,17 +1044,10 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
     end
 
     # Standard mode only: check_timescale and affect_timescale!
-    # Step limit for growing levels, NL_DT_EFOLD = c (default 1 since 2026-11-23; 0: none, as before): every level above
-    # the seed that is growing also enters the timescale list with c / (d ln N/dt), so that a step stays below ~c
-    # e-folds of it (the list's rule resets dt to a tenth of the shortest entry once dt exceeds it). Before, only levels
-    # at their bosenova cap and the spin limited the step, and the solver took steps of ~5e6 yr in which a level growing
-    # at ~2e-6 /yr gained 26 instead of 8 e-folds: its rate was the small difference of a scattering gain and a GW loss
-    # (322x322 -> 844 x BH against 844 -> 322, equal to 1.6 %), so the inaccurate stage values of the stiff 322 (held at
-    # its superradiance threshold) entered it amplified ~60 times. What followed was garbage (BH mass lost at fixed J in
-    # the saved rows, spin > 1, in the worst case the state destroyed): 1 of the 204 runs of the n88_*_nfix sets and 3
-    # of the 204 of the v1120 sets, all at f_a = 1e17 GeV, alpha 0.2-0.25. With c = 1 none; the other runs are
-    # unchanged (final spin to 2e-4), c = 0.3 agrees with c = 1; ~10 % more integration time.
+    # Step limit for growing levels (NL_DT_EFOLD = c, default 1, 0 = off): a step spans at most ~c e-folds. Growth rate
+    # from the last step, not get_du, which is noise for levels in stiff equilibrium.
     dt_efold = parse(Float64, get(ENV, "NL_DT_EFOLD", "1"))
+    growth(itg, i) = itg.t > itg.tprev ? (itg.u[i] - itg.uprev[i]) / (itg.t - itg.tprev) : 0.0
     debug && println("NL_DT_EFOLD = ", dt_efold, dt_efold > 0 ? ": growing levels limit the step to ~$(dt_efold) e-folds" : ": no step limit for growing levels")
     function check_timescale(u, t, integrator)
         u_real = exp.(u)
@@ -1082,8 +1075,8 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
             condBN = (abs(u[i] - log(bn_list[i])) < SOLVER_TOLERANCES.bosenova_threshold)
             if (u[i] > log(e_init)) && condBN && (du[i] != 0.0)
                 push!(tlist, abs(1.0 ./ du[i]))
-            elseif dt_efold > 0 && (u[i] > log(e_init) + 1.0) && (du[i] > 0.0) && !turn_off[i]
-                push!(tlist, dt_efold / du[i])              # NL_DT_EFOLD: growing level
+            elseif dt_efold > 0 && (u[i] > log(e_init) + 1.0) && !turn_off[i] && (g_up = growth(integrator, i)) > 0.0
+                push!(tlist, dt_efold / g_up)
             end
         end
 
@@ -1110,8 +1103,8 @@ function solve_system(mu, fa_or_nothing, aBH, M_BH, t_max;
             if (integrator.u[i] > log(e_init)) && condBN && (du[i] != 0.0)
                 push!(tlist, 1.0 ./ du[i])
                 push!(indx_list, i)
-            elseif dt_efold > 0 && (integrator.u[i] > log(e_init) + 1.0) && (du[i] > 0.0) && !turn_off[i]
-                push!(tlist, dt_efold / du[i])              # NL_DT_EFOLD: growing level
+            elseif dt_efold > 0 && (integrator.u[i] > log(e_init) + 1.0) && !turn_off[i] && (g_up = growth(integrator, i)) > 0.0
+                push!(tlist, dt_efold / g_up)
                 push!(indx_list, i)
             end
         end
