@@ -170,13 +170,8 @@ function _mode_key(row)::Tuple{Int,Int,Int}
 end
 
 """
-Read the last saved point of a run (resume), streaming the .dat files: a States_ row holds
-one value per saved time (~1e6), so the history is never loaded into memory.
-
-Archives may be pruned (only active modes kept). Inactive modes are restored
-to e_floor / e_init so u0 matches setup_quantum_levels_standard(Nmax, ...).
-Returns t_last, u0 (full Nmax spectrum), idx_lvl, modes_full, the Modes_ rows of
-the files, the number of saved times, and the last spin and mass.
+Last saved point of a run for --resume, streaming the .dat files; modes missing from a pruned archive get e_floor.
+Returns t_last, u0 (full Nmax spectrum), idx_lvl, modes_full, the Modes_ rows, n saved times, last spin and mass.
 """
 function load_resume_state(outdir::String, fname::String, e_floor::Float64,
                            Nmax::Int, fa::Float64, alph::Float64, aBH::Float64)
@@ -254,10 +249,8 @@ function _last_number(line::AbstractString)
 end
 
 """
-Append a resumed segment to the run's .dat files in place. Time_/Spin_/MassBH_ get the
-new rows; each States_ row (in the solver's mode order, modes_out) is the old row followed
-by the new values, written row by row from the old file, so memory stays at one row.
-A mode missing from the old files (pruned archive) gets e_floor at the earlier times.
+Append a resumed segment to the .dat files in place, one States_ row at a time (old row + new values, in
+modes_out order); modes missing from the old files get e_floor at the earlier times.
 """
 function append_resumed_segment(outdir, fname, modes_old, n_old, e_floor, t_last,
                                 timeT, StatesOut, modes_out, spin, massB)

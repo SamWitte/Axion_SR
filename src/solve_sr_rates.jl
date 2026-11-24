@@ -50,8 +50,7 @@ end
 """
     sphericalY(l::Int, m::Int, theta::Real, phi::Real) -> Complex
 
-Compute the standard spherical harmonic Y_l^m(θ, φ).
-Uses closed-form expressions via associated Legendre polynomials.
+Spherical harmonic Y_l^m(θ, φ) via associated Legendre polynomials.
 """
 function sphericalY(l::Int, m::Int, theta::Float64, phi::Float64)::Complex{Float64}
     # Validate quantum numbers
@@ -201,7 +200,7 @@ function freq_shifts(mu, M, a, n1, l1, m1, n2, l2, m2;  rpts=500, rmaxT=100, Nan
     
     delt_om = -1.0 ./ (4 * mu^2) .* radial_int .* CG .* mult_fac
     
-    return Float64(real(alph.^2 .* delt_om .* epsil_2)) # \delta Omega [Needs to be multiplied by (M_pl / f_a)^2], do dF / (alpha^5 * mu) to get coefficient hitting epsilon_x
+    return Float64(real(alph.^2 .* delt_om .* epsil_2)) # delta Omega; times (M_pl/f_a)^2, and / (alpha^5 mu) for the epsilon_x coefficient
 
 end
 
@@ -1076,11 +1075,7 @@ end
 """
     spheroidals(l, m, a, erg, alph)
 
-Spin-0 spheroidal harmonic S_lm for a *massive* scalar on Kerr. `erg` = omega*G*M and
-`alph` = mu*G*M (both dimensionless). The angular equation of a massive field has
-spheroidicity c^2 = a^2 (omega^2 - mu^2), i.e. c = a*sqrt(erg^2 - alph^2): imaginary for
-bound states, real for unbound ones. (SpinWeightedSpheroidalHarmonics uses c = a*omega,
-the massless convention, so c must be built here rather than passing a*erg.)
+Spin-0 S_lm of a massive scalar on Kerr (erg = omega GM, alph = mu GM): c = a sqrt(erg^2 - alph^2), not a*erg.
 """
 function spheroidals(l, m, a, erg, alph; spherical_above=typemax(Int))
     if abs.(m) > l
@@ -1579,8 +1574,8 @@ end
 
 
 # =====================================================================================
-# Self-gravity (Newtonian h_00 exchange) contribution to the 2 -> 2 rates: kernel K_SG = -G mu^2/|x - y|
-# (SI: -(lambda/8 mu^2) delta); mode-4 source (1/2)[psi1 Phi_23 + psi2 Phi_13], Phi_b3 = ∫ conj(psi3) psi_b/|x - y|.
+# Self-gravity (Newtonian h_00) in the 2 -> 2 rates: kernel -G mu^2/|x - y| (SI: -(lambda/8 mu^2) delta);
+# mode-4 source (1/2)[psi1 Phi_23 + psi2 Phi_13], Phi_b3 = ∫ conj(psi3) psi_b/|x - y|.
 # =====================================================================================
 function sg_gauss_legendre(n)
     beta = [k / sqrt(4k^2 - 1) for k in 1:n-1]
@@ -1605,9 +1600,8 @@ function sg_ang(profiles, ms; cos2=false)
     return 2pi * real(sum(SG_GLw .* v))
 end
 
-# multipole L of the Coulomb potential of a radial profile f on the (log) grid r:
-#   Q_L(r) = r^{-L-1} ∫_{r0}^r r'^{L+2} f + r^L ∫_r^∞ r'^{1-L} f
-# recoil = true (L = 1): BH-frame kernel, Q_1(r) -> Q_1(r) - r ∫_{r0}^∞ f
+# Coulomb multipole L of a radial profile f: Q_L = r^{-L-1} ∫_{r0}^r r'^{L+2} f + r^L ∫_r^∞ r'^{1-L} f
+# (recoil, L = 1: BH-frame kernel, Q_1 -> Q_1 - r ∫_{r0}^∞ f)
 function sg_coulomb_radial(f, r, L; recoil=false)
     n = length(r)
     ci = zeros(ComplexF64, n); co = zeros(ComplexF64, n)
@@ -1622,9 +1616,8 @@ function sg_coulomb_radial(f, r, L; recoil=false)
     return r .^ (-(L + 1)) .* ci .+ r .^ L .* co
 end
 
-# potential of the transition density conj(psi3) psi_b, multipole by multipole:
-#   Phi_b3(r, theta) e^{i M phi} = sum_L cL[L] * QL[L](r) * Y_{L M}(theta),   M = m_b - m3
-# contact = true: the density itself (tests); recoil = true: BH recoil in the L = 1 part
+# Potential of conj(psi3) psi_b: Phi_b3 e^{i M phi} = sum_L cL[L] QL[L](r) Y_{L M}(theta), M = m_b - m3;
+# contact = true: the density itself (tests); recoil = true: BH recoil in L = 1
 function sg_transition(rf_b, rf_3, Zb_prof, Z3_prof, mb, m3, lb, l3, r; contact=false, recoil=false)
     M_ = mb - m3
     Ls = [L for L in abs(M_):(lb + l3 + 4) if iseven(lb + l3 + L)]
@@ -1648,7 +1641,7 @@ function sg_radial_source(tr, Za_prof, ma, rf_a, Z4_prof, m4, r, a)
     return rf_a .* T
 end
 
-# Optional caches of eigenvalue searches and relativistic radial solves, in memory and on disk (GF_CACHE_DIR[]; "" = off).
+# Caches of eigenvalue searches and radial solves, in memory and on disk (GF_CACHE_DIR[]; "" = off).
 const GF_CACHE_DIR = Ref("")
 const GF_CACHE_MEM = Dict{Any, Any}()
 function gf_cached(f, kind::String, key)
@@ -1676,9 +1669,8 @@ function gf_cached(f, kind::String, key)
     return val
 end
 
-# Klein-Gordon charge (units of 2 mu) of a mode normalised with int |R|^2 r^2 dr = 1, ~ 1 + 3 alpha^2/(2 n^2):
+# KG charge Q (units 2 mu, ~ 1 + 3 alpha^2/(2 n^2)) for int |R|^2 r^2 dr = 1; cubic rates / Q_1 Q_2 Q_3:
 #   Q = int dr |R|^2 <(w/mu)[(r^2 + a^2)^2 - Delta a^2 sin^2]/Delta - 2 a m r/(mu Delta)> / int dr |R|^2 r^2
-# Rates cubic in the modes are divided by Q_1 Q_2 Q_3.
 function kg_norm_ratio(rf, rlist, l, m, a, alph, wre)
     r = Float64.(real.(rlist)); f2 = Float64.(abs2.(rf)); aF = Float64(a); alpF = Float64(alph); wF = Float64(wre)
     s2 = 1 - (2 * l^2 + 2 * l - 1 - 2 * m^2) / ((2 * l - 1) * (2 * l + 3))
@@ -1689,7 +1681,7 @@ end
 
 function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts_Bnd=1000, debug=false, Ntot_safe=10000,  iter=10, xtol=1e-10, ftol=1e-10, tag="_", Nang=500000, eps_fac=1e-10, NON_REL=false, h_mve=1, to_inf=false, rmaxT=100, prec=200, cvg_acc=1e-4, NptsCh=60, iterC=40, Lcheb=4, run_leaver=false, der_acc=1e-20, use_heunc=false, pre_erg1=nothing, pre_erg2=nothing, pre_erg3=nothing, BHlmax=0, self_grav=false, sg_test_contact=false, sg_recoil=false, ang_method=:mc, NR_states=nothing, inf_all_l=true, inf_wkb=true, kg_norm=true)
 
-    # NR_states = (b1, b2, b3): hydrogenic (true) or relativistic (false) bound state per level; default NON_REL for all
+    # NR_states = (b1, b2, b3): hydrogenic (true) or relativistic (false) state per level; default NON_REL
     nr_st = NR_states === nothing ? (NON_REL, NON_REL, NON_REL) : NR_states
     
     rp = BigFloat(1.0 .+ sqrt.(1.0 .- a.^2))
@@ -1780,9 +1772,8 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
 
     else
         
-        # BH-absorption channel: the hole carries off (l, m) = (l1+l2-l3, m1+m2-m3).
-        # l is the *smallest* allowed multipole; higher even multipoles are summed
-        # over below when BHlmax > l (see l_list).
+        # BH-absorption channel: (l, m) = (l1+l2-l3, m1+m2-m3), the lowest multipole; higher even l
+        # are summed below if BHlmax > l (l_list).
         m = (m1 + m2 - m3)
         dl = (l1 + l2 - l3)
         l = max(abs(dl), abs(m))
@@ -1945,17 +1936,11 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         l = l1 + l2 - l3
     end
 
-    #### build the list of BH angular multipoles to sum over.
-    # psi at the horizon is a sum over angular modes; since the S_lm are
-    # orthogonal, the absorbed flux |psi|^2 integrated over the horizon adds
-    # incoherently, so the rate is sum_l |R_l|^2 (see loop over l_list below).
-    # Parity is fixed: dl = l1+l2-l3 has the parity of l1+l2+l3, which the
-    # selection rule forces even, hence only even l contribute for BH channels.
-    # max(BHlmax, l) keeps at least the leading multipole, so BHlmax=0
-    # reproduces the single-mode result exactly.
+    # multipoles to sum: fluxes of the orthogonal S_lm add, rate = sum_l |R_l|^2; BH channels: even l only;
+    # max(BHlmax, l) keeps the leading one (BHlmax = 0: single mode)
     if to_inf
         if inf_all_l
-            # to infinity: every partial wave |m| <= l <= l1 + l2 + l3 with the parity of l1 + l2 + l3; fluxes add
+            # to infinity: all partial waves |m| <= l <= l1+l2+l3 with the parity of l1+l2+l3; fluxes add
             lsum = l1 + l2 + l3
             lmin = max(abs(m), 1)
             isodd(lmin + lsum) && (lmin += 1)
@@ -1987,9 +1972,8 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     itpG = LinearInterpolation(log10.(rlist), Float64.(real.(gammaT)), extrapolation_bc=Line())
     itpGI = LinearInterpolation(log10.(rlist), Float64.(imag.(gammaT)), extrapolation_bc=Line())
 
-    # ---- self-gravity (Newtonian h_00 exchange), see sg_transition / sg_radial_source above.
-    # The SG source times 8 alpha^2 gives Gamma_SG through the SI rate formula (lambda = mu^2/M_pl^2):
-    #   Gamma(f_a) = Gamma_SI (M_pl/f_a)^4 + Gamma_x (M_pl/f_a)^2 + Gamma_SG; sg_test_contact: unit contact kernel (check).
+    # ---- self-gravity: SG source x 8 alpha^2 in the SI rate formula (lambda = mu^2/M_pl^2) gives Gamma_SG;
+    #   Gamma(f_a) = Gamma_SI (M_pl/f_a)^4 + Gamma_x (M_pl/f_a)^2 + Gamma_SG; sg_test_contact: contact kernel
     if self_grav || ang_method == :gl
         Z1p = sg_theta_profile(Z1); Z2p = sg_theta_profile(Z2); Z3p = sg_theta_profile(Z3)
     end
@@ -2010,7 +1994,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     
     itp_rrstar = LinearInterpolation(rout_star, r_list_map, extrapolation_bc=Line())
     itp_rrstar_inv = LinearInterpolation(r_list_map, rout_star, extrapolation_bc=Line())
-    # the same map in double precision, for the inf_wkb path (rp is a BigFloat, so itp_rrstar interpolates in BigFloat)
+    # Float64 copy of the map for the inf_wkb path (itp_rrstar is BigFloat)
     itp_rrstar_F = LinearInterpolation(Float64.(rout_star), Float64.(r_list_map), extrapolation_bc=Line())
     
     h_step = Float64.(rp ./ h_mve)
@@ -2214,8 +2198,8 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         append!(rvals, rr)
         rr -= h_step
 
-        # Outgoing condition to infinity (inf_wkb): WKB start u = exp(i int q dr*)/sqrt(q), q^2 = w^2 - V(r) (exp(i k r*)
-        # at r_max is inside the Coulomb tail and reflects); amplitude times sqrt(q/k).
+        # inf_wkb: outgoing WKB start u = exp(i int q dr*)/sqrt(q), q^2 = w^2 - V (exp(i k r*) at r_max
+        # reflects off the Coulomb tail); amplitude times sqrt(q/k).
         wkb_fac = 1.0
         if to_inf && inf_wkb
             q_loc = rs -> begin
@@ -2224,7 +2208,7 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
                 sqrt(Float64(real(erg^2 - Vq)))
             end
             q0 = q_loc(rvals[1]); q1 = q_loc(rvals[2])
-            # phase advance per step of the three-point recurrence used below: 2 asin(q h / 2)  (= q h for small steps)
+            # phase advance per step of the three-point recurrence: 2 asin(q h / 2) (~ q h)
             th_step = 2 * asin(min(0.25 * (q0 + q1) * Float64(h_step), 1.0))
             outWF[2] = outWF[1] * exp(-im * th_step) * sqrt(q0 / q1)
             wkb_fac = sqrt(q0 / Float64(real(sqrt(erg^2 - alph^2 + 0im))))
@@ -2340,10 +2324,8 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
             if to_inf
                 midP = Int(round(length(rvals) - 10))
             else
-                # For bound-state GF (to_inf=false), outWF decays ~exp(-κr*) toward rmax.
-                # Computing the Wronskian near rmax (where outWF ≈ 0) loses all precision.
-                # Use a point ~1/4 from the near-horizon end: far from the near-zero rmax
-                # boundary, far from Δ→0 at the horizon, and in the numerically stable interior.
+                # bound-state GF: outWF ~ exp(-κr*) vanishes near rmax, so take the Wronskian ~1/4 from
+                # the horizon end (away from outWF ≈ 0 and from Δ → 0)
                 midP = clamp(Int(round(length(rvals) / 4)), 3, length(rvals) - 3)
             end
         elseif length(outWF_fw) > 4
@@ -2431,11 +2413,8 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
     rvals_end = 0.0
     for lmode in l_list
         if (!to_inf || ang_method != :gl) && lmode != first(l_list)
-            # The angular overlap vanishes identically for some multipoles; the MC
-            # integrator's convergence test is relative, so it would happily settle
-            # onto sampling noise there. Skip those. Only applied beyond the leading
-            # multipole, so BHlmax=0 reproduces the previous result untouched.
-            # (channels to infinity with Gauss-Legendre angles are not skipped)
+            # skip higher multipoles with identically zero angular overlap (MC would converge on noise);
+            # not for channels to infinity with Gauss-Legendre angles
             _, ang_iszero = integral4(l1, m1, l2, m2, l3, -m3, lmode, -m)
             if ang_iszero
                 if debug
@@ -2480,11 +2459,8 @@ function gf_radial(mu, M, a, n1, l1, m1, n2, l2, m2, n3, l3, m3; rpts=1000, Npts
         kH = real(erg .- m .* omega_H)
 
         if m != 0
-            # Near a superradiant resonance kH = erg - m*omega_H can pass through
-            # zero (or flip sign) as the BH spin evolves, producing anomalous
-            # negative/strongly spin-dependent rates here. Drop kH from the
-            # tabulated rate in that case and let it be reapplied downstream using
-            # the BH's evolving spin (see the kH term in solve_system_unified.jl).
+            # kH = erg - m omega_H can change sign as the spin evolves: tabulate without kH, which is
+            # reapplied downstream with the evolving spin (kH term in solve_system_unified.jl)
             rate_of = mv -> (4 .* alph .* (1 .+ sqrt.(1 - a.^2)) .* Float64(mv) .* lam^2) ./ mu^2 .* (GNew * M^2 * M_to_eV)^2
         else
             rate_of = mv -> (4 .* alph.*kH.* (1 .+ sqrt.(1 - a.^2)) .* Float64(mv) .* lam^2) ./ mu^2 .* (GNew * M^2 * M_to_eV)^2
@@ -2640,9 +2616,7 @@ end
 
 
 function eigensys_Cheby(M, atilde, mu, n, l0, m; prec=200, L=4, Npoints=60, Iter=30, debug=false, return_wf=false, der_acc=1e-20, cvg_acc=1e-10, Npts_r=1000, nu_guess=nothing, return_nu=false, sfty_run=false)
-    # L field spherical harmonic truncation l-eigenstate
-    # Npoints number of Chebyshev interpolation points
-    # Iter number of iterations for the non-linear inversion
+    # L: harmonic truncation; Npoints: Chebyshev points; Iter: iterations of the non-linear inversion
     
     
     setprecision(BigFloat, prec)  # Higher than requested precision for calculations
@@ -3285,12 +3259,7 @@ end
 """
     mlwreal_to_bigfloat(w)
 
-Convert a MathLink.WReal-like object `w` to a `BigFloat`.
-
-Strategy:
-- try `string(w)` / `repr(w)` and parse the returned representation;
-- if `w` exposes `mantissa` and `exponent` properties, use those to reconstruct exactly;
-- otherwise return an informative error with a dump of the object.
+BigFloat from a MathLink.WReal-like `w`: parse string(w) / repr(w), else its mantissa and exponent, else error.
 """
 function mlwreal_to_bigfloat(w)
     # 1) try string representation (most wrappers provide a readable string)
@@ -3392,8 +3361,7 @@ end
 """
     integral4(l1,m1,l2,m2,l3,m3,l4,m4; tol=1e-12)
 
-Compute I = ∫ Y_{l1 m1} Y_{l2 m2} Y_{l3 m3} Y_{l4 m4} dΩ
-Returns (value, is_zero::Bool) where is_zero tests abs(value) < tol.
+(I, abs(I) < tol) with I = ∫ Y_{l1 m1} Y_{l2 m2} Y_{l3 m3} Y_{l4 m4} dΩ.
 """
 function integral4(l1::Integer, m1::Integer,
                    l2::Integer, m2::Integer,
@@ -3410,7 +3378,7 @@ function integral4(l1::Integer, m1::Integer,
     Lmin = max(abs(l1 - l2), abs(l3 - l4))
     Lmax = min(l1 + l2, l3 + l4)
     for L in Lmin:Lmax
-        # For a given L, only M = -(m1+m2) contributes (because Gaunt nonzero only when m1+m2+M=0, and similarly)
+        # for a given L only M = -(m1+m2) contributes (Gaunt selection rule)
         M = -(m1 + m2)
         if abs(M) > L
             continue

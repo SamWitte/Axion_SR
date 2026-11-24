@@ -4,16 +4,7 @@
 """
     parse_state_string(str_nlm::String) -> (n, l, m)
 
-Parse a state string into quantum numbers (n, l, m).
-Supports both legacy format "211" (single digits) and new format "2-1-1" (delimited).
-Note: Uses hyphen "-" as delimiter to avoid ambiguity with underscore in rate keys.
-
-# Examples
-```julia
-parse_state_string("211")      # Returns (2, 1, 1)
-parse_state_string("2-1-1")    # Returns (2, 1, 1)
-parse_state_string("10-5-3")   # Returns (10, 5, 3)
-```
+Parse "2-1-1" (hyphen-delimited, any number of digits) or legacy "211" (single digits) into (n, l, m).
 """
 function parse_state_string(str_nlm::String)
     # Check if string contains delimiter
@@ -43,14 +34,7 @@ end
 """
     format_state_string(n::Int, l::Int, m::Int) -> String
 
-Format quantum numbers (n, l, m) into a state string using hyphen delimiter.
-Note: Uses hyphen "-" as delimiter to avoid ambiguity with underscore in rate keys.
-
-# Examples
-```julia
-format_state_string(2, 1, 1)    # Returns "2-1-1"
-format_state_string(10, 5, 3)   # Returns "10-5-3"
-```
+"n-l-m", e.g. "10-5-3" (hyphen, since underscores separate states in rate keys).
 """
 function format_state_string(n::Int, l::Int, m::Int)
     return "$(n)-$(l)-$(m)"
@@ -60,13 +44,7 @@ end
 """
     format_state_string_legacy(n::Int, l::Int, m::Int) -> String
 
-Format quantum numbers (n, l, m) into legacy state string without delimiter.
-Only works for single-digit numbers (n, l, m < 10).
-
-# Examples
-```julia
-format_state_string_legacy(2, 1, 1)  # Returns "211"
-```
+Undelimited "211"; errors if a quantum number is >= 10.
 """
 function format_state_string_legacy(n::Int, l::Int, m::Int)
     if n >= 10 || l >= 10 || m >= 10
@@ -79,15 +57,7 @@ end
 """
     parse_state_from_args(S::String) -> (n, l, m)
 
-Parse a state string from command-line arguments.
-Returns tuple of integers (n, l, m).
-
-# Examples
-```julia
-parse_state_from_args("211")      # Returns (2, 1, 1)
-parse_state_from_args("2-1-1")    # Returns (2, 1, 1)
-parse_state_from_args("10-5-3")   # Returns (10, 5, 3)
-```
+parse_state_string of a command-line argument.
 """
 function parse_state_from_args(S::String)
     return parse_state_string(S)
@@ -97,14 +67,7 @@ end
 """
     get_m_from_state_string(S::String) -> Int
 
-Extract the m quantum number from a state string.
-
-# Examples
-```julia
-get_m_from_state_string("211")      # Returns 1
-get_m_from_state_string("2-1-1")    # Returns 1
-get_m_from_state_string("10-5-3")   # Returns 3
-```
+The m of a state string ("211" or "10-5-3").
 """
 function get_m_from_state_string(S::String)
     n, l, m = parse_state_string(S)
@@ -115,16 +78,7 @@ end
 """
     format_state_for_filename(n::Int, l::Int, m::Int) -> String
 
-Format quantum numbers for use in filenames.
-Uses legacy format (no delimiter) for single-digit numbers for backward compatibility.
-Uses new format (with delimiter) for multi-digit numbers.
-
-# Examples
-```julia
-format_state_for_filename(2, 1, 1)     # Returns "211" (legacy format)
-format_state_for_filename(10, 5, 3)    # Returns "10-5-3" (new format)
-format_state_for_filename(2, 10, 1)    # Returns "2-10-1" (new format)
-```
+Legacy "211" if all quantum numbers are < 10 (older file names), else "n-l-m".
 """
 function format_state_for_filename(n::Int, l::Int, m::Int)
     if n < 10 && l < 10 && m < 10
@@ -139,11 +93,8 @@ end
 
 """
     rate_input_path(Nmax; lm_only=false, rate_input=nothing) -> String
-
-Scattering channel list read by load_rate_coeffs: rate_sve/load_rate_input_Nmax_<Nmax>[_lm].txt,
-or `rate_input` (a file name in rate_sve/ or an absolute path). The environment variable
-NL_DEFAULT_RATE_INPUT replaces the default list without changing the output file names, so a
-run can be resumed on a frozen copy of its list after load_rate_input_Nmax_<Nmax>.txt has grown.
+Channel list: `rate_input` (file in rate_sve/ or absolute path), else ENV NL_DEFAULT_RATE_INPUT (output names
+unchanged, e.g. to resume on a frozen list), else rate_sve/load_rate_input_Nmax_<Nmax>[_lm].txt.
 """
 function rate_input_path(Nmax; lm_only=false, rate_input=nothing)
     if rate_input === nothing && !isempty(get(ENV, "NL_DEFAULT_RATE_INPUT", ""))
@@ -157,9 +108,7 @@ end
 """
     scattering_levels(Nmax; lm_only=false, rate_input=nothing) -> Set{NTuple{3,Int}}
 
-The (n, l, m) levels named in that channel list (its first three columns). GW
-channels are only kept between these levels (gw_build_cache `levels`): a level
-with no self-interaction / self-gravity channel gets no GW population either.
+Levels (n, l, m) in that channel list (first three columns); GW channels are kept only between these.
 """
 function scattering_levels(Nmax; lm_only=false, rate_input=nothing)
     lv = Set{NTuple{3,Int}}()

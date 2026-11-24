@@ -1,46 +1,8 @@
 """
     gw_kerr_tables.jl
 
-Relativistic (Teukolsky) corrections to the GW rates, tabulated on an (α, a) grid
-and interpolated inside the evolution (gw_model = :rel). This file is the light
-half: reading the tables and evaluating them. Building them (Kerr quasi-bound
-modes + Teukolsky amplitudes) is in gw_kerr_build.jl, which pulls in the ODE and
-spheroidal-harmonic packages that the evolution does not need.
-
-Tables (one text file per channel in rate_sve/gw_kerr/, written by
-scripts/build_gw_kerr_tables.jl):
-
-    tr_<na>-<la>-<ma>_<nb>-<lb>-<mb>.dat      transition a -> b + graviton
-    ann_<na>-<la>-<ma>_<nb>-<lb>-<mb>.dat     annihilation a x b -> graviton
-
-with one row per (α, a) point,
-
-    alpha  a  Gamma_kerr  Gamma_nr  ratio  omega_tilde  Re_omega_a  Re_omega_b
-    Im_omega_a  Im_omega_b  Gamma_H  nl  secs  status  chk  lfrac
-
-Gamma_kerr is the Teukolsky rate P_∞/(α ω̃) in solver units (gw_kerr.jl), Gamma_nr
-the non-relativistic rate of gw_rates.jl that the solver's cache uses for the same
-channel, evaluated at the Leaver splitting for transitions (gw_transition_rate at
-δ = ω̃/α) and as C α^p (with the literature override) for annihilations, and
-ratio = Gamma_kerr/Gamma_nr. omega_tilde = Re ω_a ∓ Re ω_b and the Re/Im ω_j are
-the Leaver eigenfrequencies, all in units of μ (M = 1, μ = α; so Re ω/μ is the
-quantity gw_omega approximates). Gamma_H is the horizon part of the rate
-(P_H/(α ω̃), signed: negative for superradiant gravitons; NaN when not computed).
-nl = number of ℓ̃ summed, secs = wall time of the point, status = ok, noisy (the two
-forms of the source disagree), broad (a level wider than half its level spacing: computed
-but not used) or fail:<reason>; only ok rows enter the interpolants. chk = P_∞(direct source form)/P_∞(kernel form) - 1 (gw_kerr_rate; a
-check of the source jets and the quadrature, NaN without the horizon flux), lfrac =
-the fractions of the power to infinity per ℓ̃ ("2:0.98;3:0.02"; the angular pattern of the
-line is Σ_ℓ̃ frac_ℓ̃ |_{-2}S_{ℓ̃m̃}|², for the inclination of the line observables).
-
-In the evolution the cache (gw_rates.jl GWCache) carries, per level, an
-interpolant of Re ω/μ and, per channel, one of ln(ratio); both are bilinear in
-(ln α, a) and clamp to the edge values outside the grid (the ratio tends to a
-constant at small α and the grid stops where the superradiance tables stop).
-A channel without a table keeps ratio 1, a level without one keeps gw_omega. For a
-transition the splitting uses the Leaver frequencies only when both levels have
-them (so that Γ_nr × ratio reproduces Γ_kerr on the grid), otherwise gw_omega for
-both.
+Relativistic GW rate tables (gw_model = :rel; rate_sve/gw_kerr/{tr,ann}_<a>_<b>.dat, columns GW_KERR_COLS, built by
+gw_kerr_build.jl): ratio = Γ_kerr/Γ_nr per channel, Re ω/μ per level, bilinear in (ln α, a), clamped outside the grid.
 """
 
 using LinearAlgebra: eigen, Symmetric
@@ -117,26 +79,7 @@ end
 
 """
     gw_kerr_fill_grid!(z, αs, as, kind, sa, sb) -> how::Matrix{Int8}
-
-Fill the missing entries (NaN) of z = ln(ratio) on a table's full grid (rows α, columns a), by rules that only
-interpolate, approach a known limit, or extrapolate a little, and never across a superradiance threshold of
-either level (gw_kerr_sr_sign changes there: the profile and the horizon flux change character). In order:
-
-1. interpolated (1): an interior run of at most GW_KERR_MAX_GAP missing nodes along α, linearly in ln α between
-   the computed nodes around it, when no threshold lies in between;
-2. limit (2): below the lowest computed α of a spin. A transition's ratio tends to 1 as α -> 0 at every spin, so
-   ln ratio = z_0 (α/α_0)^p with the power p fitted to the two lowest computed nodes, clamped to [1, 2] (the
-   spin-orbit correction is linear in α); if the fit gives p < 0.5 and the two nodes agree to 0.05 per e-fold of
-   α, the ratio has levelled off and is held instead; if they disagree with p < 0.5 the p = 1 law is used but
-   counted as held (5). An annihilation's ratio tends to a constant: the lowest value is held, counted as limit
-   when the two lowest computed nodes agree to 0.05 per e-fold of α, else as held (5);
-3. extrapolated (3): at most GW_KERR_MAX_EXTRAP nodes above the highest computed α, linearly in ln α from the two
-   highest, when no threshold lies in between and the step stays below GW_KERR_MAX_EXTRAP_STEP;
-4. spin-interpolated (4): what is still missing, linearly in a between the nearest computed (or 1-3) values at the
-   same α on both sides, when no threshold lies in between;
-5. held (5): anything else takes the nearest value (gw_fill_nan!): outside the rules, reported so it can be
-   computed.
-0 = computed. Returns all -1 (and leaves z) if nothing is finite.
+Fill NaNs of z = ln(ratio) (rows α, columns a) by steps 1-5, never across a superradiance threshold (GW_FILL_NAMES).
 """
 function gw_kerr_fill_grid!(z::Matrix{Float64}, αs::AbstractVector, as::AbstractVector, kind::Symbol, sa, sb)
     nα, na = size(z)
@@ -209,9 +152,7 @@ end
 
 """
     gw_kerr_ratio_interp(kind, sa, sb, rows) -> (GWInterp2D or nothing, αs, as, how)
-
-Interpolant of ln(ratio) on the full grid of a table's rows (repeated rows of a point: the usable one wins), the
-missing values filled by gw_kerr_fill_grid!; `how` says how each grid value was obtained (GW_FILL_NAMES).
+Interpolant of ln(ratio) on the full grid of the usable rows, gaps filled by gw_kerr_fill_grid!.
 """
 function gw_kerr_ratio_interp(kind::Symbol, sa, sb, rows)
     αs = sort(unique(round.([r.alpha for r in rows], sigdigits=10)))
@@ -226,12 +167,8 @@ function gw_kerr_ratio_interp(kind::Symbol, sa, sb, rows)
     return GWInterp2D(log.(αs), as, z), αs, as, how
 end
 
-"""
-Fill the NaN entries of z (rows = α, columns = a) by the nearest finite value: first along α
-within each column (lower α preferred: tables are cut at high α where the modes stop being
-superradiant), then whole empty columns from the nearest filled column. Returns false if
-nothing is finite.
-"""
+"""Fill NaNs of z (rows α, columns a) with the nearest finite value, along α first (lower α preferred), then whole
+columns; false if nothing is finite."""
 function gw_fill_nan!(z::Matrix{Float64})
     any(isfinite, z) || return false
     nx, ny = size(z)
@@ -276,7 +213,6 @@ end
 
 """
     gw_kerr_read_table(path) -> (kind, sa, sb, rows)
-
 rows: NamedTuples with the columns of GW_KERR_COLS (numbers parsed, status a String).
 """
 function gw_kerr_read_table(path::AbstractString)
@@ -307,16 +243,7 @@ end
 
 """
     GWKerrTables
-
-ratio_ann / ratio_tr: unordered level pair -> interpolant of ln(Γ_kerr/Γ_nr).
-omega: level -> interpolant of the Leaver correction Re ω/μ - gw_omega(n, l, m, α, a) (small and smooth, so
-filling gaps and clamping outside the grid are harmless; the expansion carries the α dependence).
-hfrac: pair -> asinh(Γ_H/Γ_kerr / GW_HFRAC_SCALE)
-(only where computed). lfrac: (kind, pair) -> ℓ̃ -> interpolant of the fraction of the power
-to infinity in that ℓ̃ (0 where the table row lacks it), for the angular patterns of the lines
-(gw_rel_pattern). files: the table files read. fill: (kind, pair) -> (αs, as, how): how each grid value of
-the ratio interpolant was obtained (computed, interpolated, limit, extrapolated, spin-interpolated, held;
-gw_kerr_fill_grid!).
+Interpolants: ratio_* = ln(Γ_kerr/Γ_nr), omega = Re ω/μ - gw_omega, hfrac, lfrac per ℓ̃; fill codes as GW_FILL_NAMES.
 """
 struct GWKerrTables
     ratio_ann::Dict{Tuple{NTuple{3,Int},NTuple{3,Int}}, GWInterp2D}
@@ -352,9 +279,7 @@ end
 
 """
     gw_kerr_load_tables(dir=gw_kerr_table_dir(); verbose=false) -> GWKerrTables or nothing
-
-Read every *.dat table in `dir` (cached per directory). Returns nothing if the directory
-holds no usable table.
+Read every tr_/ann_ table in `dir` (cached per directory); nothing if none is usable.
 """
 function gw_kerr_load_tables(dir=gw_kerr_table_dir(); verbose::Bool=false)
     key = "kerr:" * abspath(dir)
@@ -448,12 +373,7 @@ const GW_SWSH_CACHE = Dict{Tuple{Int,Int,Int,Float64}, Tuple{Float64,Int,Vector{
 
 """
     gw_swsh(s, l, m, c) -> (A, lmin, b)
-
-Spin-weighted spheroidal harmonic ₛS_lm(θ; c) with spheroidicity c = aω, by diagonalising
-the angular Teukolsky operator in the basis of ₛY_{l'm}, l' = lmin … lmin + length(b) - 1:
-S(θ) = Σ_k b[k] ₛY_{lmin+k-1, m}(θ) (unit norm on the sphere), eigenvalue A with
-A → (l - s)(l + s + 1) as c → 0. The matrix elements of cos θ and cos²θ are Gauss–Legendre
-quadratures (exact: the integrands are polynomials in cos θ). Cached per (s, l, m, c).
+Spin-weighted spheroidal harmonic (c = aω): S = Σ_k b[k] ₛY_{lmin+k-1, m}, unit norm, A → (l-s)(l+s+1) at c = 0.
 """
 function gw_swsh(s::Int, l::Int, m::Int, c::Real)
     cF = Float64(c)
@@ -494,12 +414,7 @@ end
 
 """
     gw_rel_pattern(tabs, kind, sa, sb, α, a, cos_iota) -> 4π (dP/dΩ)/P, or nothing
-
-Angular pattern of the line a × b (kind = :ann) or a -> b (kind = :tr) from the tabulated per-ℓ̃
-power fractions: Σ_ℓ̃ f_ℓ̃ · 2π [S(θ)² + S(π - θ)²] with S = ₋₂S_{ℓ̃m̃}(θ; a ω̃ M) (the two terms
-are the positive- and negative-frequency parts of the real signal; sphere average 1; the ℓ̃
-are summed incoherently, as in the non-relativistic inclination_factor). ω̃ uses the tabulated
-Leaver frequencies where available. nothing when the channel has no table.
+Line pattern Σ_ℓ̃ f_ℓ̃ 2π [S(θ)² + S(π - θ)²], S = ₋₂S_{ℓ̃m̃}(θ; aω̃), ℓ̃ summed incoherently; nothing without a table.
 """
 function gw_rel_pattern(tabs::GWKerrTables, kind::Symbol, sa, sb, α, a, cι)
     fr = get(tabs.lfrac, (kind, gw_pair_key(sa, sb)...), nothing)
@@ -525,12 +440,7 @@ end
 
 """
     gw_kerr_default_channels(; lmax=5, overtones=1) -> Vector{(kind, sa, sb)}
-
-The channels that carry the GW lines of a multi-level cloud: the l = m levels with
-n = l+1 (ground) and their first `overtones` radial overtones, for 1 <= l <= lmax.
-Annihilations: every pair of ground levels (including a ≠ b) and each overtone with
-itself. Transitions: every ordered pair (higher level first, by n then by l) with a
-non-empty non-relativistic multipole list.
+Ground-pair and overtone-self annihilations, transitions with an NR multipole, among l = m levels with l ≤ lmax.
 """
 function gw_kerr_default_channels(; lmax::Int=5, overtones::Int=1)
     ground = [(l + 1, l, l) for l in 1:lmax]

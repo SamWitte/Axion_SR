@@ -1,29 +1,8 @@
 """
     gw_kerr_build.jl
 
-Builds the relativistic GW correction tables read by gw_kerr_tables.jl: for one
-channel (annihilation a x b or transition a -> b) and a grid of (α, a) points,
-the Teukolsky rate of gw_kerr.jl, the non-relativistic rate of gw_rates.jl at the
-same (Leaver) frequencies, and their ratio, appended row by row to the channel's
-table file (so that a killed job resumes where it stopped).
-
-Grid: by default the (α, a) grid of the superradiance tables (grid_sr_growth.jl:
-60 log-spaced α from 0.03 to α_max(m) = 1.3 a_max m / (2 r_+(a_max)), a_max = 0.998,
-capped at 2; 40 spins from 0.01 to 0.998), subsampled by `alpha_stride` and
-`spin_stride` (the ratio is smooth), with the α range of the pair's more
-restrictive level. Below `alpha_min` nothing is computed: the interpolant clamps
-to the lowest computed α, which is right because the ratio tends to a constant
-(transitions: 1 - c α²; annihilations: the exact leading coefficient over the
-flat-space one).
-
-Continuation: within one spin the α loop runs upward and seeds kerr_mode with
-a seed extrapolated from the previous eigenfrequencies (gw_kerr_seed; the
-hydrogenic expansion alone does not identify the overtone at large α). A mode is
-accepted only with a located, validated eigenfrequency of the right overtone
-(gw_kerr_mode_checked). Points where the mode or the Teukolsky integration fails are written
-with status fail:<reason> and NaN values; the loader fills them from neighbours.
-
-Usage: scripts/build_gw_kerr_tables.jl (one Slurm job per channel).
+Builds the relativistic GW tables read by gw_kerr_tables.jl: Teukolsky rate, NR rate and their ratio for one channel
+on an (α, a) grid, appended row by row (resumable). Driver: scripts/build_gw_kerr_tables.jl.
 """
 
 using Dates
@@ -77,13 +56,8 @@ end
 
 """
     gw_kerr_seed(ωprev, αprev, α, s, a; ωprev2=nothing, αprev2=nothing) -> seed or nothing
-
-Seed for the eigenfrequency at α from the converged one at α_prev: the hydrogenic expansion at α plus the previous
-root's complex offset from its own expansion, extrapolated in units of the level spacing as a power of α, real and
-imaginary part separately. The first term the expansion lacks is O(α⁷) in ω, i.e. α⁴ level spacings, which is the
-default power of the real part (the imaginary part is kept); with a second earlier root (ωprev2 at αprev2 < αprev)
-the powers are measured from the two. (Scaling ω_prev itself by α/α_prev keeps ω/μ fixed while the binding energy
-grows as α², and lands on a higher overtone.)
+Eigenfrequency seed at α: hydrogenic expansion plus the previous root's offset (in level spacings) extrapolated as a
+power of α (real part α⁴, imaginary part constant; measured from two earlier roots if given).
 """
 function gw_kerr_seed(ωprev, αprev, α, s::NTuple{3,Int}, a; ωprev2=nothing, αprev2=nothing)
     ωprev === nothing && return nothing
@@ -98,16 +72,8 @@ end
 
 """
     gw_kerr_track(s, a, hist, α; dz=0.15, dzstep=0.5, mode_tol=1e-8, hmin=1e-3) -> hist' or nothing
-
-Follow level s at spin a from its last known eigenfrequency to α. `hist` = (α1, ω1, α0, ω0): the last two points
-(α0, ω0 may be nothing). The level is advanced in steps of ln α, the whole distance first; a step is accepted when
-the eigenfrequency is located (km_eigenfrequency error < mode_tol, bound) within dz level spacings of the seed
-extrapolated from the two previous points, and the seed itself moves the offset by less than dzstep spacings;
-otherwise the step is halved. So where a level drifts fast (large α: a whole spacing between two grid nodes, with
-a growing width for levels that are not superradiant) it is followed in steps small enough that the neighbouring
-overtone, one spacing away, cannot be mistaken for it. Returns the history ending at (α, ω), or nothing when the
-step falls below hmin (the level can no longer be followed: it has become a broad resonance, or the root search
-fails).
+Follow level s at spin a from hist = (α1, ω1, α0, ω0) to α in adaptive ln α steps (root within dz spacings of the
+seed); nothing once the step falls below hmin.
 """
 function gw_kerr_track(s::NTuple{3,Int}, a, hist, α; dz=0.15, dzstep=0.5, mode_tol=1e-8, hmin=1e-3, maxsteps::Int=400)
     α1, ω1, α0, ω0 = hist
@@ -153,29 +119,14 @@ The overtone n' (same l, m; n' = l+1 ... n+4) whose hydrogenic expansion (km_ome
 gw_kerr_nearest_overtone(s::NTuple{3,Int}, ω, α, a) =
     argmin(np -> abs(real(ω) - real(km_omega_guess(np, s[2], s[3], α, a))), (s[2] + 1):(s[1] + 4))
 
-"""Largest α at which the hydrogenic expansion alone identifies the overtone of a level with orbital number l:
-where the level's offset from the expansion, about 10 α⁴/l³ level spacings (measured for l = 3-10: 0.25, 0.11,
-0.054, 0.040, 0.018, 0.0095 × α⁴), stays below 0.3 spacings. Above it the neighbouring overtone can be the root
-nearest to the expansion (seen for l = 5, 6 at α = 1.7-2), so only a continuation seed identifies the level."""
+"""Largest α at which the hydrogenic expansion alone identifies the overtone of a level with orbital number l
+(offset ≈ 10 α⁴/l³ level spacings below 0.3); above it only a continuation seed does."""
 gw_kerr_alpha_free(l::Int) = l == 0 ? 0.0 : (0.3 * l^3 / 10)^0.25
 
 """
     gw_kerr_mode_checked(s, α, a; seed=nothing, tol=0.35, mode_tol=1e-8, free_tol=0.3) -> (KerrMode, status)
-
-kerr_mode for level s = (n,l,m) at (α, a), from `seed` (continuation) or the hydrogenic guess, accepted only if
-(1) the eigenfrequency is located: its a-posteriori error estimate (kerr_mode's second return value, in units of
-    the level spacing) is below mode_tol, and
-(2) it is the right overtone: a seeded root lies within tol level spacings of its seed (a continuation seed is
-    accurate; the neighbouring overtone is a whole spacing away); otherwise, and for an unseeded solve, the root
-    is accepted if α ≤ gw_kerr_alpha_free(l), its nearest hydrogenic overtone is n and it lies within free_tol
-    spacings of the expansion.
-(3) for a radial overtone continued by the ODE (n - l - 1 ≥ 2, l ≥ 1, width below 5 % of the spacing) the radial
-    function has n - l - 1 nodes (km_radial_nodes): an identification of the overtone that does not rest on the
-    seed.
-status = "ok", "res" (no located root), "root" (a root that cannot be assigned to this overtone) or "nodes" (a
-located root with the wrong number of radial nodes).
-(Until 2026-11-21 condition (1) was |continued-fraction residual| < 1e-8 in Float64, which rejected sound roots
-at low spin, where the residual is steep, and accepted noise at high spin, where it is flat.)
+kerr_mode for level s at (α, a), accepted if located (error < mode_tol, in spacings) and the right overtone (within tol
+of the seed, else gw_kerr_alpha_free test; radial nodes); status "ok", "res", "root" or "nodes".
 """
 function gw_kerr_mode_checked(s::NTuple{3,Int}, α, a; seed=nothing, tol=0.35, mode_tol=1e-8, free_tol=0.3)
     gap = gw_kerr_overtone_gap(s, α)
@@ -204,14 +155,8 @@ end
 
 """
     gw_kerr_table_point(kind, sa, sb, α, a; nr, ω0a, ω0b, T, lmax, ltol, decay, mode_tol) -> NamedTuple
-
-One grid point. `nr` is the NR reference: the transition channel list (kind = :tr) or
-(C, p) (kind = :ann). Returns the table row as a NamedTuple with the columns of
-GW_KERR_COLS plus the two KerrModes (for seeding the next point). `lost` = :a or :b
-writes the failure of a level that the builder could not follow to this α (gw_kerr_track).
-status: "ok"; "noisy" (direct and kernel forms of the source disagree by more than chk_tol);
-"broad" (a level wider than broad_tol of its level spacing: computed, but not a
-quasi-stationary level; the loader does not use it); "fail:<reason>".
+One table row (GW_KERR_COLS plus both KerrModes); `nr` = NR reference (:tr channel list, :ann (C, p)). status "ok",
+"noisy" (|chk| > chk_tol), "broad" (width > broad_tol spacings; unused by the loader) or "fail:<reason>".
 """
 function gw_kerr_table_point(kind::Symbol, sa, sb, α, a; nr, ω0a=nothing, ω0b=nothing, T=Float64,
                              lmax::Int=12, ltol=1e-8, decay=60.0, mode_tol=1e-8, horizon::Bool=true,
@@ -268,14 +213,9 @@ gw_kerr_row_string(r) = join((string(r.alpha), string(r.a), string(r.Gamma_kerr)
                               string(r.chk), r.lfrac), " ")
 
 """
-    gw_kerr_build_channel(kind, sa, sb; αs, as, path, resume=true, T=Float64, bigfloat_below=0.0,
-                          lmax=nothing, ltol=1e-8, decay=60.0, horizon=true, verbose=true, kerr_kwargs...) -> path
-
-Compute the table of one channel on the grid (αs × as) and write/append it to `path`
-(default: gw_kerr_table_dir()/gw_kerr_table_name(kind, sa, sb)). With `resume`, points
-already present with status ok are skipped. Points with α < bigfloat_below use BigFloat
-for the Teukolsky integration. lmax defaults to |m̃| + 10. `horizon` adds the horizon
-part of the rate (Gamma_H column; about doubles the cost).
+    gw_kerr_build_channel(kind, sa, sb; αs, as, path, resume=true, T=Float64, bigfloat_below=0.0, kwargs...) -> path
+Table of one channel on αs × as, appended to `path` (`resume` skips finished rows); BigFloat below bigfloat_below,
+lmax = |m̃| + 10 by default, `horizon` adds Gamma_H (about twice the cost).
 """
 function gw_kerr_build_channel(kind::Symbol, sa, sb; αs=nothing, as=nothing, path=nothing, resume::Bool=true,
                                T=Float64, bigfloat_below=0.0, lmax=nothing, ltol=1e-8, decay=60.0, horizon::Bool=true,
@@ -297,7 +237,7 @@ function gw_kerr_build_channel(kind::Symbol, sa, sb; αs=nothing, as=nothing, pa
     done_ω = Dict{Tuple{Float64,Float64},Tuple{ComplexF64,ComplexF64}}()     # stored roots, to keep seeding on resume
     if resume && isfile(path)
         for r in gw_kerr_read_table(path)[4]
-            # ok, noisy and broad rows are final (verdicts that recomputing would repeat); failures are retried
+            # ok, noisy and broad rows are final (recomputing would repeat them); failures are retried
             if r.status in ("ok", "noisy", "broad")
                 key = (round(r.alpha, sigdigits=10), round(r.a, sigdigits=10))
                 push!(done, key)
@@ -330,7 +270,7 @@ function gw_kerr_build_channel(kind::Symbol, sa, sb; αs=nothing, as=nothing, pa
                 continue
             end
             Tuse = α < bigfloat_below ? BigFloat : T
-            # follow both levels from their last eigenfrequency to this α (in small steps where they drift fast)
+            # follow both levels from their last eigenfrequency to this α (small steps where they drift fast)
             ta = (ha === nothing || losta) ? nothing : gw_kerr_track(sa, a, ha, α)
             ha !== nothing && ta === nothing && (losta = true)
             tb = same ? ta : ((hb === nothing || lostb) ? nothing : gw_kerr_track(sb, a, hb, α))

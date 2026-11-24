@@ -1,42 +1,8 @@
 """
     rate_interpolation.jl
 
-SR rate Γ(α, a) of each level from the Leaver tables in rate_sve/ (Imag_ergC_{pos,neg}_<nlm>.npz,
-growth and damping rates on an (α, a) grid; floored values ~1e-100 mark "no rate on this side").
-
-Default (SR_RATE_INTERP[] = :anchored): each α row of the tables is taken as a function of the distance
-from threshold, u = Ω_H(a) - Ω_H(a_c(α_row)), with a_c(α) from the zero-crossing table
-(Imag_zeroC_<nlm>.dat). Writing the signed rate as G = u A (A > 0 on both sides), each row holds ln A
-at its table points plus a value at u = 0 (the slope of G at threshold, see anchored_rows), joined by a
-monotone cubic (PCHIP) and continued smoothly (capped) beyond its outermost points. At (α, a),
-u = Ω_H(a) - Ω_H(a_c(α)) and the four rows around α are combined at that same u, ln A as a PCHIP in
-ln α. The rate vanishes exactly at a_c(α), is C1 in a and in α, reproduces the table points, and rows
-are never mixed across their thresholds. Near threshold at large α, ω_I(a) is lopsided (a steep rise to
-a near-plateau above a_c, an orders-of-magnitude drop below it); :factorised could not follow this and
-overshot up to 18x just above a_c (544 at α = 1.49).
-
-Tables for 322, 544, l = 5 (651-855) and l = 6 with m < 6 (761-865) recomputed on 2026-11-10 with
-double-double Leaver, each mode tracked continuously from small α (the earlier tables jumped to the
-n+1 overtone at large α, and l = 5, 6 were the perturbative formula); α <= 2, 49 spins (9 extra
-nodes in [0.94, 0.9965]), so the spin grid need not be uniform. Against direct Leaver at α between
-table rows, more than 0.01 from a_c: median error 0.01-0.3%, at most ~5-18% at large α (653 at
-α = 1.33, from the row spacing); a few 10% at the node closest to a_c. a_c(α) matches Leaver to
-< 1e-6 (up to 3e-4 where a_c -> 0.998).
-
-Tables for 433, 533 and 644 recomputed on 2026-11-23 with scripts/build_sr_tables_leaver.jl (the mixed-precision
-Leaver solver of kerr_modes.jl, each level followed continuously in α; same grids and conventions). The tables
-they replace had 14 hand-entered threshold rows 0.0015-0.023 above a_c (which put a_c(433) above a_c(533) at
-α ~ 1) and broken rates at large α. The same script reproduces the 544 table above to 7 digits where both are
-Leaver values; it differs where a_c > 0.992 (α > 1.99: 0.99697 against 0.99789 at α = 2.14, the nodeless level
-checked to change sign there).
-
-:factorised (default on 2026-11-09 and 10): Γ = m [Ω_H(a) - Ω_H(a_c(α))] A(α, a), ln A linear in
-(ln α, a), the two rows blended at fixed a. Same zero crossing, but kinks at the spin nodes, and an
-overshoot near a_c when a bracketing row is already past its threshold.
-
-:legacy interpolates the signed rate linearly in α between table nodes (~7% apart) and in a. Since
-Γ ∝ α^(4l+5) the larger node dominates and the zero crossing lands up to ~0.02 above a_c, as a
-staircase in α (flat between nodes, a jump just above each one); kept for comparisons.
+SR rate Γ(α, a) of each level from the Leaver tables in rate_sve/. SR_RATE_INTERP[] = :anchored (default; ln(Γ/u)
+PCHIP in u = Ω_H(a) - Ω_H(a_c(α)) and in ln α, zero at a_c), :factorised, or :legacy (linear in α and a).
 """
 
 module RateInterpolation
@@ -120,10 +86,7 @@ end
 """
     extract_valid_rates_at_alpha(data_3d, alph, M; floor_threshold=RATE_FLOOR)
 
-Extract rate vs spin at a specific alpha, filtering out floored values.
-Returns (spin_array, rate_array, alpha_min) where alpha_min is the smallest
-alpha in the dataset. If alph < alpha_min the interpolation is evaluated at
-alpha_min; the caller is responsible for applying any power-law rescaling.
+-> (spins, rates, alpha_min): non-floored rates vs spin at max(alph, alpha_min); caller rescales below alpha_min.
 """
 function extract_valid_rates_at_alpha(data_3d, alph, M; floor_threshold=RATE_FLOOR)
     alpha_vals = sort(unique(data_3d[:, :, 1]))
@@ -146,13 +109,7 @@ end
 """
     load_threshold(state_str, m, rate_sve_dir; cheby=true)
 
-Zero-crossing table α -> a_c as a monotone C1 curve (PCHIP; continued linearly with the end slopes),
-without the root finder's failures: points that are not bound (ω/μ > 1 + ZERO_W_TOL, e.g. 511 at
-α = 0.231), points at the a = maxSpin clamp ("no root"), and points where a_c stops increasing with α
-(the 432 and 831 tails, where a_c -> 1). A piecewise-linear a_c(α) puts a slope jump into the rate at
-every zeroC point near threshold (kinks along α at fixed spin) and, where a_c bends towards 1,
-misplaces the threshold between points. Returns nothing if the file is missing or fewer than two
-points remain.
+Zero-crossing table α -> a_c as a monotone PCHIP curve, root-finder outliers dropped; nothing if < 2 points left.
 """
 function load_threshold(state_str::String, m::Int, rate_sve_dir::String; cheby::Bool=true)
     prefix = cheby ? "Imag_zeroC" : "Imag_zero"
@@ -205,11 +162,7 @@ end
 """
     factorised_tables(state_str, l, m, rate_sve_dir; cheby=true) -> (a_c, [LnATable...]) or nothing
 
-Left out of ln A: floored points, points within SPIN_GAP of a_c, and points on the wrong side of a_c
-for their table (some rows label the first grid points above threshold as damping, e.g. 433 at
-α = 0.121 and α = 0.793, while a_c agrees with the Kerr spectrum there). The gaps are then filled
-along a, linearly between usable points and flat beyond them, so that both α nodes around any α have
-a value at every spin and ln A is continuous in α.
+ln A per table without floored, wrong-side or within-SPIN_GAP points; gaps filled along a (linear, flat beyond).
 """
 function factorised_tables(state_str::String, l::Int, m::Int, rate_sve_dir::String; cheby::Bool=true)
     get!(FACTORISED_CACHE, (state_str, cheby)) do
@@ -239,7 +192,7 @@ function factorised_tables(state_str::String, l::Int, m::Int, rate_sve_dir::Stri
                 lnA[i, :] = length(ok) == 1 ? fill(lnA[i, ok[1]], length(spins)) :
                     LinearInterpolation(spins[ok], lnA[i, ok], extrapolation_bc=Flat()).(spins)
             end
-            # rows without usable points: linear in ln alpha between filled rows, alpha^(4l+5) below, flat above
+            # empty rows: linear in ln alpha between filled rows, alpha^(4l+5) below, flat above
             filled = findall(i -> !isnan(lnA[i, 1]), eachindex(alphas))
             isempty(filled) && continue
             lnal = log.(alphas)
@@ -265,10 +218,7 @@ end
 """
     factorised_rate_at_alpha(a_c, tabs, l, m, alph, M) -> (a_mid, rate(a), spin range) or nothing
 
-ln A at α: each table on its own side of a_c(α) (growth above, damping below), linear in ln α
-between its two nodes (only an empty node row leaves the other one alone), then linear in a over
-the points of both tables; flat beyond the spin and α range of the tables, and ∝ α^(4l+5) below it
-(as the legacy rescaling).
+ln A at α (linear in ln α, ∝ α^(4l+5) below the tables) on each table's side of a_c, then linear in a.
 """
 function factorised_rate_at_alpha(a_c, tabs::Vector{LnATable}, l, m, alph, M)
     ac = min(a_c(alph), 1.0)
@@ -428,11 +378,7 @@ end
 """
     anchored_tables(state_str, m, rate_sve_dir; cheby=true) -> AnchoredTables or nothing
 
-Rows from the pos (growth) and neg (damping) tables at each α node, keeping only points above the
-floor, on the right side of a_c(α), and further than ANCHOR_GAP from it (some rows label the first
-points above threshold as damping, e.g. 433 at α = 0.121 and 0.793). When the two tables share a grid
-each row holds both sides (so the slope at the anchor sees both); otherwise (421, 431, 521, 621, 631,
-632, 642, 841, 842, 844: growth on 40 x 30, damping on 60 x 40) each side has its own rows.
+Rows per α node from the pos/neg tables (valid points > ANCHOR_GAP from a_c); shared rows when the grids match.
 """
 function anchored_tables(state_str::String, m::Int, rate_sve_dir::String; cheby::Bool=true)
     get!(ANCHORED_CACHE, (state_str, cheby)) do
@@ -533,18 +479,7 @@ end
 """
     anchored_rate_at_alpha(T, l, m, alph, M) -> (a_mid, rate(a), spin range)
 
-Rate at α: u = Ω_H(a) - Ω_H(a_c(α)); on the side of u, the rows' G at that u (a row without points on
-that side uses the nearest row that has some), ln|G| cubic (PCHIP) in ln α through the four rows around α.
-Below the first row the rate scales as α^(4l+5); beyond the last row the last row is used. A side
-without any table rows continues the other side's rows linearly through the anchor.
-
-The two sides can come from different rows (a row without points on one side, or the separate growth
-and damping grids of some levels); their slopes at the anchor then differ, while ω_I(a) has one slope
-there. Each side's ln A is then moved to the common A_0 (harmonic mean of the two, so the shallower
-side dominates, as at a PCHIP knot) with weight (1 - (u/u_s)^2)^2 for |u| < u_s, u_s the distance of
-that side's first knot (linear in ln α between the two middle rows): the rate is C1 through a_c, the
-weight and its slope vanish at u_s, and table points are reproduced. With the same rows on both sides
-the two slopes are equal and nothing changes.
+Rate at α vs u = Ω_H(a) - Ω_H(a_c(α)): row ln A cubic in ln α; the two sides blended to one slope at a_c (C1).
 """
 function anchored_rate_at_alpha(T::AnchoredTables, l, m, alph, M)
     ac = min(T.a_c(alph), 1.0)
@@ -587,8 +522,7 @@ end
 """
     pre_computed_sr_rates_unified(n, l, m, alph, M; cheby=true) -> (a_mid, rate(a), spin range)
 
-SR rate of (n, l, m) at α as a function of spin (eV), with the interpolation chosen by SR_RATE_INTERP.
-Levels without rate tables get rate 0.
+SR rate of (n, l, m) at α vs spin (eV), interpolated as set by SR_RATE_INTERP; levels without tables get rate 0.
 """
 function pre_computed_sr_rates_unified(n, l, m, alph, M; cheby::Bool=true)
     SR_RATE_INTERP[] === :legacy && return sr_rates_linear_legacy(n, l, m, alph, M; cheby=cheby)
@@ -612,8 +546,7 @@ end
 """
     sr_rates_linear_legacy(n, l, m, alph, M; cheby=true)
 
-The interpolation used before 2026-11-09 (SR_RATE_INTERP[] = :legacy): valid (non-floored) growth and
-damping rates linear in (α, a), averaged where both tables have a point, then linear in a.
+:legacy interpolation: non-floored growth and damping rates linear in (α, a), averaged at shared spins.
 """
 function sr_rates_linear_legacy(n, l, m, alph, M; cheby::Bool=true)
     state_str = format_state_for_filename(n, l, m)

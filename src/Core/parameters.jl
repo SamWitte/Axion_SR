@@ -7,12 +7,7 @@ Defines structured types replacing tuple-based parameter passing throughout the 
 """
     QMState
 
-Represents a quantum mechanical state with principal, orbital, and azimuthal quantum numbers.
-
-# Fields
-- `n::Int`: Principal quantum number (n ≥ 1)
-- `l::Int`: Orbital angular momentum quantum number (0 ≤ l < n)
-- `m::Int`: Azimuthal quantum number (-l ≤ m ≤ l)
+Quantum numbers (n, l, m), checked n >= 1, 0 <= l < n, |m| <= l.
 """
 struct QMState
     n::Int
@@ -30,15 +25,7 @@ end
 """
     EvolutionParameters
 
-Parameters controlling the ODE system evolution for axion-black hole dynamics.
-
-# Fields
-- `mu::Float64`: Axion mass in eV
-- `f_a::Float64`: Axion decay constant (PQ scale)
-- `e_max_2::Float64`: Second energy level maximum
-- `spin_initial::Float64`: Initial black hole spin parameter (0 ≤ a ≤ 1)
-- `mass_initial::Float64`: Initial black hole mass (M_⊙)
-- `impose_low_cut::Float64`: Low-coupling cutoff for alpha parameter
+ODE parameters: mu [eV], f_a, e_max_2, spin_initial, mass_initial [M_sun], impose_low_cut (alpha cutoff).
 """
 struct EvolutionParameters
     mu::Float64
@@ -60,23 +47,7 @@ end
 """
     SolverSettings
 
-Configuration options for ODE solver and numerical algorithms.
-
-# Fields
-- `tau_max::Float64`: Maximum evolution time (years)
-- `alpha_max_cut::Float64`: Maximum coupling cutoff
-- `impose_low_cut::Float64`: Low-coupling cutoff
-- `stop_on_a::Float64`: Stop evolution when spin drops below threshold
-- `eq_threshold::Float64`: Energy equilibration threshold
-- `abstol::Float64`: Absolute tolerance for ODE solver
-- `reltol::Float64`: Relative tolerance for ODE solver
-- `use_chebyshev::Bool`: Use Chebyshev polynomials for interpolation
-- `include_spinone::Bool`: Include spin-1 modes
-- `include_nonrelativistic::Bool`: Include non-relativistic corrections
-- `nmax::Int`: Maximum principal quantum number to include
-- `n_interp_pts::Int`: Number of interpolation points for spin
-- `n_interp_pts_l::Int`: Number of interpolation points for l-levels
-- `debug::Bool`: Enable debug output
+Keyword-constructed solver options: tau_max [yr], cutoffs, tolerances, flags, nmax, interpolation sizes, debug.
 """
 struct SolverSettings
     tau_max::Float64
@@ -122,13 +93,7 @@ end
 """
     BlackHoleProperties
 
-Represents a black hole's observable and dynamical properties.
-
-# Fields
-- `mass::Float64`: Mass in solar masses
-- `spin::Float64`: Dimensionless spin parameter (0 ≤ a ≤ 1)
-- `age::Float64`: Age in years (optional, for timing constraints)
-- `name::String`: Identifier/name for the object
+BH mass [M_sun], spin (0 <= a <= 1), optional age [yr] and a name.
 """
 struct BlackHoleProperties
     mass::Float64
@@ -149,13 +114,7 @@ end
 """
     TransitionRate
 
-Represents a single quantum transition rate (spontaneous or stimulated).
-
-# Fields
-- `initial_state::QMState`: Initial quantum state
-- `final_state::QMState`: Final quantum state
-- `rate::Float64`: Transition rate (1/time)
-- `destination::Symbol`: Either :BH (stays near BH) or :Inf (escapes to infinity)
+Rate [1/time] from initial_state to final_state; destination :BH (stays bound) or :Inf (escapes).
 """
 struct TransitionRate
     initial_state::QMState

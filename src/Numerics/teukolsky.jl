@@ -1,43 +1,7 @@
 """
-    teukolsky.jl
-
-Homogeneous solutions of the radial Teukolsky equation on Kerr and the source
-integrals that give the gravitational-wave amplitude at infinity. This is the
-radial machinery behind the relativistic GW rates (gw_rates_relativistic).
-
-Conventions: Sasaki & Tagoshi, Living Rev. Relativ. 6 (2003) 6 [ST03], Sec. 2,
-with G = c = M = 1, a = J/M^2, Boyer-Lindquist coordinates and the Kinnersley
-tetrad. For spin weight s the radial equation (ST03 eq. 14 for s = -2) is
-
-    Δ^{-s} d/dr(Δ^{s+1} dR/dr) + U(r) R = 𝒯,
-    U = [K^2 - 2is(r-1)K]/Δ + 4isωr - λ,   K = (r^2+a^2)ω - am,
-
-λ the eigenvalue of the spin-weighted spheroidal harmonic in Teukolsky's
-convention (λ -> (l-s)(l+s+1) as aω -> 0; SpinWeightedSpheroidalHarmonics.jl
-returns exactly this). s = -2 is ψ_4 = ρ^4 Σ_{lm} e^{-iωt+imφ} S_lm(θ) R_lm(r),
-ρ = (r - ia cosθ)^{-1}, with S normalised to ∫|S|^2 dΩ = 1.
-
-Homogeneous solutions (ST03 eqs. 19-20, normalised here with B^trans = C^trans = 1):
-    R^in  -> Δ^{-s} e^{-ikr*}                         (r -> r_+),   k = ω - mΩ_H
-    R^in  -> B^ref r^{-2s-1} e^{iωr*} + B^inc r^{-1} e^{-iωr*}   (r -> ∞)
-    R^up  -> r^{-2s-1} e^{iωr*}                       (r -> ∞)
-W = Δ^{s+1}(R^in R^up' - R^up R^in') is constant and equals 2iω B^inc.
-The amplitude of the outgoing wave at infinity for a source 𝒯 is (ST03 eq. 25)
-    Z^∞ = (1/W) ∫ R^in 𝒯 Δ^{-2} dr,   ψ_4 -> (1/r) Σ Z^∞ S e^{iω(r*-t)+imφ},
-and the energy flux is dE/dt = Σ |Z^∞|^2/(4πω^2) (ST03 eq. 48).
-
-Numerics: both boundary series are generated from the ODE itself with a small
-truncated-Laurent-series algebra (no hand-derived recurrences), and the ODE is
-integrated with OrdinaryDiffEq in any floating type (Float64 or BigFloat).
-R^in is integrated outward from the horizon, which is stable; R^up inward from
-r_inf, which picks up the growing solution as (r_inf/r)^4, so it is only
-carried to r_m = r_inf/10 where the Wronskian is taken.
-
-Sources: `teuk_source_kernels` gives the kernels multiplying the tetrad
-components T_nn, T_n m̄, T_m̄ m̄ after all derivatives have been moved onto
-R^in and S (ST03 eqs. 36-44 with the particle's C_ab replaced by 1), so one
-routine serves a point particle (test: circular equatorial orbits against the
-post-Newtonian luminosity, ST03 eqs. 178 and 181) and the extended scalar cloud.
+Radial Teukolsky equation on Kerr, conventions of Sasaki & Tagoshi 2003 [ST03] (G = c = M = 1, Kinnersley tetrad,
+unit-norm S): R^in, R^up from boundary series + ODE (B^trans = C^trans = 1, W = 2iω B^inc), and source kernels
+for Z^∞ = (1/W) ∫ R^in 𝒯 Δ^{-2} dr, dE/dt = Σ |Z^∞|²/(4πω²) (ST03 eqs. 25, 48).
 """
 
 using OrdinaryDiffEq
@@ -142,11 +106,7 @@ end
 """
     ls_frobenius(A2, A1, A0, N, D; tol) -> f_0..f_N
 
-Power-series solution f = Σ f_n z^n (f_0 = 1) of A2 f'' + A1 f' + A0 f = 0 with
-Laurent-series coefficients A_k. The term f_n first appears at the power z^(D+n),
-with D fixed by the ansatz (the exponent of z already extracted into g, so the
-indicial equation has the root 0). Coefficients that would act below z^D must
-vanish; they are checked against the first indicial coefficient.
+Series solution f = Σ f_n z^n (f_0 = 1) of A2 f'' + A1 f' + A0 f = 0 (Laurent A_k); f_n first enters at z^(D+n).
 """
 function ls_frobenius(A2::LSeries{T}, A1::LSeries{T}, A0::LSeries{T}, N::Int, D::Int; tol=1e-9) where T
     indicial(n) = n * (n - 1) * ls_coef(A2, D + 2) + n * ls_coef(A1, D + 1) + ls_coef(A0, D)
@@ -253,9 +213,7 @@ end
 """
     teuk_series_horizon_out(s, m, ω, a, λ, N, T) -> coefficients g_n
 
-The second solution at the horizon, e^{+ikr*} Σ_n g_n (r - r_+)^n, g_0 = 1 (the outgoing
-piece C^up e^{ikr*} of R^up; converges for r - r_+ < r_+ - r_-). Together with the ingoing
-series this continues R^up analytically into r < r_h0 (teuk_radial r_up_min).
+Outgoing horizon series e^{+ikr*} Σ_n g_n (r - r_+)^n, g_0 = 1; continues R^up into r < r_h0.
 """
 function teuk_series_horizon_out(s::Int, m::Int, ω, a, λ, N::Int, ::Type{T}) where T
     C = Complex{T}
@@ -360,16 +318,9 @@ struct TeukRadial{T, S1, S2}
 end
 
 """
-    teuk_radial(s, l, m, ω, a; T=Float64, N=40, rtol, atol, ωr_inf=25, r_inf_min=200,
-                hfrac=0.1, ωr_m=0.5, λ=nothing) -> TeukRadial
+    teuk_radial(s, l, m, ω, a; T=Float64, N=40, λ=nothing, r_in_max, r_up_min, ...) -> TeukRadial
 
-Homogeneous solutions R^in (horizon to r_inf) and R^up (r_inf down to
-r_m = min(ωr_m/|ω|, r_inf/10)) for real ω ≠ 0. The horizon series is used out
-to r_+ + hfrac (r_+ - r_-), the asymptotic series from r_inf = max(ωr_inf/|ω|,
-r_inf_min). `λ` overrides the spheroidal eigenvalue (e.g. a BigFloat value).
-`r_in_max` carries R^in outward beyond r_inf (a source may extend further; this
-integration is stable) and `tstops_in` makes the integrator step through given
-radii (e.g. quadrature nodes), so that `teuk_in` there needs no interpolation.
+R^in (horizon out to max(r_inf, r_in_max)), R^up (r_inf in to r_m or r_up_min) and their Wronskian W; real ω ≠ 0.
 """
 function teuk_radial(s::Int, l::Int, m::Int, ω, a; T=Float64, N::Int=40, rtol=nothing, atol=nothing,
                      ωr_inf=25.0, r_inf_min=200.0, hfrac=0.1, ωr_m=0.5, λ=nothing, nW=8,
@@ -468,16 +419,7 @@ teuk_Binc(tr::TeukRadial) = tr.W / (2im * tr.ω)
 """
     teuk_horizon_alpha(tr) -> α_{ℓmω}
 
-Coefficient of the energy flux into the horizon, dE_H/dt = α |Z^H|²/(4πω²), for the
-horizon amplitude Z^H = (1/W) ∫ R^up 𝒯 Δ^{-2} dr of this file's normalisation
-(R^in -> Δ² e^{-ikr*}, R^up -> r³ e^{iωr*}, S unit-normalised over the sphere;
-Teukolsky & Press 1974 eq. 4.44, Tagoshi, Mano & Takasugi 1997 eqs. 13-14, Hughes 2000):
-
-    α = 256 (2r_+)^5 k (k² + 4ε²)(k² + 16ε²) ω³ / |C|²,   ε = √(1-a²)/(4r_+),  k = ω - mΩ_H,
-    |C|² = [(λ+2)² + 4aωm - 4a²ω²][λ² + 36aωm - 36a²ω²] + (2λ+3)(96a²ω² - 48aωm) + 144ω²(1-a²),
-
-λ the s = -2 eigenvalue (-> (ℓ-1)(ℓ+2); Schwarzschild: |C|² = [(ℓ-1)ℓ(ℓ+1)(ℓ+2)]² + 144ω²).
-Negative for superradiant modes (k < 0): the hole loses energy to the wave.
+Horizon flux dE_H/dt = α |Z^H|²/(4πω²), s = -2 (Teukolsky & Press 1974 eq. 4.44); α < 0 if superradiant (k < 0).
 """
 function teuk_horizon_alpha(tr::TeukRadial)
     tr.s == -2 || error("teuk_horizon_alpha: s = -2 only")
@@ -496,15 +438,7 @@ end
 """
     teuk_source_kernels(tr, r, θ) -> (K_nn, K_nm̄, K_m̄m̄)
 
-Kernels of the amplitude at infinity for a source with tetrad components
-T_ab(t, r, θ, φ) = T̂_ab(r, θ) e^{-iωt + imφ} (Kinnersley tetrad, ST03 eqs. 36-44
-with the particle's C_ab -> 1 and S unit-normalised over the sphere):
-
-    Z^∞ = (2π)^2/W ∫ dr ∫ sinθ dθ [K_nn T̂_nn + K_nm̄ T̂_nm̄ + K_m̄m̄ T̂_m̄m̄],
-
-all r- and θ-derivatives having been moved onto R^in and S. For a point
-particle with T_ab = μ C_ab δ(r-r_0)δ(θ-θ_0)δ(φ-φ(t))/sinθ on a circular orbit
-(φ = Ωt, ω = mΩ) this collapses to Z^∞ = 2πμ/W [K_nn C_nn + ...] at (r_0, θ_0).
+Kernels of Z^∞ = (2π)^2/W ∫dr ∫sinθ dθ Σ K_ab T̂_ab, T_ab = T̂_ab e^{-iωt+imφ} (ST03 eqs. 36-44, C_ab -> 1).
 """
 function teuk_source_kernels(tr::TeukRadial, r, θ)
     S = tr.Sfun(θ); dS = tr.Sfun(θ; theta_derivative=1); d2S = tr.Sfun(θ; theta_derivative=2)
@@ -588,8 +522,7 @@ end
 """
     teuk_circular_flux_H(a, r0; lmax=6, T=Float64, kwargs...) -> (P_H, modes)
 
-Energy flux into the horizon, in units of (μ/M)^2, from a unit-mass particle on the
-prograde circular equatorial orbit at r0 (negative when the modes are superradiant).
+Horizon energy flux in units of (μ/M)^2, prograde circular equatorial orbit at r0 (negative if superradiant).
 """
 function teuk_circular_flux_H(a, r0; lmax::Int=6, T=Float64, kwargs...)
     _, _, Ω, _ = teuk_circular_orbit(T(a), T(r0))
@@ -609,9 +542,7 @@ end
 """
     teuk_circular_flux(a, r0; lmax=6, T=Float64, kwargs...) -> (P, modes)
 
-GW energy flux to infinity, in units of (μ/M)^2, from a unit-mass particle on
-the prograde circular equatorial orbit at r0, summed over 2 <= l <= lmax and
-m = -l..l (m ≠ 0). `modes` maps (l, m) to its flux. kwargs go to teuk_radial.
+GW flux to infinity in units of (μ/M)^2, prograde circular equatorial orbit at r0; 2 <= l <= lmax, m ≠ 0.
 """
 function teuk_circular_flux(a, r0; lmax::Int=6, T=Float64, kwargs...)
     _, _, Ω, _ = teuk_circular_orbit(T(a), T(r0))
@@ -631,10 +562,7 @@ end
 """
     pn_flux_circular(a, r0) -> dE/dt / (32/5 x^10)
 
-Post-Newtonian luminosity of a particle on a circular equatorial orbit, ST03
-eq. 178 (Schwarzschild, to x^11) plus the spin-dependent terms of eq. 181
-(to x^8), x = Ω^{1/3}. For a ≠ 0 the spin-independent terms beyond x^8 are not
-spin-complete, so the a ≠ 0 result is accurate to O(x^9).
+PN circular-orbit luminosity, x = Ω^{1/3}: ST03 eq. 178 (to x^11) plus spin terms of eq. 181; O(x^9) for a ≠ 0.
 """
 function pn_flux_circular(a, r0)
     Ω = 1 / (r0^(3 // 2) + a)
@@ -669,13 +597,7 @@ pn_flux_newtonian(a, r0) = 32 // 5 * (1 / (r0^(3 // 2) + a))^(10 // 3)
 """
     teuk_Z_grid(tr, Tnn, Tnm, Tmm, rn, rw, θn, θw; horizon=false) -> Z^∞ (or Z^H)
 
-As `teuk_Z_extended`, with the tetrad components given as matrices on the
-(rn, θn) grid; R^in and S are evaluated once per node. With horizon = true the
-horizon amplitude Z^H (R^up in the kernels) is returned instead; its flux is
-teuk_horizon_alpha(tr) |Z^H|²/(4πω²). The kernel form drops the boundary terms of
-the integrations by parts, which vanish at r_+ for R^in (∝ Δ²) but NOT for R^up
-(O(1) there): for a source that extends to the horizon use teuk_Z_direct_jets
-with horizon = true; here the source must vanish at both ends of the r range.
+As `teuk_Z_extended` with T̂_ab as matrices on (rn, θn); horizon = true only for sources vanishing at r_+.
 """
 function teuk_Z_grid(tr::TeukRadial, Tnn::AbstractMatrix, Tnm::AbstractMatrix, Tmm::AbstractMatrix, rn, rw, θn, θw;
                      horizon::Bool=false)
@@ -697,15 +619,7 @@ end
 """
     teuk_Z_extended(tr, Tnn, Tnm, Tmm, rn, rw, θn, θw) -> Z^∞
 
-Amplitude at infinity for a monochromatic extended source whose tetrad
-components are T_ab = T̂_ab(r, θ) e^{-iωt+imφ} (Kinnersley tetrad; T̂ as
-functions of (r, θ)), from the kernels of `teuk_source_kernels`:
-
-    Z^∞ = (2π)^2/W ∫dr ∫ sinθ dθ [K_nn T̂_nn + K_nm̄ T̂_nm̄ + K_m̄m̄ T̂_m̄m̄]
-
-with the quadrature nodes/weights (rn, rw) in r and (θn, θw) in θ (the sinθ is
-included here). The source must vanish at the ends of the r range (the
-integrations by parts drop boundary terms).
+Quadrature of `teuk_source_kernels` over functions T̂_ab(r, θ) (sinθ included); T̂ must vanish at the r ends.
 """
 function teuk_Z_extended(tr::TeukRadial, Tnn, Tnm, Tmm, rn, rw, θn, θw)
     acc = zero(Complex{typeof(tr.ω)})
@@ -772,8 +686,7 @@ end
 """
     teuk_Z_direct(tr, Tnn, Tnm, Tmm, rn, rw, θn, θw) -> Z^∞
 
-Same as `teuk_Z_extended` but from the direct source form:
-Z^∞ = 4(2π)^2/W ∫dr Δ^{-2} R^in ∫ sinθ dθ ρ^{-5} ρ̄^{-1} (B'_2 + B'*_2) S.
+Direct form 4(2π)^2/W ∫dr Δ^{-2} R^in ∫ sinθ dθ ρ^{-5} ρ̄^{-1} (B'_2 + B'*_2) S, to check `teuk_Z_extended`.
 """
 function teuk_Z_direct(tr::TeukRadial, Tnn, Tnm, Tmm, rn, rw, θn, θw)
     B2 = teuk_source_B2(Tnn, Tnm, Tmm, tr.a, tr.ω, tr.m)
@@ -791,8 +704,7 @@ function teuk_Z_direct(tr::TeukRadial, Tnn, Tnm, Tmm, rn, rw, θn, θw)
 end
 
 # ----------------------------------------------------------------------------
-# Direct source form with second-order jets (ST03 eqs. 9-12): exact, cheaper than ForwardDiff, valid down
-# to the horizon (for Z^H).
+# Direct source form with second-order jets (ST03 eqs. 9-12), valid down to the horizon
 # ----------------------------------------------------------------------------
 
 struct Jet2{T}
@@ -831,13 +743,7 @@ jet_angular(f0, f1, f2, ::Type{T}) where T = Jet2{T}(f0, 0, f1, 0, 0, f2)
 """
     teuk_source_B2_jet(Tnn, Tnm, Tmm, a, ω, m, r0, θ0; phase_factored=false) -> B'_2 + B'*_2 at (r0, θ0)
 
-ST03 eqs. 9-12 (ρ = (r - ia cosθ)^{-1}, sources ∝ e^{-iωt+imφ}) from the second-order jets
-of the tetrad components at the node; equals teuk_source_B2(...)(r0, θ0).
-
-phase_factored = true: the jets are those of T̂_ab = T_ab/Ph with Ph = e^{-iωr* + imr#}, the
-horizon phase of the Teukolsky mode (ω, m), and the result is (B'_2 + B'*_2)/Ph. Since
-J_+(Ph X) = Ph ∂_r X, the radial operators then act as plain ∂_r on functions that are
-regular at r_+, which avoids the 1/Δ cancellations of J_+ near the horizon.
+ST03 eqs. 9-12 from 2nd-order jets; phase_factored: jets of T_ab/Ph (Ph = e^{-iωr*+imr#}), result divided by Ph.
 """
 function teuk_source_B2_jet(Tnn::Jet2{T}, Tnm::Jet2{T}, Tmm::Jet2{T}, a, ω, m, r0, θ0; phase_factored::Bool=false) where T
     jr = jet_var_r(T(r0)); jθ = jet_var_t(T(θ0))
@@ -861,10 +767,7 @@ end
 """
     teuk_Z_direct_jets(tr, jets, rn, rw, θn, θw; horizon=false) -> Z^∞ (or Z^H)
 
-Amplitude from the direct source form, Z = 4(2π)²/W ∫dr Δ^{-2} R ∫ sinθ dθ ρ^{-5} ρ̄^{-1} (B'_2 + B'*_2) S,
-with R = R^in (horizon = false) or R^up (horizon = true, the horizon amplitude; teuk_radial
-needs r_up_min <= rn[1]). `jets(i, j)` returns the Jet2 triple (T_nn, T_nm̄, T_m̄m̄) of the
-source at (rn[i], θn[j]). No integration by parts, so the source may be finite at r_+.
+Direct-form amplitude (source may be finite at r_+); `jets(i, j)` gives the Jet2 triple (T_nn, T_nm̄, T_m̄m̄).
 """
 function teuk_Z_direct_jets(tr::TeukRadial, jets, rn, rw, θn, θw; horizon::Bool=false)
     Sv = [tr.Sfun(θ) for θ in θn]
@@ -885,14 +788,7 @@ end
 """
     teuk_Z_hat(tr, Shat, Ph, rn, rw, θn, θw; horizon=false) -> Z^∞ (or Z^H)
 
-Direct-form amplitude for a source tabulated on the (rn, θn) grid as
-Shat[i, j] = ρ^{-5} ρ̄^{-1} (B'_2 + B'*_2)/Ph[i] (phase-factored jets, e.g. gw_kerr_source_hat):
-
-    Z = 4(2π)²/W Σ_i rw_i R(r_i) Ph_i Δ_i^{-2} Σ_j θw_j sinθ_j S(θ_j) Shat_ij,
-
-with R = R^in (Z^∞) or R^up (horizon = true: the horizon amplitude, whose flux is
-teuk_horizon_alpha(tr) |Z^H|²/(4πω²); teuk_radial needs r_up_min <= rn[1]). Shat and Ph do
-not depend on ℓ, so one tabulation serves every ℓ.
+Direct-form amplitude from Shat[i, j] = ρ^{-5} ρ̄^{-1} (B'_2 + B'*_2)/Ph[i] (ℓ-independent, e.g. gw_kerr_source_hat).
 """
 function teuk_Z_hat(tr::TeukRadial, Shat::AbstractMatrix, Ph::AbstractVector, rn, rw, θn, θw; horizon::Bool=false)
     Sv = [tr.Sfun(θ) * sin(θ) * w for (θ, w) in zip(θn, θw)]

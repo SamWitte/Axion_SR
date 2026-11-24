@@ -1,61 +1,8 @@
 """
     kerr_modes.jl
 
-Quasi-bound states of a massive scalar on Kerr for the relativistic GW rates
-(G = c = M = 1, μ = α). The radial function is Leaver's series (Dolan 2007), as
-in solve_sr_rates.jl / find_im_part, in the horizon-regular ingoing form
-
-    ψ = f(r) S(θ) e^{-iωv + imφ̃},   f = R_BL e^{iωr* - imr#},
-    R_BL = (r-r_+)^{-iσ} (r-r_-)^{iσ+χ-1} e^{qr} Σ_n b_n u^n,   u = (r-r_+)/(r-r_-),
-
-with v = t + r*, φ̃ = φ + r#, dr#/dr = a/Δ. The minimal solution b_n comes from
-the continued-fraction recurrence run backward and the complex eigenvalue ω from a
-secant iteration on its eigenvalue condition, with the exact spheroidal
-eigenvalue Λ of (L² - c² cos²θ) S = Λ S, c² = a²(ω² - μ²), from diagonalising
-in the Y_lm basis (S = Σ b_l' Y_l'm, so θ-derivatives are exact).
-
-Precision of the eigenvalue (2026-11-21). The first ~n terms of the recurrence of level
-(n, l, m) form a binomial hump (|b_k/b_0| up to C(n-1, (n-1)/2)), and the slope of the
-eigenvalue condition with respect to ω falls as Π_{j<n} j/sqrt(j² + 4σ²),
-σ = (ω - mΩ_H)/(4π T_H). In Float64 the rounding noise of the condition therefore
-exceeds its whole variation across a level spacing for weakly bound levels at high spin
-(e.g. (20,6,6) at a = 0.998, (24,10,10) at a ≥ 0.92), and a root search returns noise that
-still passes a residual test. No Float64 reformulation helps (it is the conditioning of the
-recurrence). The eigenvalue condition is therefore evaluated in mixed precision
-(km_cf_eval): the head n ≤ J (default 300) in BigFloat, the tail in Float64 (it
-contributes below 1e-25), and every root is validated a posteriori (km_eigenfrequency):
-the condition is re-evaluated at the root with twice the precision, a three times longer
-head and twice as many terms, each difference divided by the slope is an error of the
-root in units of the level spacing, and precision, head or tail are raised until the
-errors are below `tol`. The secant runs on the pole-free form D = α_0 b_1 + β_0 b_0
-(β_0/α_0 - t_1 has a pole next to the root for nodeless levels).
-
-Normalisation: N_j quanta correspond to the field √(N_j/(2ω_j)) (ψ_j + ψ_j*)
-with ψ_j of unit Klein-Gordon norm on a v = const slice (finite at the
-horizon; the Boyer-Lindquist slice diverges there for real ω). In the
-non-relativistic limit this is ∫|ψ|² d³x = 1.
-
-Radial overtones (N = n - l - 1 ≥ 2, kerr_mode radial=:auto): the series Σ b_n uⁿ
-behaves as (1-u)^N g(u) with large alternating b_n, so at large r (u → 1) it cancels
-to ~r^{-N} of its terms: in Float64 the sum is wrong beyond a few overtones, and since
-the Klein-Gordon norm is set there, the normalised profile came out too small by many
-orders of magnitude in the inner region that overlaps compact levels. For N ≥ 2 the
-series is used only up to u = 0.2 (with the BigFloat head coefficients; the handover data
-are summed in BigFloat), and f is continued outward by integrating its ODE,
-
-    f'' + (Δ' - 2iK)/Δ f' - [iK' + μ²r² + a²ω² - 2amω + Λ]/Δ f = 0,   K = (r²+a²)ω - am,
-
-in the variable h = f e^{-iωr}, which is regular at the horizon like f but does not carry
-the far-field phase e^{iωr*} of f (2n²/α radians out to the turning point, 1e5 for n = 45
-at α = 0.03):
-
-    h'' + [2(r-1) - 2i(2ωr - am)]/Δ h' + [-q²r² + 2ω²r - 2iω - Λ]/Δ h = 0,   q² = μ² - ω².
-
-The integration is stable up to the outer turning point (the regular solution dominates or
-oscillates there) and is stopped 6/|q| beyond it; further out f follows the leading
-asymptotic form (r-r_-)^{iσ+χ-1} e^{(q+iω)r}. The Klein-Gordon norm of such a mode is
-integrated on the steps of the ODE solution (a fixed number of nodes cannot resolve the
-n-l-1 radial nodes of a high overtone: 400 nodes gave errors of 1-20 % at n ~ 39).
+Massive-scalar quasi-bound modes on Kerr (G = c = M = 1, μ = α), ψ = f(r) S(θ) e^{-iωv + imφ̃} in ingoing coordinates:
+Leaver series (Dolan 2007), mixed-precision eigenvalue, ODE continuation of overtones, unit KG norm on v = const.
 """
 
 using LinearAlgebra
@@ -93,10 +40,7 @@ end
 
 """
     km_spheroidal(l, m, c2; nextra=8, nq=64) -> (Λ, Dict l' => b_l')
-
-Eigenfunction of (L² - c² cos²θ) S = Λ S continuously connected to Y_lm,
-S = Σ b_l' Y_l'm with Σ b² = 1 (so ∫ S² dΩ = 1). For nearly real c² (|Im c²| ≤ 1e-6 |c²|) Λ is the
-real eigenvalue at Re c² plus its first-order imaginary part, which keeps a tiny Im Λ accurate.
+Eigenpair of (L² - c² cos²θ) S = Λ S continuing Y_lm, S = Σ b_l' Y_l'm, Σ b² = 1; nearly real c²: Im Λ to first order.
 """
 function km_spheroidal(l::Int, m::Int, c2; nextra::Int=8, nq::Int=64)
     ls = [lp for lp in abs(m):(l + 2nextra) if iseven(lp - l)]
@@ -190,11 +134,7 @@ end
 
 """
     leaver_cf_head(L, J, tJ1; coeffs=false) -> (D, R, b)
-
-Head of the recurrence in the precision of L, by Miller's algorithm: b_J = 1, b_{J+1} = -tJ1 b_J (tJ1 = t_{J+1}
-from the tail), b_{n-1} = -(α_n b_{n+1} + β_n b_n)/γ_n down to b_0. D = α_0 b_1 + β_0 b_0 is the eigenvalue
-condition without poles, R = β_0/α_0 + b_1/b_0 = β_0/α_0 - t_1 the same condition normalised (independent of the
-scale of b, with poles where b_0 = 0). With `coeffs`, b = (b_0, ..., b_{J+1})/b_0, the series coefficients.
+Miller recursion (precision of L) from b_J = 1, b_{J+1} = -tJ1: D = α_0 b_1 + β_0 b_0 (pole-free), R = β_0/α_0 - t_1.
 """
 function leaver_cf_head(L::LeaverCoeffs{C}, J::Int, tJ1; coeffs::Bool=false) where {C}
     bn = one(C); bp = -C(tJ1)                                   # b_J, b_{J+1}
@@ -218,11 +158,7 @@ end
 
 """
     km_cf_eval(ω, alph, a, m, Λ, K, J; coeffs=false) -> (D, R, b, L)
-
-Eigenvalue condition of the Leaver recurrence at ω::Complex{BigFloat} in mixed precision: coefficients and the
-head n ≤ J in the current BigFloat precision, the tail J < n ≤ K in Float64 from the same coefficients rounded
-once. (All ill-conditioning of the recurrence sits in the first ~n_level terms; Float64 arithmetic beyond n = 100
-changes the condition by less than 1e-24.)
+Eigenvalue condition at ω::Complex{BigFloat}: head n ≤ J in the current BigFloat precision, tail J < n ≤ K in Float64.
 """
 function km_cf_eval(ω::Complex{BigFloat}, alph, a, m, Λ, K::Int, J::Int; coeffs::Bool=false)
     L = leaver_coeffs(ω, alph, a, m, Λ)
@@ -239,10 +175,7 @@ function leaver_terms(alph, ω, a)
     return Int(clamp(ceil((40 / (2 * sqrt(2κ * (rp - rm))))^2), 2000, 4_000_000))
 end
 
-"""Hydrogenic estimate of the eigenfrequency: the real part to O(α⁵), the spin term from the hyperfine expansion,
-returned as a complex number with zero imaginary part. (Until 2026-11-21 an imaginary part 1e-9 α^(4l+5) was added
-as a seed for the secant; for l ≥ 6 it exceeds the level spacing above α ~ 1.2-1.6 and made the root search fail
-there.)"""
+"""Hydrogenic eigenfrequency (to O(α⁵), with the hyperfine spin term) as a complex number with zero imaginary part."""
 function km_omega_guess(n, l, m, alph, a)
     spin = l == 0 ? 0.0 : 2a * m * alph^5 / n^3 / (l * (l + 0.5) * (l + 1))
     ωR = alph * (1 - alph^2 / (2n^2) - alph^4 / (8n^4) + alph^4 / n^4 * (2l - 3n + 1) / (l + 0.5) + spin)
@@ -259,17 +192,7 @@ end
 
 """
     km_eigenfrequency(n, l, m, alph, a; ω0, tol=1e-12, steptol=1e-14, maxit=60, bits=256, J=300, K) -> NamedTuple
-
-Eigenfrequency of level (n, l, m): secant iteration on the pole-free mixed-precision condition D (km_cf_eval)
-from ω0 (default: the hydrogenic expansion), the spheroidal eigenvalue recomputed at every step. The root is then
-validated: R = β_0/α_0 - t_1 is re-evaluated at the root with 2 × bits, with a head of 3J terms and with 2K terms,
-and each difference divided by |dR/dω| (finite difference over 1e-6 of the level spacing) estimates the error of
-the root in units of the level spacing (km_level_gap). While an estimate exceeds `tol`, the precision is doubled,
-the head tripled or the number of terms doubled, and the root recomputed.
-
-Returns (ω, ωbig, err, converged, bits, J, K, gap): ω rounded to ComplexF64, ωbig at `bits` bits, err the sum of
-the error estimates in level spacings (Inf if the iteration did not converge). The secant converges to the root
-nearest its start, which at large α or from a poor seed can be another overtone: the caller checks that.
+Secant on D (km_cf_eval) from ω0; bits, J, K raised until err < `tol` level spacings; may hit a neighbouring overtone.
 """
 function km_eigenfrequency(n::Int, l::Int, m::Int, alph, a; ω0=nothing, tol=1e-12, steptol=1e-14, maxit::Int=60,
                            bits::Int=256, J::Int=300, K=nothing, maxbits::Int=8192, maxJ::Int=30_000)
@@ -313,7 +236,7 @@ function km_eigenfrequency(n::Int, l::Int, m::Int, alph, a; ω0=nothing, tol=1e-
         if isfinite(err) && eprec <= tol && ehead <= tol && etail <= tol
             break
         elseif !isfinite(err)
-            (retried || bits >= maxbits) && break            # a failed iteration is retried once at twice the precision
+            (retried || bits >= maxbits) && break            # retry once at twice the precision
             retried = true; bits *= 2
         elseif eprec > tol && bits < maxbits
             bits *= 2
@@ -353,10 +276,8 @@ B = -[iK' + μ²r² + a²ω² - 2amω + Λ]/Δ), and their r-derivatives."""
     return A, B, (dNA * Δ - NA * dΔ) / Δ^2, (dNB * Δ - NB * dΔ) / Δ^2
 end
 
-"""Right-hand side of the ODE of h = f e^{-iωr}, u = [h, h']:
-h'' + [2(r-1) - 2i(2ωr - am)]/Δ h' + [-q²r² + 2ω²r - 2iω - Λ]/Δ h = 0 (the f-ODE of km_ode_coeffs with
-f = h e^{iωr}; q² = μ² - ω² from md.L.q, which was rounded from extended precision, so the weak binding of high
-levels is not lost in μ² - ω²)."""
+"""Right-hand side of the ODE of h = f e^{-iωr}, u = [h, h'] (km_ode_coeffs with f = h e^{iωr}); q² = μ² - ω² is taken
+from md.L.q (extended precision) so the weak binding of high levels survives."""
 function km_ode_rhs!(du, u, md::KerrMode, r)
     a = md.a; ω = md.ω
     Δ = r^2 - 2r + a^2
@@ -392,15 +313,8 @@ function km_ode_continue(md::KerrMode; rtol=1e-13, f0=nothing, f1=nothing)
 end
 
 """
-    kerr_mode(n, l, m, alph, a; ω0=km_omega_guess(...), K, tol=1e-12, maxit=60, radial=:auto, bits=256, J=300)
-        -> (KerrMode, err)
-
-Quasi-bound state (n, l, m) at μM = alph and spin a: eigenfrequency from km_eigenfrequency (mixed-precision
-continued fraction, validated a posteriori), then the series coefficients (the first J in BigFloat, rounded). The
-returned mode is normalised to unit Klein-Gordon norm (kerr_mode_norm). radial = :auto continues the series by its
-ODE for n - l - 1 ≥ 2 (see the file docstring), :ode always, :series never. `err` is the estimated error of the
-eigenfrequency in units of the level spacing km_level_gap (Inf if the iteration did not converge); `tol` is the
-target for it. K overrides the number of series terms.
+    kerr_mode(n, l, m, alph, a; ω0, K, tol=1e-12, maxit=60, radial=:auto, bits=256, J=300) -> (KerrMode, err)
+Mode (n, l, m) at μM = alph, spin a, unit KG norm; err in level spacings; radial :auto uses the ODE if n - l - 1 ≥ 2.
 """
 function kerr_mode(n::Int, l::Int, m::Int, alph, a; ω0=nothing, K=nothing, tol=1e-12, maxit=60, normalize=true,
                    radial::Symbol=:auto, bits::Int=256, J::Int=300)
@@ -416,7 +330,7 @@ function kerr_mode(n::Int, l::Int, m::Int, alph, a; ω0=nothing, K=nothing, tol=
         LB = leaver_coeffs(eig.ωbig, alph, a, m, Λ)
         Lr = km_round(LB)
         if use_ode
-            # only u ≤ 0.2 is summed: the head suffices (0.2^J); the handover data come from the BigFloat coefficients
+            # only u ≤ 0.2 is summed: the BigFloat head suffices (0.2^J)
             _, _, bs = leaver_cf_head(LB, Jh, Jh < eig.K ? leaver_cf_tail(Lr, eig.K, Jh) : 0.0im; coeffs=true)
             r0 = km_ode_range(alph, a, n, Lr.q)[1]
             g0, g1, _ = km_series_eval(LB, bs, BigFloat(r0))
@@ -452,10 +366,8 @@ function kerr_mode(n::Int, l::Int, m::Int, alph, a; ω0=nothing, K=nothing, tol=
     return md, eig.err
 end
 
-"""f, f', f'' at r (the horizon-regular ingoing radial function, including md.norm). The series is
-summed in the precision of `r` (BigFloat r avoids rounding accumulation over the ~10^4-10^5 terms).
-With an ODE continuation (md.ode, radial overtones) the series is used only for r <= r0; beyond r_end
-the leading asymptotic form scales the value at r_end."""
+"""f, f', f'' at r (horizon-regular radial function, incl. md.norm): series in the precision of r, ODE continuation
+beyond r0, asymptotic form beyond r_end."""
 function kerr_radial_f(md::KerrMode, r)
     if md.ode !== nothing && r > md.ode[2]
         f, f1, f2, _ = kerr_radial_ode_jet(md, Float64(r))
@@ -555,17 +467,7 @@ end
 
 """
     kerr_mode_norm(md; nr=400, nθ=48, nodes=nothing) -> N
-
-Klein-Gordon norm of ψ/√(2ω) on a v = const slice of ingoing Kerr coordinates
-(√-g = Σ sinθ, g^{vv} = a² sin²θ/Σ, g^{vr} = (r²+a²)/Σ, g^{vφ} = a/Σ):
-
-    N = (2π/2ω) ∫dr ∫dθ sinθ |S|² [ 2(r²+a²) Im(f* f') + (2ma - 2ω a² sin²θ) |f|² ],
-
-which tends to ∫|ψ|² d³x in the non-relativistic limit. The r integral uses
-Gauss-Legendre panels (km_norm_nodes): for a pure series nr nodes in ln(r - r_+) out to
-where the mode has decayed; with an ODE continuation the panels are the steps of the ODE
-solution, which resolve the radial nodes of the overtone whatever their number.
-`nodes` = (r, weights) replaces the radial quadrature (tests).
+Klein-Gordon norm of ψ/√(2ω) on a v = const slice (∫|ψ|² d³x for α → 0); `nodes` = (r, w) replaces km_norm_nodes.
 """
 function kerr_mode_norm(md::KerrMode; nr::Int=400, nθ::Int=48, nodes=nothing)
     a = md.a; ω = real(md.ω); m = md.m
@@ -585,13 +487,7 @@ end
 
 """
     km_radial_nodes(md; per_step=8) -> number of radial nodes, or -1 without an ODE continuation
-
-Zeros of the Boyer-Lindquist radial function R = f e^{-iωr* + imr#} of an ODE-continued mode between half its
-hydrogenic inner turning point and the end of the integration: sign changes of Re(R conj(R_peak)) on the ODE steps,
-each subdivided per_step times (for a quasi-bound mode R is real up to a constant phase where it is not
-evanescent). A level (n, l, m) has n - l - 1 of them, whatever its frequency shift: an independent identification
-of the overtone. Not meaningful for l = 0 (no barrier: the ingoing phase near the horizon adds sign changes) or for
-resonances as broad as the level spacing.
+Sign changes of Re(R conj(R_peak)) of the BL radial function on the ODE steps: n - l - 1 for an overtone (not l = 0).
 """
 function km_radial_nodes(md::KerrMode; per_step::Int=8)
     md.ode === nothing && return -1

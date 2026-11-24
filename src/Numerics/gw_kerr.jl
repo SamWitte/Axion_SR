@@ -1,25 +1,8 @@
 """
     gw_kerr.jl
 
-Relativistic gravitational-wave emission of a scalar cloud on Kerr: annihilation
-a × b -> graviton (ω̃ = ω_a + ω_b, m̃ = m_a + m_b) and transition a -> b + graviton
-(ω̃ = ω_a - ω_b, m̃ = m_a - m_b), from the Teukolsky amplitude at infinity
-(teukolsky.jl) sourced by the quasi-bound modes of kerr_modes.jl. G = c = M = 1,
-μ = α; the levels are evaluated at Re ω_j.
-
-Field: Φ = Σ_j √(N_j/(2ω_j)) (ψ_j + ψ_j*), ψ_j = R_j(r) S_j(θ) e^{-iω_j t + im_j φ}
-of unit Klein-Gordon norm. Since n and m̄ are null with n·m̄ = 0, the source
-components are bilinear in first derivatives, T_nn = (n·∂Φ)², T_nm̄ = (n·∂Φ)(m̄·∂Φ),
-T_m̄m̄ = (m̄·∂Φ)², and the component with the process's (ω̃, m̃) is
-
-    T̂_nn = c n_a n_b,   T̂_nm̄ = (c/2)(n_a m_b + n_b m_a),   T̂_m̄m̄ = c m_a m_b,
-
-n_j = n·∂ψ_j, m_j = m̄·∂ψ_j (ψ_b -> ψ_b* for transitions), c = √(N_aN_b/(ω_aω_b))
-for a ≠ b and N_a/(2ω_a) for a = b. With N_a = N_b = 1 the power to infinity is
-P = Σ_ℓ |Z_ℓ|²/(2πω̃²) (both helicities, by the parity of the levels) and the
-rate in the solver's convention (du_a/dτ = -Γ u_a u_b, τ = μt, u = N/(GM²)) is
-
-    Γ(α, a) = P/(α ω̃)      (G = c = M = 1 units of P and ω̃).
+Relativistic GW annihilation (a × b) and transition (a -> b) rates of a scalar cloud on Kerr: Teukolsky amplitude
+(teukolsky.jl) sourced by the kerr_modes.jl modes at Re ω; G = c = M = 1, μ = α, Γ = P/(α ω̃) in solver units.
 """
 
 """Tetrad components of the pair on the grid: (Tnn, Tnm, Tmm, ω̃, m̃)."""
@@ -34,7 +17,7 @@ function gw_kerr_tetrad(ma::KerrMode, mb::KerrMode, kind::Symbol, rn, θn)
     ω̃ = conjb ? ωa - ωb : ωa + ωb
     m̃ = conjb ? ma.m - mb.m : ma.m + mb.m
     c = same ? 1 / (2ωa) : 1 / sqrt(ωa * ωb)
-    # radial factors: n.dpsi = -Delta f' e^{-i w r* + i m r#} S/(2 Sigma), mbar.dpsi = (rho/sqrt2)[S' + (m/sin - a w sin) S] R;
+    # n.dpsi = -Delta f' e^{-iw r* + im r#} S/(2 Sigma), mbar.dpsi = (rho/sqrt2)[S' + (m/sin - a w sin) S] R;
     # the source is taken at Re w (with complex w the horizon derivatives carry spurious e^{Im w r*}).
     C = Complex{promote_type(eltype(rn), Float64)}
     nr_a = zeros(C, length(rn)); nr_b = similar(nr_a); Ra = similar(nr_a); Rb = similar(nr_a)
@@ -100,21 +83,8 @@ end
 
 """
     gw_kerr_source_hat(ma, mb, kind, rn, θn) -> (Shat, Ph, ω̃, m̃)
-
-Direct (operator) form of the Teukolsky source of the pair on the (rn, θn) grid, for
-teuk_Z_hat (Z^∞ with R^in, the horizon amplitude Z^H with R^up):
-
-    Shat[i, j] = ρ^{-5} ρ̄^{-1} (B'_2 + B'*_2)/Ph_i,   Ph = e^{-iω̃ r* + i m̃ r#}   (ST03 eqs. 9-12).
-
-The tetrad components are those of gw_kerr_tetrad, written as Ph × (horizon-regular
-part): n·∂ψ_j = -Δ f_j' ph_j S_j/(2Σ), m̄·∂ψ_j = (ρ/√2) L_j f_j ph_j, with
-ph_j = e^{-i Re ω_j r* + i m_j r#} (quasi-stationary source at Re ω), so that ph_a ph_b
-(ph_a ph_b* for transitions) = Ph exactly. Their second-order (r, θ) jets come from
-f, f', f'' (Leaver series), f''' (ForwardDiff) and the spheroidal equation, and the
-source operators act on them with J_+ -> ∂_r (teuk_source_B2_jet phase_factored). No
-integration by parts, so nothing is dropped at r_+.
-
-`window` (tests): a function r -> (W, W', W'') multiplying all three components.
+Direct (no integration by parts, valid at r_+) Teukolsky source for teuk_Z_hat: Shat = ρ^{-5} ρ̄^{-1} (B'_2 + B'*_2)/Ph,
+Ph = e^{-iω̃ r* + i m̃ r#} (ST03 eqs. 9-12). `window` (tests): r -> (W, W', W'') multiplying the source.
 """
 function gw_kerr_source_hat(ma::KerrMode, mb::KerrMode, kind::Symbol, rn, θn; window=nothing)
     kind in (:ann, :tr) || error("gw_kerr_source_hat: kind must be :ann or :tr")
@@ -184,12 +154,7 @@ gw_kerr_turning(md::KerrMode) = md.n^2 / md.alph^2 * (1 + sqrt(max(0.0, 1 - md.l
 
 """
     gw_kerr_rmax(ma, mb, decay) -> x_max (= r_max - r_+)
-
-Where the product of the two radial functions has decayed by e^{-decay}. Each function decays as e^{-|q| r} only
-beyond its outer turning point (gw_kerr_turning): between the two turning points the product decays at the rate of
-the more compact mode alone, beyond both at the sum. (Until 2026-11-22 the grid ended at the larger of decay/(q_a+q_b)
-and the end of the more compact mode's ODE range, 6/|q| beyond its turning point: for two extended levels, e.g.
-(21,10,10) -> (16,8,8), the product had decayed by only e^-6 there and the ratio came out 0.53 instead of 0.95.)
+Where R_a R_b has decayed by e^{-decay}; each decays as e^{-|q| r} only beyond its turning point (gw_kerr_turning).
 """
 function gw_kerr_rmax(ma::KerrMode, mb::KerrMode, decay::Real)
     qa, qb = abs(real(ma.L.q)), abs(real(mb.L.q))
@@ -201,19 +166,9 @@ function gw_kerr_rmax(ma::KerrMode, mb::KerrMode, decay::Real)
 end
 
 """
-    gw_kerr_grid(ma, mb, ω̃; eps=1e-6, ppr=8, ppw=8, decay=40, nθ=48, per_panel=8)
-
-Quadrature grid for the pair: Gauss-Legendre panels in r from r_+ + eps out to where
-R_a R_b has decayed to e^{-decay} (gw_kerr_rmax; R^in grows as r^3 in the wave zone and annihilation
-amplitudes are ~1e-9 of their bulk partial sums, so the tail must be below ~1e-12 of the
-peak: decay = 45 is the minimum there, 60 the default), each panel of width
-min((r - r_+)/ppr, (2π/ω̃)/ppw), so
-that both the radial structure (which lives on the scale of r - r_+) and the oscillation
-e^{iω̃ r*} of R^in (annihilations have ω̃ ≈ 2μ, with the cloud in the wave zone) are
-resolved with spectral accuracy. The by-parts (kernel) form of the amplitude differs from
-the direct form by total derivatives of bulk-sized terms, so the panel quadrature error
-sets the floor of the strongly cancelling annihilation integrals; ppr matters for that.
-Gauss-Legendre in θ.
+    gw_kerr_grid(ma, mb, ω̃; eps=1e-6, ppr=8, ppw=8, decay=60, nθ=48, per_panel=8)
+Gauss-Legendre panels in r from r_+ + eps to gw_kerr_rmax(decay) (annihilations need decay ≥ 45), each of width
+min((r - r_+)/ppr, (2π/ω̃)/ppw); Gauss-Legendre in θ.
 """
 function gw_kerr_grid(ma::KerrMode, mb::KerrMode, ω̃; eps=1e-6, ppr::Real=8.0, ppw::Real=8.0, decay::Real=60.0,
                       nθ::Int=48, per_panel::Int=8)
@@ -236,25 +191,9 @@ end
 gw_kerr_grid(ma::KerrMode, mb::KerrMode; kwargs...) = gw_kerr_grid(ma, mb, abs(real(ma.ω) - real(mb.ω)) > 0 ? abs(real(ma.ω) - real(mb.ω)) : real(ma.ω) + real(mb.ω); kwargs...)
 
 """
-    gw_kerr_rate(ma, mb, kind; lmax=12, ltol=1e-8, nθ=48, eps=1e-6, ppr=8, ppw=8, decay=60,
-                 T=Float64, verbose=false, horizon=false, ltrunc=1e-6, teuk_kwargs...)
-        -> (Γ, P_∞, Dict ℓ => P_∞ℓ, ω̃, m̃, Γ_H, Dict ℓ => P_Hℓ, chk)
-
-Rate of the annihilation (kind = :ann) or transition a -> b (kind = :tr,
-needs Re ω_a > Re ω_b) in the solver's convention, summing ℓ from max(2, |m̃|)
-until two consecutive ℓ contribute less than ltol of the total (or until the Teukolsky
-integration fails at an ℓ whose predecessor contributed less than ltrunc). Γ and P_∞ are the
-flux to infinity (kernel form, teuk_Z_grid).
-
-With horizon = true the flux into the horizon is computed too, from the direct
-(phase-factored) form of the source (gw_kerr_source_hat, teuk_Z_hat with R^up; the
-kernel form cannot be used there: its integrations by parts drop boundary terms that
-do not vanish at r_+ for R^up): P_H = Σ_ℓ teuk_horizon_alpha |Z^H_ℓ|²/(2πω̃²) (both
-helicities) and Γ_H = P_H/(α ω̃), negative for superradiant gravitons
-(k = ω̃ - m̃ Ω_H < 0). The total rate of the process is Γ + Γ_H, and P_H enters the BH
-mass and angular-momentum budget. The same direct form gives P_∞ again, and
-chk = P_∞(direct)/P_∞(kernel) - 1 is returned as a consistency check of the source
-jets and the quadrature. Γ_H and chk are NaN without horizon.
+    gw_kerr_rate(ma, mb, kind; lmax=12, ltol=1e-8, horizon=false, kw...) -> (Γ, P_∞, P_∞ℓ, ω̃, m̃, Γ_H, P_Hℓ, chk)
+Annihilation (:ann) or transition a -> b (:tr, Re ω_a > Re ω_b) rate to infinity in solver units, ℓ summed to ltol;
+horizon = true adds Γ_H (< 0 if superradiant) and chk = P_∞(direct)/P_∞(kernel) - 1 (else NaN).
 """
 function gw_kerr_rate(ma::KerrMode, mb::KerrMode, kind::Symbol; lmax::Int=12, ltol=1e-8, nθ::Int=48, eps=1e-6,
                       ppr::Real=8.0, ppw::Real=8.0, decay::Real=60.0, T=Float64, verbose::Bool=false,
@@ -277,7 +216,7 @@ function gw_kerr_rate(ma::KerrMode, mb::KerrMode, kind::Symbol; lmax::Int=12, lt
         tr = try
             teuk_radial(-2, l, m̃, T(ω̃), T(ma.a); kw...)
         catch
-            # a failed Teukolsky integration at high l ends the sum if the previous l added < ltrunc of the total
+            # Teukolsky failure at high l ends the sum if the previous l added < ltrunc of the total
             if l > l0 && modes[l - 1] < ltrunc * P && (!horizon || abs(modesH[l - 1]) < ltrunc * (P + abs(PH)))
                 verbose && println("  ℓ = $l: Teukolsky solution failed; sum ended at ℓ = $(l - 1), whose term is $(modes[l - 1] / P) of the total")
                 break

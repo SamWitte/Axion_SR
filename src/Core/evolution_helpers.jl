@@ -1,24 +1,12 @@
 """
-    Evolution helper functions for axion-black hole ODE system.
-
-Provides utilities for boundary condition enforcement, spin clamping, and ODE setup.
-These functions are included into files that have already included Core/constants.jl
+Evolution helpers for the axion-BH ODE system: boundary enforcement, spin clamping, ODE setup.
+Included after Core/constants.jl.
 """
 
 """
     get_clamped_spin(spin_val::Float64)::Tuple{Float64, Float64}
 
-Clamp black hole spin to valid range and compute Kerr metric factor rP.
-
-# Arguments
-- `spin_val::Float64`: Current black hole spin (0 ≤ a ≤ 1)
-
-# Returns
-- `(clamped_spin::Float64, rP::Float64)`: Clamped spin and rP = 1 + sqrt(1 - a²)
-
-# Details
-Enforces spin bounds: 0 ≤ a ≤ 0.998 (maxSpin)
-Special handling at boundaries for Kerr geometry stability.
+Clamp the spin to [0, maxSpin] and return (a, rP) with rP = 1 + sqrt(1 - a^2).
 """
 function get_clamped_spin(spin_val::Float64)::Tuple{Float64, Float64}
     if spin_val > maxSpin
@@ -33,19 +21,7 @@ end
 """
     enforce_bosenova_boundary!(u::Vector, u_real::Vector, i::Int, bn_list::Vector, e_init::Float64)
 
-Enforce bosenova (binding energy) boundary conditions on quantum level i.
-
-# Arguments
-- `u::Vector`: Log-space state vector (modified in place)
-- `u_real::Vector`: Real-space state vector (modified in place)
-- `i::Int`: Index of quantum level to constrain
-- `bn_list::Vector`: List of bosenova binding energies
-- `e_init::Float64`: Minimum energy threshold
-
-# Details
-Ensures binding energy stays within physically valid bounds:
-- e_init ≤ E ≤ bn_list[i] (bosenova maximum)
-Uses log-space comparison with SOLVER_TOLERANCES.bosenova_threshold tolerance
+Clamp level i in place (log u and linear u_real) to e_init <= E <= bn_list[i], the bosenova cap.
 """
 function enforce_bosenova_boundary!(u::Vector, u_real::Vector, i::Int, bn_list::Vector, e_init::Float64)
     # Check if below minimum energy
@@ -64,17 +40,7 @@ end
 """
     enforce_all_boundaries!(u::Vector, u_real::Vector, idx_lvl::Int, bn_list::Vector, e_init::Float64)
 
-Apply boundary condition enforcement to all quantum levels.
-
-# Arguments
-- `u::Vector`: Log-space state vector (modified in place)
-- `u_real::Vector`: Real-space state vector (modified in place)
-- `idx_lvl::Int`: Number of active quantum levels
-- `bn_list::Vector`: List of bosenova binding energies
-- `e_init::Float64`: Minimum energy threshold
-
-# Details
-Calls enforce_bosenova_boundary! for each level i ∈ [1, idx_lvl]
+enforce_bosenova_boundary! for levels 1:idx_lvl.
 """
 function enforce_all_boundaries!(u::Vector, u_real::Vector, idx_lvl::Int, bn_list::Vector, e_init::Float64)
     for i in 1:idx_lvl
@@ -85,15 +51,7 @@ end
 """
     check_energy_floor(u::Vector, idx_lvl::Int)::Vector{Int}
 
-Identify quantum levels that have fallen below energy floor.
-
-# Arguments
-- `u::Vector`: Log-space state vector
-- `idx_lvl::Int`: Number of active quantum levels
-
-# Returns
-- `Vector{Int}`: Indices of levels below energy floor (e < 1e-75)
-
+Indices of levels whose log energy u[i] is below log(SOLVER_TOLERANCES.energy_floor).
 """
 function check_energy_floor(u::Vector, idx_lvl::Int)::Vector{Int}
     below_floor = Int[]
@@ -108,15 +66,7 @@ end
 """
     is_near_bosenova(u::Vector, i::Int, log_bn::Float64)::Bool
 
-Check if quantum level is near bosenova threshold (within tolerance).
-
-# Arguments
-- `u::Vector`: Log-space state vector
-- `i::Int`: Index of level to check
-- `log_bn::Float64`: Log of bosenova binding energy for this level
-
-# Returns
-- `Bool`: true if level is within SOLVER_TOLERANCES.bosenova_threshold of bosenova
+True if log level u[i] is within SOLVER_TOLERANCES.bosenova_threshold of log_bn.
 """
 function is_near_bosenova(u::Vector, i::Int, log_bn::Float64)::Bool
     abs(u[i] - log_bn) < SOLVER_TOLERANCES.bosenova_threshold
@@ -125,18 +75,7 @@ end
 """
     initialize_solver_tolerances(non_rel::Bool, high_p::Bool)::Tuple{Float64, Float64}
 
-Compute default and threshold tolerances for ODE solver based on physical regime.
-
-# Arguments
-- `non_rel::Bool`: Whether using non-relativistic approximation
-- `high_p::Bool`: Whether using high-precision mode
-
-# Returns
-- `(default_reltol::Float64, reltol_Thres::Float64)`: Default and threshold relative tolerances
-
-# Details
-Non-relativistic mode uses tighter tolerances (1e-5 vs 1e-3).
-High-precision mode uses much tighter threshold (1e-3 vs 0.1).
+Return (default_reltol, reltol_Thres), tighter for non_rel and for high_p.
 """
 function initialize_solver_tolerances(non_rel::Bool, high_p::Bool)::Tuple{Float64, Float64}
     default_reltol = non_rel ? 1e-8 : 1e-7
@@ -147,21 +86,7 @@ end
 """
     setup_state_vectors(idx_lvl::Int, aBH::Float64, M_BH::Float64, e_init::Float64, default_reltol::Float64)::Tuple{Vector, Vector}
 
-Initialize ODE state vector y0 and relative tolerance array reltol.
-
-# Arguments
-- `idx_lvl::Int`: Number of active quantum levels
-- `aBH::Float64`: Black hole spin
-- `M_BH::Float64`: Black hole mass
-- `e_init::Float64`: Initial energy threshold
-- `default_reltol::Float64`: Default relative tolerance for energy levels
-
-# Returns
-- `(y0::Vector, reltol::Vector)`: Log-space initial state and per-component tolerances
-
-# Details
-Creates state vector [log(e1), ..., log(e_idx_lvl), log(aBH), log(M_BH)].
-Applies default_reltol to energy components and def_spin_tol=1e-3 to spin/mass.
+Log-space y0 = log.([e_init (idx_lvl times); aBH; M_BH]) and reltol (default_reltol; 1e-10 for spin and mass).
 """
 function setup_state_vectors(idx_lvl::Int, aBH::Real, M_BH::Real, e_init::Real, default_reltol::Real)::Tuple{Vector, Vector}
     y0 = Float64[]
@@ -189,22 +114,7 @@ end
 """
     setup_quantum_levels_standard(Nmax::Int, fa::Float64, M_Pl::Float64, alph::Float64, aBH::Float64)::Tuple{Int, Vector, Vector, Vector}
 
-Setup quantum levels for standard (non-spinone) mode with multiple levels.
-
-# Arguments
-- `Nmax::Int`: Maximum principal quantum number (3-8)
-- `fa::Float64`: Axion decay constant (1/GeV)
-- `M_Pl::Float64`: Planck mass
-- `alph::Float64`: Dimensionless axion-gravity coupling
-- `aBH::Float64`: Black hole spin
-
-# Returns
-- `(idx_lvl::Int, m_list::Vector, bn_list::Vector, modes::Vector)`: Number of levels, m values, bosenova energies, mode tuples
-
-# Details
-Creates all (n,l,m) levels with 1 ≤ m ≤ l, 1 ≤ l ≤ n-1, 1 ≤ n ≤ Nmax.
-Also adds truncation modes for high-m states.
-Bosenova binding energy: e_bn = e2_maxBN * (n/2)^4 with e2_maxBN = 1024π(fa/M_Pl)²/(9α³)
+Levels 1 <= m <= l < n <= Nmax, plus end states (2l+1, 2l, 2m) beyond Nmax, with bosenova caps e2_maxBN (n/2)^4.
 """
 function setup_quantum_levels_standard(Nmax::Int, fa::Float64, M_Pl::Float64, alph::Float64, aBH::Float64)::Tuple{Int, Vector, Vector, Vector}
 
@@ -252,14 +162,7 @@ end
 """
     setup_quantum_levels_spinone()::Tuple{Int, Vector, Vector, Vector}
 
-Setup quantum levels for spinone mode (single level only).
-
-# Returns
-- `(idx_lvl::Int, m_list::Vector, bn_list::Vector, modes::Vector)`: idx_lvl=1, m=[1], empty lists for others
-
-# Details
-Spinone mode tracks only a single quantum level with m=1.
-No bosenova energy tracking needed (handled differently).
+Spinone mode: one level, idx_lvl = 1, m_list = [1], empty bn_list and modes.
 """
 function setup_quantum_levels_spinone()::Tuple{Int, Vector, Vector, Vector}
     idx_lvl = 1

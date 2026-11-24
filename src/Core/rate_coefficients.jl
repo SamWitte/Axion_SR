@@ -1,12 +1,6 @@
 """
-Rate Coefficient Management for Axion Superradiance Calculations
-
-This module organizes rate coefficients for axion-black hole interactions
-using structured data types instead of hardcoded dictionary entries.
-
-Key structures:
-- RateCoefficient: Single rate coefficient with metadata
-- RateDatabase: Collection of coefficients for a given Nmax and parameter set
+Rate coefficients of the axion-BH scattering channels: RateCoefficient (one channel) and RateDatabase
+(all channels for an Nmax).
 """
 
 module RateCoefficients
@@ -16,22 +10,7 @@ using LinearAlgebra
 """
     RateCoefficient
 
-Structured representation of a single rate coefficient.
-
-Fields:
-- key::String: Identifier for the rate (e.g., "211_211^322^BH")
-- level1::String: First quantum level (e.g., "211")
-- level2::String: Second quantum level (e.g., "322")
-- channel::String: Interaction channel ("BH", "Inf"); GW emission lives in Numerics/gw_rates.jl
-- coefficient::Float64: Amplitude coefficient
-- power_index::Int: Power of alpha in rate expression
-- requires_rp::Bool: Whether rate depends on pericenter radius
-- requires_fa::Bool: Whether rate depends on axion decay constant
-
-Typical usage:
-```julia
-rate = RateCoefficient("211_211^322^BH", "211", "211", "BH", 4.2e-7, 11, true, true)
-```
+Channel rate (key e.g. "211_211^322^BH", channel "BH" or "Inf") = coefficient * alpha^power_index [* fa_factor] [* rp].
 """
 struct RateCoefficient
     key::String
@@ -47,16 +26,7 @@ end
 """
     evaluate_rate(rc::RateCoefficient, alpha::Float64, fa_factor::Float64=1.0, rp::Float64=1.0)
 
-Evaluate a rate coefficient with given parameters.
-
-Arguments:
-- rc: RateCoefficient struct
-- alpha: Coupling parameter (mu * GNew * M)
-- fa_factor: (M_pl / f_a)^4 factor
-- rp: Pericenter radius factor
-
-Returns:
-- Computed rate value
+coefficient * alpha^power_index, times fa_factor = (M_pl/f_a)^4 and rp where the coefficient requires them.
 """
 function evaluate_rate(rc::RateCoefficient, alpha::Float64, fa_factor::Float64=1.0, rp::Float64=1.0)
     rate = rc.coefficient * (alpha ^ rc.power_index)
@@ -75,9 +45,7 @@ end
 """
     RateDatabase
 
-Container for rate coefficients organized by Nmax and interaction type.
-
-Stores coefficients and provides lookup functions for efficient access.
+Rate coefficients by key for one Nmax (and non_relativistic flag).
 """
 mutable struct RateDatabase
     coefficients::Dict{String, RateCoefficient}
@@ -99,9 +67,7 @@ end
 """
     get_rate(db::RateDatabase, key::String)
 
-Retrieve a rate coefficient by key.
-
-Returns the RateCoefficient if found, otherwise nothing.
+The RateCoefficient stored under `key`, or nothing.
 """
 function get_rate(db::RateDatabase, key::String)
     return get(db.coefficients, key, nothing)
@@ -110,14 +76,7 @@ end
 """
     list_rates(db::RateDatabase; channel::Union{String, Nothing}=nothing)
 
-List all available rate coefficients, optionally filtered by channel.
-
-Arguments:
-- db: RateDatabase
-- channel: Optional filter ("BH", "Inf", or nothing for all)
-
-Returns:
-- Vector of RateCoefficient keys
+Keys of all rate coefficients, or of those of `channel` ("BH" or "Inf").
 """
 function list_rates(db::RateDatabase; channel::Union{String, Nothing}=nothing)
     if channel === nothing
@@ -131,10 +90,7 @@ end
 """
     count_rates(db::RateDatabase; channel::Union{String, Nothing}=nothing)
 
-Count available rate coefficients.
-
-Returns:
-- Number of rates (optionally filtered by channel)
+Number of rate coefficients (optionally of one channel).
 """
 function count_rates(db::RateDatabase; channel::Union{String, Nothing}=nothing)
     return length(list_rates(db; channel=channel))
@@ -143,17 +99,7 @@ end
 """
     build_default_rates(Nmax::Int; non_relativistic::Bool=true)
 
-Build default rate database for given Nmax.
-
-This function creates and populates a RateDatabase with the standard
-rate coefficients used in axion superradiance calculations.
-
-Arguments:
-- Nmax: Maximum principal quantum number
-- non_relativistic: Use non-relativistic approximation
-
-Returns:
-- Populated RateDatabase
+RateDatabase with the tabulated non-relativistic coefficients (Nmax 3-5 channels; empty if !non_relativistic).
 """
 function build_default_rates(Nmax::Int; non_relativistic::Bool=true)
     db = RateDatabase(Nmax; non_relativistic=non_relativistic)
@@ -232,19 +178,7 @@ end
 """
     export_to_dict(db::RateDatabase, alpha::Float64, fa_factor::Float64=1.0, rp::Float64=1.0)
 
-Export rate database as dictionary (compatible with existing code).
-
-This function allows structured rate data to be converted to the dictionary
-format used throughout the codebase for backward compatibility.
-
-Arguments:
-- db: RateDatabase
-- alpha: Coupling parameter
-- fa_factor: Axion decay constant factor
-- rp: Pericenter radius factor
-
-Returns:
-- Dictionary with string keys and computed rate values
+Dict of key => evaluate_rate(rc, alpha, fa_factor, rp) for every coefficient.
 """
 function export_to_dict(db::RateDatabase, alpha::Float64, fa_factor::Float64=1.0, rp::Float64=1.0)
     result = Dict{String, Float64}()

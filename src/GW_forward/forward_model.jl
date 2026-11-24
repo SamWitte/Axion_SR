@@ -1,35 +1,7 @@
 """
-    forward_model.jl
-
-Forward model of the GW lines a single BH + axion cloud emits today, for BH
-parameters drawn from a prior. Each realization:
-
-  1. draws the birth mass M0, birth spin a0, age, Eddington ratio f_Edd,
-     distance d and inclination cos(iota) (angle between the BH spin and the
-     line of sight) from `BHPriors`;
-  2. evolves the cloud from birth to t = age with solve_system (accretion at
-     constant Mdot = f_Edd Mdot_Edd(M0), see Core/accretion.jl);
-  3. computes every GW line at t = age with gw_lines (frequency including BH
-     drift and cloud self-gravity / self-interaction shifts, power, strain).
-
-The birth priors should be broad: SR and accretion move M and a a long way.
-Measurements of M and a today enter afterwards as weights on the
-realizations (plot_realizations.py --M_obs ... --a_obs ...), so one ensemble
-can be reused for different measurements.
-
-Orientation. gw_lines returns the orientation-averaged amplitude
-h_avg = sqrt(<A_+^2 + A_x^2>). The amplitude seen at inclination iota is
-h(iota) = h_avg sqrt(4 pi (dP/dOmega)(iota) / P). Each line has a definite
-azimuthal number (m_a + m_b for annihilations, m_a - m_b for transitions), and
-we take dP/dOmega from the spin-weighted harmonics of the leading multipoles,
-    4 pi (dP/dOmega) / P = (2L+1)/2 [ d^L_{m,2}(iota)^2 + d^L_{-m,2}(iota)^2 ] :
-  - annihilations: only the lowest multipole, L = m_a + m_b. This is an
-    approximation: L = m dominates the relativistic 211 x 211 flux at small
-    alpha (Yoshino & Kodama 2014), and higher L are neglected. For 211 x 211 it
-    gives the familiar h_+ ∝ (1 + cos^2 iota)/2, h_x ∝ cos iota;
-  - transitions: every allowed (L, mass/current) channel, weighted by its power
-    at the current alpha and Delta omega. Interference between channels with
-    different L is neglected. Each channel's pattern is exact.
+Forward model of the GW lines a BH + axion cloud emits today: draw birth M, a, age, f_Edd, distance and inclination
+from BHPriors, evolve with solve_system to t = age, then gw_lines. Birth priors should be broad; measurements of
+M and a today enter afterwards as weights on the realizations (plot_realizations.py).
 """
 
 using Random
@@ -43,9 +15,7 @@ using SpecialFunctions: loggamma
 """
     BHPriors(; M, a, log10_age, f_edd, d_kpc, cos_iota)
 
-Distributions for the BH birth mass [M_sun], birth spin, log10(age/yr),
-Eddington ratio, distance [kpc] and cos(inclination). Any field can be a
-Distributions.jl distribution or a fixed number.
+Birth M [M_sun], spin, log10(age/yr), f_Edd, distance [kpc] and cos(iota), each a Distribution or a number.
 """
 Base.@kwdef struct BHPriors
     M = Uniform(5.0, 20.0)
@@ -74,8 +44,7 @@ end
 """
     gw_pattern(L, m, cos_iota)
 
-4 pi (dP/dOmega)/P of a single (L, m) GW multipole radiated at positive and
-negative frequency (sphere average = 1). L = m = 2: (5/16)(1 + 6c^2 + c^4).
+4 pi (dP/dOmega)/P of an (L, +-m) GW multipole (sphere average 1); L = m = 2: (5/16)(1 + 6c^2 + c^4).
 """
 gw_pattern(L, m, c) = (2L + 1) / 2 * (wigner_d(L, m, 2, c)^2 + wigner_d(L, -m, 2, c)^2)
 
@@ -83,11 +52,8 @@ const TRANSITION_CHANNELS = Dict{Tuple{NTuple{3,Int},NTuple{3,Int}}, Vector{Tupl
 
 """
     inclination_factor(line, cos_iota, alpha, a; gw_model=:nonrel) -> h(iota) / h_avg
-
-`line` is an entry of gw_lines(...).lines; alpha and a are today's values. With
-gw_model = :rel and a Kerr table for the channel (rate_sve/gw_kerr), the pattern is the
-tabulated per-ℓ̃ power fractions weighted with the spin-weighted spheroidal harmonics at
-the line's spheroidicity (gw_rel_pattern); otherwise the non-relativistic multipoles.
+`line` from gw_lines; alpha, a today. :rel with a Kerr table: gw_rel_pattern; else non-relativistic multipoles
+(annihilations: L = m only; transitions: all channels weighted by power, interference neglected).
 """
 function inclination_factor(line, c, α, a; gw_model::Symbol=:nonrel)
     sa, sb = line.a, line.b
@@ -119,23 +85,9 @@ end
 # ----------------------------------------------------------------------------
 
 """
-    forward_model(p; mu, fa, Nmax=3, n_times=4000, window=0.9, rel_floor=1e-12,
-                  fdot_frac=0.01, gw_model=:nonrel, self_gravity=true)
-
-Evolve realization `p` (from sample_system) for mu [eV] and fa [GeV] (same
-convention as run_Nlevels.jl / gw_lines) and return its GW lines today.
-
-Lines are computed from the part of the trajectory with t >= window × age, and
-kept if their strain today is >= rel_floor × the brightest line today. Every
-channel is included, also those the solver drops as dynamically irrelevant
-(gw_min_rate_per_yr), so faint lines such as 322 x 322 appear.
-fdot is the finite difference between t = age and the last saved time
-<= (1 - fdot_frac) × age.
-
-Returns (status, M_today, a_today, u_today, lines), with `lines` a vector of
-NamedTuples (kind, a, b, f [Hz], fdot [Hz/s], df_cloud [Hz], P [erg/s], h_avg,
-h_iota) sorted by h_iota. status is :ok, or :incomplete if the solver stopped
-before t = age.
+    forward_model(p; mu, fa, Nmax=3, n_times=4000, window=0.9, rel_floor=1e-12, fdot_frac=0.01, gw_model, self_gravity)
+Evolve p (mu [eV], fa [GeV]) to t = age; return (status, M_today, a_today, u_today, lines), lines from t >= window*age
+(f [Hz], fdot over the last fdot_frac of age, P [erg/s], h_avg, h_iota), kept if h_iota >= rel_floor * max, sorted.
 """
 function forward_model(p; mu, fa, Nmax=3, n_times=4000, window=0.9, rel_floor=1e-12,
                        fdot_frac=0.01, gw_model=:nonrel, self_gravity=true)
@@ -198,8 +150,7 @@ end
 """
     run_and_append(p, id, fs, fl; mu, fa, verbose=true, label="", kwargs...)
 
-Forward-model realization `p` and append its row to `fs` and its lines to `fl`
-(see run_ensemble). Returns the forward_model output, or nothing on error.
+Forward-model p and append its row to fs and its lines to fl; return the forward_model output (nothing on error).
 """
 function run_and_append(p, id, fs, fl; mu, fa, verbose=true, label="", kwargs...)
     t0 = time()
@@ -242,11 +193,7 @@ end
 """
     run_ensemble(priors, N; mu, fa, outdir, tag, seed=1, verbose=true, kwargs...)
 
-Draw N realizations, forward-model each, and append the results to
-<outdir>/samples_<tag>.dat (one row per realization) and
-<outdir>/lines_<tag>.dat (one row per line), flushing after every realization.
-Realizations that throw are recorded with status `error`. kwargs go to
-forward_model.
+Forward-model N draws into <outdir>/samples_<tag>.dat and lines_<tag>.dat (status error if one throws).
 """
 function run_ensemble(pr::BHPriors, N; mu, fa, outdir, tag, seed=1, verbose=true, kwargs...)
     fs, fl = init_outputs(outdir, tag)

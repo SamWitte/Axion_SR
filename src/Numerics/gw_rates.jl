@@ -1,51 +1,8 @@
 """
     gw_rates.jl
 
-Gravitational-wave annihilation and transition rates for arbitrary pairs of
-hydrogenic scalar levels |nlm>, in the non-relativistic (NR) limit.
-
-Conventions (solve_system_unified.jl)
--------------------------------------
-Occupations are u_i = N_i / (G M^2) and time is tau = mu t, so that every rate
-here is a dimensionless number multiplying u_a u_b:
-
-  annihilation a x b -> g : du_a/dtau = du_b/dtau = -rate u_a u_b
-                            (a == b: du_a/dtau = -2 rate u_a^2)
-  transition   a -> b + g : du_a/dtau = -rate u_a u_b,  du_b/dtau = +rate u_a u_b
-                            (omega_a > omega_b; stimulated emission)
-
-The solver builds a GWCache once (gw_build_cache) and calls gw_rhs! on every
-right-hand-side evaluation, so the rates follow the evolving BH mass (α) and
-spin (hyperfine part of Δω).
-
-M in u = N/(G M^2) is the mass of the α the rate is evaluated at: a rate contains one
-factor G M^2. The solver's occupations are instead normalised to the initial mass,
-u_0 = N/(G M_0^2), for which the rate per u_0a u_0b is rate(α) (M_0/M)^2 = rate(α) (α_0/α)^2
-(_gw_terms! and gw_line_at apply this factor).
-
-Physics (NR limit)
-------------------
-* Annihilation (omega_GW ~ 2 mu, graviton wavelength << cloud): flat-space
-  Weinberg formula with the TT part of the kinetic stress T_ij = d_i phi d_j phi
-  (Arvanitaki, Baryakhtar & Huang 2015, App. A). The Fourier transform is done
-  exactly: gradient formula -> Gaunt coefficients -> closed-form radial
-  integrals of r^p e^{-beta r} j_J(kr). We return the leading term C alpha^p of
-  the small-alpha expansion. Caveat: for 2p x 2p the flat-space leading term
-  cancels for every l=1 pair (alpha^16 instead of the alpha^14 found once the BH potential is
-  included); see `gw_literature_annihilation`.
-* Transition (omega_GW = Delta omega ~ mu alpha^2, wavelength >> cloud): leading
-  mass (I_L) and current (J_L) multipoles of the cross density/current, summed
-  over every allowed L with the Thorne/Blanchet flux
-      P = G sum_L [ (L+1)(L+2)/((L-1)L L!(2L+1)!!) |I_L^(L+1)|^2
-                  + 4L(L+2)/((L-1)(L+1)!(2L+1)!!) |J_L^(L+1)|^2 ].
-  Coefficients are alpha-independent; Delta omega enters at load time.
-
-All lengths are in Bohr units a0 = 1/(mu alpha).
-
-Relativistic rates (gw_model = :rel): the cache built here is multiplied, channel by
-channel, by the tabulated ratio Γ_Kerr/Γ_NR of the Teukolsky calculation
-(gw_kerr.jl, tables in rate_sve/gw_kerr/ read by gw_kerr_tables.jl), and the level
-frequencies come from the Leaver eigenvalues where tabulated (`gw_rates_relativistic`).
+NR GW annihilation (flat-space Weinberg) and transition (multipole) rates of hydrogenic levels, Teukolsky-corrected for
+gw_model = :rel: du/dτ = ∓ rate u_a u_b with u = N/(G M^2) at the M of α, τ = μt; lengths in Bohr units 1/(μα).
 """
 
 using WignerSymbols: clebschgordan
@@ -59,9 +16,7 @@ using ForwardDiff
 
 """
     gw_theta_lm(l, m, θ)
-
-theta part of Y_lm, so that Y_lm(θ,φ) = gw_theta_lm(l,m,θ) e^{imφ}. Works for
-negative m and for ForwardDiff duals.
+θ part of Y_lm: Y_lm(θ,φ) = gw_theta_lm(l,m,θ) e^{imφ}; any sign of m, ForwardDiff-safe.
 """
 function gw_theta_lm(l::Int, m::Int, θ)
     if abs(m) > l
@@ -162,10 +117,8 @@ function gw_radial_moment(R::GWRadial{T}) where {T}
 end
 
 # ----------------------------------------------------------------------------
-# Closed-form  k^{p+1} ∫_0^∞ r^p e^{-beta r} j_J(k r) dr,  as a function of b = beta/k.
-# Uses h_J^(1) = (-i)^{J+1} e^{iz}/z sum_s i^s (J+s)!/(s!(J-s)!(2z)^s). The single
-# log-divergent s = J = p term is purely imaginary; its finite real part is
-# (2J)!/(J! 2^J) arctan(1/b).
+# Closed-form  k^{p+1} ∫_0^∞ r^p e^{-beta r} j_J(k r) dr  as a function of b = beta/k, via the series of h_J^(1);
+# the log-divergent s = J = p term contributes only its finite real part (2J)!/(J! 2^J) arctan(1/b).
 # ----------------------------------------------------------------------------
 
 function gw_Itilde(p::Int, J::Int, b::Float64)
@@ -186,8 +139,7 @@ function gw_Itilde(p::Int, J::Int, b::Float64)
 end
 
 # ----------------------------------------------------------------------------
-# Gradient of psi_nlm in the spherical basis:  ∇ψ = sum_q c_q e_q,
-#   c_q = sum_{L=l±1} A_{L,q} g_L(r) Y_{L, m-q}
+# Gradient of psi_nlm in the spherical basis: ∇ψ = sum_q c_q e_q, c_q = sum_{L=l±1} A_{L,q} g_L(r) Y_{L, m-q},
 # e_{+1} = -(x+iy)/√2, e_0 = z, e_{-1} = (x-iy)/√2
 # ----------------------------------------------------------------------------
 
@@ -237,9 +189,7 @@ end
 
 """
     gw_grad_psi(n, l, m, x) -> Vector{ComplexF64}
-
-Cartesian gradient of the normalised hydrogenic psi_nlm at Cartesian point x
-(Bohr units), built from the spherical-basis gradient formula. Used in tests.
+Cartesian gradient of the normalised hydrogenic psi_nlm at x (Bohr units), from the spherical-basis formula (tests).
 """
 function gw_grad_psi(n, l, m, x)
     r = sqrt(sum(abs2, x)); θ = acos(x[3] / r); φ = atan(x[2], x[1])
@@ -270,10 +220,8 @@ gw_gaunt(L1, m1, L2, m2, J, M) =
 
 """
     gw_annihilation_F(sa, sb, α) -> (Fhat, Pmin)
-
-Angular-integrated TT power functional F = ∫dΩ Λ_{ij,kl} T*_ij T_kl for the
-source S_ij = ∂_iψ_a ∂_jψ_b (+ i<->j if a != b), evaluated at κ = k a0 = 2/α.
-Returned as F = κ^{-2 Pmin} Fhat to avoid underflow.
+TT power F = ∫dΩ Λ_{ij,kl} T*_ij T_kl of S_ij = ∂_iψ_a ∂_jψ_b (+ i<->j if a != b) at κ = k a0 = 2/α,
+returned as F = κ^{-2 Pmin} Fhat to avoid underflow.
 """
 function gw_annihilation_F(sa::NTuple{3,Int}, sb::NTuple{3,Int}, α::Float64)
     (na, la, ma), (nb, lb, mb) = sa, sb
@@ -338,9 +286,7 @@ end
 
 """
     gw_annihilation_rate_flat(sa, sb, α)
-
-Full flat-space annihilation rate (all orders in α within the flat-space,
-ω_GW = 2μ approximation), in the solver's convention (see file header).
+Flat-space annihilation rate to all orders in α (ω_GW = 2μ approximation), solver units.
 """
 function gw_annihilation_rate_flat(sa, sb, α)
     Fhat, Pmin = gw_annihilation_F(sa, sb, α)
@@ -349,9 +295,7 @@ end
 
 """
     gw_annihilation_leading(sa, sb; α1=1e-3) -> (C, p)
-
-Leading NR term, rate ≈ C α^p, extracted from the exact flat-space expression at
-α1 and 2α1 (Richardson-corrected for the O(α) term).
+Leading NR term, rate ≈ C α^p, from the flat-space result at α1 and 2α1 (Richardson-corrected).
 """
 function gw_annihilation_leading(sa, sb; α1=1e-3)
     α2 = 2α1
@@ -377,11 +321,8 @@ gw_ccurr(L) = 16π * L * (L + 2) / ((L - 1) * (L + 1) * gw_dfact(2L + 1)^2)
 
 """
     gw_transition_channels(sa, sb; radcache=nothing, angcache=nothing) -> Vector{(L, kind, K)}
-
-Multipole channels for a <-> b. kind = :mass or :current. With δ = Δω/μ, the rate
-of each channel is K α^{2-2L} δ^{2L+1} (mass) or K α^{4-2L} δ^{2L+1} (current).
-Optional Dict caches reuse the radial (m-independent) and angular (n-independent)
-factors across pairs.
+Multipole channels of a <-> b: rate K α^{2-2L} δ^{2L+1} (:mass) or K α^{4-2L} δ^{2L+1} (:current), δ = Δω/μ;
+the optional Dicts cache radial and angular factors across pairs.
 """
 function gw_transition_channels(sa::NTuple{3,Int}, sb::NTuple{3,Int}; radcache=nothing, angcache=nothing)
     (na, la, ma), (nb, lb, mb) = sa, sb
@@ -446,10 +387,7 @@ gw_omega(n, l, m, α, a) = 1 - α^2 / (2n^2) - α^4 / (8n^4) + α^4 / n^4 * (2l 
 
 """
     gw_state_list(Nmax) -> Vector{NTuple{3,Int}}
-
-The solver's level list: (n,l,m) with 1 <= m <= l < n <= Nmax, then the
-truncation modes (2l+1, 2l, 2m) that fall outside Nmax (same order as
-setup_quantum_levels_standard).
+The solver's levels: (n,l,m) with 1 <= m <= l < n <= Nmax, then the truncation modes (2l+1, 2l, 2m) beyond Nmax.
 """
 function gw_state_list(Nmax::Int)
     st = NTuple{3,Int}[]
@@ -473,18 +411,8 @@ gw_delta_bound(sa, sb) = maximum(abs(gw_omega(sa..., 1.0, a) - gw_omega(sb..., 1
 
 """
     gw_build_nr_table(Nmax; path=gw_table_path(Nmax), floor_at_alpha1=1e-60, rel_channel=1e-8)
-
-Compute leading NR annihilation (C, p) and transition multipole coefficients for
-every unordered pair of levels in `gw_state_list(Nmax)` and write
-
-  ann  na la ma nb lb mb  C   p   0                       rate = C α^p
-  tr   na la ma nb lb mb  K   L   kind(1=mass,2=current)  rate = K α^{2-2L | 4-2L} δ^{2L+1}
-
-Rates only fall with decreasing α, so entries are pruned at α = 1: an annihilation
-is dropped if C < floor_at_alpha1; a transition channel is dropped if its α = 1
-rate (with the largest Δω the spectrum allows) is below floor_at_alpha1 or below
-rel_channel times the pair's dominant channel. `threaded=true` spreads pairs over
-Julia threads (can deadlock on Julia 1.8 with many threads; serial is the default).
+Write the NR annihilation (C, p) and transition multipole coefficients of every level pair of gw_state_list(Nmax),
+pruned at α = 1 (floor_at_alpha1; rel_channel × the pair's main channel); threaded=true can deadlock on Julia 1.8.
 """
 function gw_build_nr_table(Nmax::Int; path=gw_table_path(Nmax), floor_at_alpha1=1e-60,
                            rel_channel=1e-8, verbose=true, threaded=false)
@@ -554,14 +482,8 @@ gw_origin_amp2(n, l) = (2 / n)^(2l + 3) * exp(loggamma(n + l + 1) - loggamma(n -
 
 """
     gw_literature_annihilation(sa, sb) -> (C, p) or nothing
-
-Leading-order annihilation terms that supersede the flat-space value. For every
-l = 1 pair (n p x n' p) the flat-space O(α^14) term cancels, leaving α^16; the BH
-potential restores α^14 with dE/dt = (484+9π^2)/23040 (M_c/M)^2 α^14 for 2p x 2p
-(Yoshino & Kodama 2014; Brito et al. 2017; Baryakhtar et al. 2021 Table IV quotes
-1e-2 α^14). The large-k tail is set by the wavefunctions at the origin, so other
-n, n' follow from |R_n1(0)|^2 |R_n'1(0)|^2, times 4 for distinct levels (the
-same scaling the flat-space coefficients obey exactly).
+l = 1 pairs (flat-space α^14 term cancels): BH-potential α^14 result for 2p x 2p (Yoshino & Kodama 2014; Brito et al.
+2017), scaled to other n, n' by |R_n1(0)|^2 |R_n'1(0)|^2, times 4 for distinct levels.
 """
 function gw_literature_annihilation(sa, sb)
     (sa[2] == 1 && sb[2] == 1) || return nothing
@@ -574,17 +496,8 @@ include(joinpath(@__DIR__, "gw_kerr_tables.jl"))
 
 """
     gw_rates_relativistic(c::GWCache; dir=gw_kerr_table_dir(), verbose=true) -> GWCache
-
-Attach the Teukolsky correction tables (gw_kerr_tables.jl) to a non-relativistic
-cache: every annihilation / transition channel with a table gets an interpolant
-of ln(Γ_Kerr/Γ_NR) in (α, a) that multiplies its rate in gw_rhs!, and every level
-with a table gets the Leaver Re ω/μ in place of gw_omega. Channels and levels
-without a table are unchanged (ratio 1, gw_omega). Errors if `dir` holds no table.
-
-horizon = true also attaches, where the tables have it, the horizon fraction
-Γ_H/Γ_∞ of each channel: the levels are then depleted at Γ_∞ + Γ_H (the gravitons
-that fall into the hole are emitted too) and the hole gains the energy and angular
-momentum of the absorbed part (gw_horizon_bh!; negative for superradiant gravitons).
+Attach the Teukolsky tables to an NR cache: ln(Γ_Kerr/Γ_NR) per channel and Leaver Re ω/μ per level where tabulated;
+horizon = true adds the horizon fraction Γ_H/Γ_∞ (gw_horizon_bh!). Errors if `dir` holds no table.
 """
 function gw_rates_relativistic(c; dir=gw_kerr_table_dir(), verbose::Bool=true, horizon::Bool=true)   # c::GWCache (defined below)
     tabs = gw_kerr_load_tables(dir; verbose=verbose)
@@ -655,17 +568,8 @@ function gw_load_table(path)
 end
 
 """
-GW channels resolved to solver level indices. Annihilation k: rate C α^p.
-Transition t: rate sum_q K_q α^{apow_q} |δ|^{dpow_q} over channels
-q in off[t]:off[t+1]-1 (stored as ln K), with δ = ω_i - ω_j recomputed from the current α and
-spin (the emission direction follows the sign of δ).
-
-Relativistic corrections (rel = true, gw_rates_relativistic): itp holds the (α, a)
-interpolants; ω_itp[i], ann_itp[k], tr_itp[t] index into it (0 = none). A level with
-ω_itp ≠ 0 uses the tabulated Leaver Re ω/μ (kept in ωrel; NaN otherwise) and a
-channel with ann_itp / tr_itp ≠ 0 has its rate to infinity multiplied by
-exp(itp) = Γ_Kerr/Γ_NR. ann_hitp / tr_hitp index the horizon fraction h = Γ_H/Γ_∞
-(0 = none, h = 0): the levels are depleted at (1 + h) Γ_∞ and the hole absorbs h Γ_∞.
+GW channels on solver level indices: annihilation k rate C α^p, transition t rate sum_q K_q α^{apow_q} |δ|^{dpow_q}
+(q in tr_off[t]:tr_off[t+1]-1, ln K stored); rel: itp interpolants indexed by ω_itp, *_itp, *_hitp (0 = none).
 """
 struct GWCache
     n::Vector{Int}; l::Vector{Int}; m::Vector{Int}; ω::Vector{Float64}
@@ -686,28 +590,9 @@ gw_empty_cache(modes) = GWCache([md[1] for md in modes], [md[2] for md in modes]
 gw_has_horizon(c::GWCache) = c.rel && (any(!=(0), c.ann_hitp) || any(!=(0), c.tr_hitp))
 
 """
-    gw_build_cache(Nmax, modes, mu, M, a; gw_model=:nonrel, min_rate_per_yr=1e-10,
-                   literature_overrides=true, M_cut=M, levels=nothing) -> GWCache
-
-Resolve the GW table for `Nmax` onto the solver's level list `modes`
-((n,l,m,...) tuples, as from setup_quantum_levels_standard).
-
-gw_model: :nonrel (NR tables, Numerics/gw_rates.jl), :rel (the same channels with the
-Teukolsky correction tables of rate_sve/gw_kerr attached, gw_rates_relativistic) or
-:off (no GW emission).
-
-Channels with rate * mu/hbar * yr < min_rate_per_yr at the initial (α, a) are
-dropped: with the default 1e-10 their e-fold time exceeds a Hubble time even at
-u = 1 (α only decreases during spin-down, so this stays conservative). At
-α ≳ 0.2 and Nmax ≳ 15 this still leaves O(10^5) mostly high-n transitions.
-`literature_overrides` replaces the flat-space l=1 x l=1 annihilations by the
-BH-potential-corrected α^14 result (gw_literature_annihilation).
-With accretion the BH can grow: pass the largest mass reached as `M_cut`, and
-a channel is kept if it passes the cut at either M or M_cut.
-`levels` (a set of (n, l, m), e.g. scattering_levels(Nmax)) keeps only channels
-whose levels are all in it; `nothing` keeps every level in `modes`. The table
-covers every level of gw_state_list(Nmax), so this is where a run's channel list
-restricts GW emission.
+    gw_build_cache(Nmax, modes, mu, M, a; gw_model=:nonrel, min_rate_per_yr=1e-10, M_cut=M, levels=nothing) -> GWCache
+GW channels of the Nmax table on the solver levels `modes` (gw_model :nonrel, :rel or :off), keeping those above
+min_rate_per_yr at M or M_cut whose levels are all in `levels` (nothing = all).
 """
 function gw_build_cache(Nmax, modes, mu, M, a; gw_model=:nonrel, min_rate_per_yr=1e-10,
                         literature_overrides=true, M_cut=M, levels=nothing,
@@ -822,15 +707,8 @@ end
 
 """
     gw_horizon_bh!(du, X, c, α, a, xfl, spinI, massI, nrm=1.0) -> du
-
-Horizon part of the GW emission for the BH rows, in the raw units of the solver's
-superradiance terms (number rate per τ in u units, times the energy per quantum in units of
-μ for the mass row and times the azimuthal number for the spin row): for every channel with
-a horizon fraction h, the hole gains energy ω̃ h Γ_∞ u_a u_b and angular momentum
-m̃ h Γ_∞ u_a u_b (ω̃ = ω_a + ω_b or ω_hi - ω_lo in units of μ, m̃ the graviton's m; both
-negative for superradiant gravitons, where the hole feeds the radiation). Needs the cache
-frequencies at (α, a) (gw_set_omegas_cache!). No-op without horizon tables. nrm = (M_0/M)^2 when X is
-normalised to a mass M_0 other than the mass M of α (see Conventions).
+Add the horizon-absorbed energy ω̃ h Γ_∞ u_a u_b and angular momentum m̃ h Γ_∞ u_a u_b to the BH rows (< 0 if
+superradiant); needs gw_set_omegas_cache! at (α, a); nrm = (M_0/M)^2 when X is normalised to M_0.
 """
 function gw_horizon_bh!(du, X, c::GWCache, α, a, xfl::Float64, spinI::Int, massI::Int, nrm::Float64=1.0)
     gw_has_horizon(c) || return du
@@ -870,11 +748,7 @@ end
 
 """
     gw_rhs!(du, u, c::GWCache, α, a)
-
-Add GW annihilation and transition terms to du (solver units: rates in units of
-mu multiplying u_i u_j, before the solver's mu/hbar*yr conversion), using the
-current α = G M mu and BH spin a. Mass and spin are untouched: the gravitons
-leave the system.
+Add the GW annihilation and transition terms (units of μ, per u_i u_j) to du at α = G M μ and spin a; BH rows untouched.
 """
 function gw_rhs!(du, u, c::GWCache, α, a)
     gw_set_omegas_cache!(c, α, a)
@@ -898,10 +772,7 @@ end
 
 """
     gw_channel_rates(c::GWCache, α, a) -> (ann, tr)
-
-Instantaneous rates for inspection / signal modelling. ann: (i, j, rate) with
-ω_GW = ω_i + ω_j; tr: (hi, lo, rate) for hi -> lo with ω_GW = ω_hi - ω_lo
-(frequencies in units of mu, from gw_omega).
+Instantaneous rates: ann (i, j, rate) at ω_GW = ω_i + ω_j, tr (hi, lo, rate) at ω_GW = ω_hi - ω_lo.
 """
 function gw_channel_rates(c::GWCache, α, a)
     gw_set_omegas_cache!(c, α, a)
@@ -927,34 +798,9 @@ const GW_C_CGS = 2.99792458e10
 const GW_KPC_CM = 3.0857e21
 
 """
-    gw_lines(timeT, states, modes, spin, mass, mu, Nmax; d_kpc=1.0, rel_floor=1e-8,
-             n_peak_samples=400, gw_model=:nonrel, min_rate_per_yr=1e-10,
-             literature_overrides=true, levels=nothing)
-
-GW lines of an evolved cloud. `states[i, k]` is u_i at time `timeT[k]` (years) for
-level `modes[i]` = (n, l, m, ...) (rows of a Modes_ file; pruned lists are fine),
-`spin`/`mass` are the BH spin and mass (M_sun) at the same times, `mu` in eV.
-
-Each annihilation a x b and transition a -> b is one line with, at every time,
-  f  [Hz]    = ω_GW μ / (2π ħ),   ω_GW = ω_a + ω_b  or  |ω_a - ω_b|   (gw_omega)
-  P  [erg/s] = (emission events per s) × ħ ω_GW,
-               events/s = rate(α(t), a(t)) (M_0/M(t))^2 u_a u_b G M_0^2 μ/ħ
-  h0         = sqrt(8 G P / (c^3 (2πf)^2 d^2)),  i.e. sqrt(A_+^2 + A_x^2) averaged
-               over source orientation, for a source at distance d_kpc.
-Lines whose peak power (on `n_peak_samples` sampled times) is below
-rel_floor × the brightest line are dropped. Output is on `n_out` log-spaced
-times. Returns (t, lines): t [yr] and a vector of NamedTuples (kind, a, b, f,
-df_cloud, P, h0) sorted by peak power.
-
-Frequencies include the BH drift (α(t) = G M(t) μ, spin in the spectrum) and,
-with `self_gravity=true` and/or `fa` (GeV) given, the cloud's self-gravity and
-quartic self-interaction level shifts (cloud_shifts.jl) from every level
-occupied above occ_rel × the largest occupation; `df_cloud` is that cloud part
-of f. Powers use the unshifted spectrum, as in the evolution. `M0` is the BH mass
-that normalises u (the initial mass of the run); pass it when `timeT` etc. are a
-late-time slice of the run. `levels` restricts the lines to those levels, as in
-gw_build_cache; pass the run's scattering_levels so that the lines match the
-evolution.
+    gw_lines(timeT, states, modes, spin, mass, mu, Nmax; d_kpc=1.0, rel_floor=1e-8, kwargs...) -> (t, lines)
+f [Hz], cloud shift df_cloud, P [erg/s] and orientation-averaged h0 at d_kpc of every GW line of an evolved cloud
+(timeT in yr, mass in M_sun, mu in eV), lines below rel_floor × the brightest dropped; M0 is the mass normalising u.
 """
 function gw_lines(timeT, states, modes, spin, mass, mu, Nmax; d_kpc=1.0, rel_floor=1e-8,
                   n_peak_samples=400, n_out=2000, gw_model=:nonrel, min_rate_per_yr=1e-10,
