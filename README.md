@@ -109,30 +109,18 @@ After evolution runs finish, prune inactive modes and make figures:
 
 ### 5. **Pre-Computed Rate Tables** (`rate_sve/`)
 
-Ship as archives; unpack into `src/rate_sve/` before evolving:
-
-| Archive | Contents |
-|---------|----------|
-| `Eigs.zip` | Superradiance growth tables (`Imag_zeroC_*`, `Imag_ergC_*`) |
-| `Rates.zip` | Self-interaction / scattering tables (`*_LvrHc_.dat`, ~50k; SHA256 in `Rates.zip.sha256`) |
-| `Rates_master_Nmax18_LvrHc.zip` | Full master LvrHc set (84 490 channels; preferred for Nmax≤18) |
-| `gw_kerr_tables.zip` | Relativistic GW corrections for `--gw_model rel`: one table per channel in `gw_kerr/` (Kerr/flat-space rate ratio, Leaver frequencies, horizon part; SHA256 in `gw_kerr_tables.zip.sha256`; repack with `scripts/pack_gw_kerr_tables.sh`) |
-
-Also in this directory (tracked, not zipped):
-
-- `load_rate_input_Nmax_{3..8,15,18}.txt` (+ optional `_lm`) — which LvrHc files to load
-- `gen_lm_input.py` — build `l==m` subsets of those lists
-- `Rate_Scaling.ipynb` — rate-scaling notebook
+Unpack into `src/rate_sve/` before evolving (runs read the loose files):
 
 ```bash
 cd src/rate_sve
-unzip -o Eigs.zip
-unzip -o Rates.zip
-# or: unzip -o Rates_master_Nmax18_LvrHc.zip
-unzip -o gw_kerr_tables.zip        # only needed for --gw_model rel
+unzip -o Eigs.zip                  # superradiance rates (Imag_zeroC_*, Imag_ergC_*)
+unzip -o gw_kerr_tables.zip        # relativistic GW rates, gw_kerr/ (--gw_model rel)
+tar -xJf scattering_rates.tar.xz   # SI and SG scattering tables (*_LvrHc_.dat, *_LvrHc_SG.dat), spin_table_v1.txt
 ```
 
-Runtime reads the **loose** unpacked files (never the `.zip` directly). Destinations in LvrHc names: `BH` (horizon) or `Inf` (infinity).
+Also here: `load_rate_input_*.txt` (channel lists), `gen_custom_input.py`, `gen_lm_input.py`, `regime_split.txt`.
+
+Destinations in LvrHc names: `BH` (horizon) or `Inf` (infinity).
 
 #### Self-gravity contribution (`*_LvrHc_SG.dat`)
 
@@ -145,28 +133,18 @@ cd src
 julia Compute_all_rates.jl --S1 211 --S2 211 --S3 322 --S4 BH --ftag _LvrHc_ --self_grav true --ang_method gl
 ```
 
-writes `rate_sve/211_211_322_BH_LvrHc_SG.dat` (columns α, Γ_SI, Γ_SG, Γ_×, κ = Γ_×/2√(Γ_SI Γ_SG)) next to the SI table; an existing SI table is not overwritten. Evolve with `solve_system(...; non_rel=false, self_grav=true)` (`si_sign=-1` for a repulsive quartic); channels without an SG table fall back to SI only (one warning per session). `--ang_method gl` replaces the Monte Carlo angular overlaps (±1% seed scatter in amplitude) by exact Gauss–Legendre quadrature. Background and validation: `src/ongoing_tests/sg_vs_si/`.
+writes `rate_sve/211_211_322_BH_LvrHc_SG.dat` (columns α, Γ_SI, Γ_SG, Γ_×, κ = Γ_×/2√(Γ_SI Γ_SG)) next to the SI table; an existing SI table is not overwritten. Evolve with `solve_system(...; non_rel=false, self_grav=true)` (`si_sign=-1` for a repulsive quartic); channels without an SG table fall back to SI only (one warning per session). `--ang_method gl` replaces the Monte Carlo angular overlaps (±1% seed scatter in amplitude) by exact Gauss–Legendre quadrature.
 
 Since November 2026 `gf_radial` has three corrections, all on by default (`false` reproduces earlier tables):
 - `inf_all_l`: channels to infinity sum every allowed outgoing multipole, not just one.
 - `inf_wkb`: their outgoing wave starts as a WKB solution, and the outer radius contains the levels.
 - `kg_norm`: the cloud modes have the Klein-Gordon normalisation.
 
-The corrected tables of the self-gravity campaign are in `rate_sve/rates_sg_v1120_20261122.zip`; see
-`src/scripts/sg_ext/README.md`.
+**Spin dependence.** Tables are at spin 0.95; horizon channels are rescaled with r+(a)/r+(0.95) and a per-channel
+factor from `rate_sve/spin_table_v1.txt` (`NL_SPIN_TABLE=0`: off). Horizon channels with m4 != 0 change the spin of
+the hole (`NL_BH_M4_SPIN=0`: off).
 
-**Spin dependence of the rates.** The tables are computed at spin 0.95 and the solver rescales horizon channels with
-r+(a)/r+(0.95), which is the alpha -> 0 limit only. Since 2026-11-23 the residual factor R(alpha, a) per channel is
-applied by default from `rate_sve/spin_table_v1.txt`: unzip `rate_sve/spin_table_v1_20261123.zip` into `rate_sve`
-(a run without the file says so and uses the r+ scaling alone). At spin 0.5 the factor is 0.91 at alpha = 0.05 and
-0.65-0.77 at alpha = 0.1-0.25 for the populated channels. `NL_SPIN_TABLE=<file>` selects another table,
-`NL_SPIN_TABLE=0` switches it off. `rate_sve/rates_m4fix_20261123.zip` holds corrected tables of the 57 horizon
-channels with m4 != 0 (unzip after the v1120 archive); these channels also change the spin of the hole
-(`NL_BH_M4_SPIN=0` switches that off). See `src/scripts/spin_tab/README.md`.
-
-**Step limit of the N-level solver.** Since 2026-11-23 a step stays below about one e-fold of any growing level
-(`NL_DT_EFOLD`, default 1; `NL_DT_EFOLD=0` reproduces earlier runs). Without it a level in a near-balanced race between
-a scattering gain and a GW loss could overshoot by many e-folds in one long step.
+**Step limit.** A step spans at most ~1 e-fold of a growing level (`NL_DT_EFOLD`, default 1; 0: off).
 
 **Switching it on in an evolution.** SI-only remains the default. With self-gravity:
 
@@ -274,8 +252,9 @@ julia install_pkgs.jl
 - Constraint contours for publication
 
 ### Computed Rates (`rate_sve/`)
-- `Eigs.zip` — SR eigenfrequency / growth-rate tables
-- `Rates.zip` — LvrHc self-interaction rate tables (production bundle)
+- `Eigs.zip` — superradiance rates
+- `gw_kerr_tables.zip` — relativistic GW rates
+- `scattering_rates.tar.xz` — SI and SG scattering rates
 - `load_rate_input_Nmax_*.txt` — per-Nmax load lists
 
 ### Constraints (`stored_limits/`)

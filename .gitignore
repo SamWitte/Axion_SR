@@ -61,3 +61,24 @@ src/ongoing_tests/**/*.pdf
 # run logs are not kept in the repository
 src/ongoing_tests/**/logs/
 src/ongoing_tests/**/*.log
+
+# kept on disk, not in git (24 Nov 2026)
+src/rate_sve/*.zip
+!src/rate_sve/Eigs.zip
+!src/rate_sve/gw_kerr_tables.zip
+src/rate_sve/*.sha256
+src/rate_sve/sg*_channels.txt
+src/rate_sve/sgx_*.txt
+src/rate_sve/*.ipynb
+src/rate_sve/*_OLD.txt
+src/ongoing_tests/
+src/scripts/sg_ext/
+src/scripts/spin_tab/
+src/scripts/gw_kerr_jobs/
+src/temp8.txt
+src/Note_to_self.txt
+UserManual/main.aux
+UserManual/main.log
+UserManual/main.toc
+UserManual/main.out
+UserManual/main.synctex.gz
