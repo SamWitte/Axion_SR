@@ -2,6 +2,7 @@ using Glob
 include("state_utils.jl")
 include(joinpath(@__DIR__, "Numerics", "gw_rates.jl"))
 include(joinpath(@__DIR__, "spin_table.jl"))
+@isdefined(table_read) || include(joinpath(@__DIR__, "Core", "table_io.jl"))
 
 # Leaver rate files (rate_sve/*_LvrHc_.dat), read once per session: solve_system
 # with track_alpha evaluates the scattering rates on a grid of BH masses.
@@ -24,8 +25,8 @@ function regime_split_table(dirN)
     get!(REGIME_SPLIT_CACHE, dirN) do
         tab = Dict{String, Tuple{Float64, String}}()
         split_file = joinpath(dirN, "regime_split.txt")
-        if isfile(split_file)
-            for ln in eachline(split_file)
+        if table_exists(split_file)
+            for ln in table_read(readlines, split_file)
                 p = split(ln)
                 if length(p) in (4, 5) && !startswith(p[1], "#")
                     tab[p[1] * "_" * p[2] * "_" * p[3]] =
@@ -86,7 +87,7 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
     si_fac = s_chan ? c_contact^2 : faFac          # Gamma_SI is multiplied by this
 
     rate_file = rate_input_path(Nmax; lm_only=lm_only, rate_input=rate_input)
-    rate_list = readdlm(rate_file)
+    rate_list = table_read(readdlm, rate_file)
     if rate_input !== nothing
         for st in unique(string.(vec(rate_list[:, 1:3])))
             get_state_idx(st, Nmax) == -1 && error("rate_input $(rate_input): state $(st) is not among the Nmax = $(Nmax) modes; increase Nmax")
@@ -259,10 +260,10 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
             fileT = dirN * s1 * "_" * s2 * "_" * s3 * "_" * s4 * ftag * ".dat"
             # without the split, a split channel's unsplit original (kept by split_regime.py)
             orig = dirN * "regime_split_orig/" * basename(fileT)
-            !regime_split && isfile(orig) && (fileT = orig)
+            !regime_split && table_exists(orig) && (fileT = orig)
             data = get!(LVR_FILE_CACHE, fileT) do
-                isfile(fileT) || return nothing
-                d = open(readdlm, fileT)
+                table_exists(fileT) || return nothing
+                d = table_read(p -> open(readdlm, p), fileT)
                 d[d[:, 2] .!= 0.0, :]
             end
             split_ch = get(split_tab, s1 * "_" * s2 * "_" * s3, nothing)
@@ -273,11 +274,11 @@ function load_rate_coeffs(mu, M, a, f_a, Nmax, SR_rates; non_rel=true, lm_only=f
                 # (e.g. the fully relativistic self-gravity tables of ongoing_tests/sg_relativistic).
                 if !isempty(sg_overlay)
                     alt = joinpath(sg_overlay, basename(fileSG))
-                    isfile(alt) && (fileSG = alt)
+                    table_exists(alt) && (fileSG = alt)
                 end
                 sg = get!(LVR_FILE_CACHE, fileSG) do
-                    isfile(fileSG) || return nothing
-                    d = open(readdlm, fileSG)        # alpha, Gamma_SI, Gamma_SG, Gamma_x, kappa
+                    table_exists(fileSG) || return nothing
+                    d = table_read(p -> open(readdlm, p), fileSG)        # alpha, Gamma_SI, Gamma_SG, Gamma_x, kappa
                     d[d[:, 3] .> 0.0, :]
                 end
                 self_grav && sg === nothing && (n_sg_missing += 1)

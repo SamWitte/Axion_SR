@@ -28,6 +28,7 @@ end
 # The table in use. Default since 2026-11-23: rate_sve/spin_table_v1.txt (unzip rate_sve/spin_table_v1_20261123.zip there).
 # NL_SPIN_TABLE=<file> selects another table; NL_SPIN_TABLE=0 (or off / none) switches the factors off (r+ scaling only,
 # as before). If the default file is not there the run goes on without the factors and says so.
+@isdefined(table_read) || include(joinpath(@__DIR__, "Core", "table_io.jl"))
 const SPIN_TABLE_DEFAULT = joinpath(@__DIR__, "rate_sve", "spin_table_v1.txt")
 if !@isdefined(SPIN_TABLE_WARNED)
     const SPIN_TABLE_WARNED = Ref(false)
@@ -37,7 +38,7 @@ function spin_table_path()
     lowercase(p) in ("0", "off", "none", "false") && return ""
     isempty(p) || return p
     for k in 1:3                                   # a loaded file system can report an existing file as missing
-        isfile(SPIN_TABLE_DEFAULT) && return SPIN_TABLE_DEFAULT
+        table_exists(SPIN_TABLE_DEFAULT) && return SPIN_TABLE_DEFAULT
         k < 3 && sleep(1.0)
     end
     if !SPIN_TABLE_WARNED[]
@@ -66,10 +67,10 @@ end
 # Dict(channel => range of its rows, sorted in alpha)).
 function load_spin_table(path::AbstractString)
     get!(SPIN_TABLE_CACHE, String(path)) do
-        isfile(path) || error("NL_SPIN_TABLE: no file $(path)")
+        table_exists(path) || error("NL_SPIN_TABLE: no file $(path)")
         spins = Float64[]; ns = 0
         ks = String[]; al = Float64[]; vals = Float64[]
-        for ln in eachline(path)
+        for ln in table_read(readlines, path)
             p = split(ln)
             isempty(p) && continue
             if startswith(p[1], "#")

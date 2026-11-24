@@ -27,6 +27,7 @@ using DelimitedFiles
 include(joinpath(@__DIR__, "..", "Core/constants.jl"))
 # Import state utilities
 include(joinpath(@__DIR__, "..", "state_utils.jl"))
+include(joinpath(@__DIR__, "..", "Core/table_io.jl"))
 
 # Export public interface
 export compute_sr_rates, pre_computed_sr_rates
@@ -41,8 +42,8 @@ function pre_computed_sr_rates(n, l, m, alph, M; n_high=20, n_low=20, delt_a=0.0
     else
         fn = joinpath(rate_sve_dir, "Imag_zeroC_$(state_str).dat")
     end
-    if isfile(fn)
-        zerolist = readdlm(fn)
+    if table_exists(fn)
+        zerolist = table_read(readdlm, fn)
 
         itp = LinearInterpolation(zerolist[:, 1], zerolist[:, 2], extrapolation_bc=Line())
         a_mid = itp(alph)
@@ -71,8 +72,8 @@ function pre_computed_sr_rates(n, l, m, alph, M; n_high=20, n_low=20, delt_a=0.0
         else
             fn = joinpath(rate_sve_dir, "Imag_ergC_pos_$(state_str).npz")
         end
-        if isfile(fn)
-            file_in = npzread(fn)
+        if table_exists(fn)
+            file_in = table_read(npzread, fn)
 
             file_in[:, :, 3] .*= 2.0
             alpha_load = unique(file_in[:,:,1])
@@ -97,8 +98,8 @@ function pre_computed_sr_rates(n, l, m, alph, M; n_high=20, n_low=20, delt_a=0.0
         else
             fn = joinpath(rate_sve_dir, "Imag_ergC_neg_$(state_str).npz")
         end
-        if isfile(fn)
-            file_in = npzread(fn)
+        if table_exists(fn)
+            file_in = table_read(npzread, fn)
 
             file_in[:, :, 3] .*= 2.0
             alpha_load = unique(file_in[:,:,1])

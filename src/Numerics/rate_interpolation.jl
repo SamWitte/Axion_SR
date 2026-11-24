@@ -48,6 +48,7 @@ using DelimitedFiles
 # Import constants and utilities
 include(joinpath(@__DIR__, "..", "Core/constants.jl"))
 include(joinpath(@__DIR__, "..", "state_utils.jl"))
+include(joinpath(@__DIR__, "..", "Core/table_io.jl"))
 
 export compute_sr_rates_smooth, pre_computed_sr_rates_unified
 export symlog, inverse_symlog
@@ -58,7 +59,7 @@ const RATE_FLOOR = 1e-90
 # Rate tables are read once per session (accretion runs rebuild the SR
 # interpolators on a grid of BH masses).
 const NPZ_CACHE = Dict{String, Any}()
-cached_npzread(fn) = get!(() -> npzread(fn), NPZ_CACHE, fn)
+cached_npzread(fn) = get!(() -> table_read(npzread, fn), NPZ_CACHE, fn)
 
 # :anchored (default), :factorised or :legacy, see the module docstring
 const SR_RATE_INTERP = Ref(:anchored)
@@ -110,11 +111,11 @@ function load_zero_crossing(state_str::String, rate_sve_dir::String; cheby::Bool
     prefix = cheby ? "Imag_zeroC" : "Imag_zero"
     fn = joinpath(rate_sve_dir, "$(prefix)_$(state_str).dat")
 
-    if !isfile(fn)
+    if !table_exists(fn)
         return nothing
     end
 
-    zerolist = readdlm(fn)
+    zerolist = table_read(readdlm, fn)
     itp = LinearInterpolation(zerolist[:, 1], zerolist[:, 2], extrapolation_bc=Line())
     return itp
 end
@@ -159,8 +160,8 @@ points remain.
 function load_threshold(state_str::String, m::Int, rate_sve_dir::String; cheby::Bool=true)
     prefix = cheby ? "Imag_zeroC" : "Imag_zero"
     fn = joinpath(rate_sve_dir, "$(prefix)_$(state_str).dat")
-    isfile(fn) || return nothing
-    z = readdlm(fn)
+    table_exists(fn) || return nothing
+    z = table_read(readdlm, fn)
     al, ac = z[:, 1], z[:, 2]
     keep = falses(length(al))
     a_run = -Inf
@@ -223,7 +224,7 @@ function factorised_tables(state_str::String, l::Int, m::Int, rate_sve_dir::Stri
         tabs = LnATable[]
         for (side, sgn) in (("pos", 1.0), ("neg", -1.0))
             fn = joinpath(rate_sve_dir, "$(prefix)_$(side)_$(state_str).npz")
-            isfile(fn) || continue
+            table_exists(fn) || continue
             d = cached_npzread(fn)
             alphas = sort(unique(d[:, :, 1]))
             spins = sort(unique(d[:, :, 2]))
@@ -450,7 +451,7 @@ function anchored_tables(state_str::String, m::Int, rate_sve_dir::String; cheby:
         tabs = Dict{Bool, Any}()
         for (side, pos) in (("pos", true), ("neg", false))
             fn = joinpath(rate_sve_dir, "$(prefix)_$(side)_$(state_str).npz")
-            isfile(fn) || continue
+            table_exists(fn) || continue
             d = cached_npzread(fn)
             al = sort(unique(d[:, :, 1])); sp = sort(unique(d[:, :, 2]))
             (d[:, 1, 1] ≈ al && d[1, :, 2] ≈ sp) || error("$(fn): expected a sorted (alpha, spin) grid")
@@ -646,7 +647,7 @@ function sr_rates_linear_legacy(n, l, m, alph, M; cheby::Bool=true)
     all_rates = Float64[]
 
     # Add positive rate data (these are growth rates, keep as positive)
-    if isfile(pos_file)
+    if table_exists(pos_file)
         pos_data = cached_npzread(pos_file)
         spins_pos, rates_pos, alpha_min_pos = extract_valid_rates_at_alpha(pos_data, alph, M)
         if alph < alpha_min_pos
@@ -662,7 +663,7 @@ function sr_rates_linear_legacy(n, l, m, alph, M; cheby::Bool=true)
     end
 
     # Add negative rate data (these are damping rates, make negative)
-    if isfile(neg_file)
+    if table_exists(neg_file)
         neg_data = cached_npzread(neg_file)
         spins_neg, rates_neg, alpha_min_neg = extract_valid_rates_at_alpha(neg_data, alph, M)
         if alph < alpha_min_neg
