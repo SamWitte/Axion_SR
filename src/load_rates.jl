@@ -413,43 +413,27 @@ function key_to_indx(keyN, Nmax)
     end
 end
 
-function get_state_idx(str_nlm, Nmax)
-    cnt = 1
-    out_idx = -1
-
-    for nn in 1:Nmax, l in 1:(nn - 1),  m in 1:l
-
-        # Support both old format "211" and new format "2_1_1"
-        state_str_new = format_state_string(nn, l, m)
-        state_str_old = (nn < 10 && l < 10 && m < 10) ? format_state_string_legacy(nn, l, m) : ""
-
-        if str_nlm == state_str_new || str_nlm == state_str_old
-            out_idx = cnt
-            found = true
-            break
-        end
-        cnt += 1
-    end
-
-
-    if out_idx == -1
-        seen_truncation_modes = Set()
+# level name ("n-l-m" or legacy "nlm") -> index in the Nmax basis (regular modes, then truncation modes); -1 if absent
+if !@isdefined(STATE_IDX_CACHE)
+    const STATE_IDX_CACHE = Dict{Int, Dict{String, Int}}()
+end
+function state_idx_table(Nmax)
+    get!(STATE_IDX_CACHE, Nmax) do
+        tab = Dict{String, Int}()
+        add(n, l, m, i) = (get!(tab, format_state_string(n, l, m), i);
+                           (n < 10 && l < 10 && m < 10) && get!(tab, format_state_string_legacy(n, l, m), i))
+        cnt = 1
         for nn in 1:Nmax, l in 1:(nn - 1), m in 1:l
-            n_end = 2 * l + 1
-            l_end = 2 * l
-            m_end = 2 * m
-            trunc_key = (n_end, l_end, m_end)
-            if n_end > Nmax && !(trunc_key in seen_truncation_modes)
-                state_str_new = format_state_string(n_end, l_end, m_end)
-                state_str_old = (n_end < 10 && l_end < 10 && m_end < 10) ? format_state_string_legacy(n_end, l_end, m_end) : ""
-                if str_nlm == state_str_new || str_nlm == state_str_old
-                    out_idx = cnt
-                    break
-                end
-                push!(seen_truncation_modes, trunc_key)
-                cnt += 1
+            add(nn, l, m, cnt); cnt += 1
+        end
+        seen = Set{NTuple{3, Int}}()
+        for nn in 1:Nmax, l in 1:(nn - 1), m in 1:l
+            key = (2 * l + 1, 2 * l, 2 * m)
+            if key[1] > Nmax && !(key in seen)
+                add(key..., cnt); push!(seen, key); cnt += 1
             end
         end
+        tab
     end
-    return out_idx
 end
+get_state_idx(str_nlm, Nmax) = get(state_idx_table(Nmax), str_nlm, -1)
